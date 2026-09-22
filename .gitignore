@@ -1,0 +1,10 @@
+src/**/node_modules/
+src/**/dist/
+src/**/.vite/
+src/**/coverage/
+src/**/.env
+src/**/.env.*
+!src/**/.env.example
+src/**/*.log
+*.log
+.DS_Store

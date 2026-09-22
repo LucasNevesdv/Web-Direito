@@ -8,13 +8,18 @@
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prisma:generate": "prisma generate"
   },
   "dependencies": {
-    "fastify": "^5.0.0"
+    "@prisma/client": "^6.16.2",
+    "dotenv": "^16.6.1",
+    "fastify": "^5.0.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "prisma": "^6.16.2",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
