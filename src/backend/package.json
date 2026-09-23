@@ -11,13 +11,18 @@
     "test": "vitest run",
     "prisma:generate": "prisma generate",
     "verify:office-repository": "tsx tests/integration/prisma-offices-repository.check.ts",
-    "verify:onboarding": "tsx tests/integration/onboarding.check.ts"
+    "verify:onboarding": "tsx tests/integration/onboarding.check.ts",
+    "configure:auth": "node scripts/configure-auth.mjs",
+    "verify:auth-browser": "node tests/integration/authentication-browser.check.mjs"
   },
   "dependencies": {
+    "@fastify/cookie": "11",
+    "@fastify/rate-limit": "10",
     "@prisma/client": "^6.16.2",
     "argon2": "0.44.0",
     "dotenv": "^16.6.1",
     "fastify": "^5.0.0",
+    "jose": "6",
     "zod": "^3.23.8"
   },
   "devDependencies": {

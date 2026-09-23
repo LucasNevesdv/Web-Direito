@@ -42,6 +42,12 @@ const environmentSchema = z.object({
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
     .default('development'),
+  AUTH_JWT_SECRET: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/)
+    .refine((value) => Buffer.from(value, 'base64url').length >= 32),
+  AUTH_JWT_ISSUER: z.string().trim().min(1).max(200).default('neodireito'),
+  AUTH_JWT_AUDIENCE: z.string().trim().min(1).max(200).default('neodireito-web'),
+  AUTH_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(900),
+  AUTH_REFRESH_TTL_SECONDS: z.coerce.number().int().min(3600).max(604800).default(604800),
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

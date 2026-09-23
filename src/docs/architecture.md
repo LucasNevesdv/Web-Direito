@@ -8,13 +8,13 @@ O repositório Git está em `Neodireito/`; o workspace pnpm permanece em
 - `backend/src/database-health-checker.ts` define somente
   `DatabaseHealthChecker.check(): Promise<void>`.
 - `backend/src/app.ts` constrói o Fastify e recebe esse contrato e o caso de uso
-  de cadastro. Não importa Prisma ou a infraestrutura. `/health` informa liveness sem chamar o verificador;
+  de cadastro e os serviços de autenticação. Não importa Prisma ou a infraestrutura. `/health` informa liveness sem chamar o verificador;
   `/ready` chama apenas `check()` e converte sucesso/falha em HTTP 200/503.
 - `backend/src/database.ts` cria o Prisma Client e implementa o verificador com
   uma consulta `SELECT 1`. A dependência instalada é Prisma ORM 6.19.3, com o
   engine PostgreSQL padrão da versão 6, sem adaptador ou driver adicional.
 - `backend/src/server.ts` valida o ambiente e compõe Prisma, verificador de
-  prontidão, repositório de cadastro, Argon2id e caso de uso, injetando as
+  prontidão, repositório de cadastro, Argon2id e casos de uso, injetando as
   dependências na aplicação. A conexão ao banco é aberta sob demanda;
   uma indisponibilidade do banco não impede o endpoint `/health` de funcionar.
 
@@ -94,8 +94,8 @@ repositório converte esse conflito em `EmailAlreadyRegisteredError`.
 A migration `20260923160423_create_users_and_memberships`, revisada e aplicada,
 acrescenta `users`, `memberships`, `user_status` e `membership_role`. Há unicidade
 de `users.email` e de `(office_id, user_id)`, além de chaves estrangeiras para
-escritório e usuário com `RESTRICT` na exclusão e na atualização. Os enums novos
-contêm somente `ACTIVE` e `OWNER`, respectivamente. As migrations anteriores
+escritório e usuário com `RESTRICT` na exclusão e na atualização. O estado do
+usuário admite `ACTIVE` e `INACTIVE` desde RF-003; o único papel é `OWNER`. As migrations anteriores
 e os dados existentes são preservados.
 
 O endpoint retorna HTTP 201 com os cinco campos públicos de escritório, somente
@@ -119,11 +119,78 @@ nesta entrega. Nenhum algoritmo próprio é empregado.
 - [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
 
 RF-002 foi atendido como condição técnica da atomicidade de RF-001: cadastro
-inicial do usuário e de seu vínculo. Permanecem pendentes login, verificação de
+inicial do usuário e de seu vínculo. O login foi entregue em RF-003. Permanecem pendentes verificação de
 e-mail, recuperação de senha, convites, gerenciamento de membros, autenticação
 em dois fatores e proteção avançada contra abuso do endpoint público. Não foram
 implementados auditoria de negócio, permissões customizáveis ou isolamento de
-consultas autenticadas entre escritórios nesta entrega.
+consultas dos demais módulos entre escritórios nesta entrega.
+
+## Autenticação e sessão — RF-003
+
+`application/authentication/` contém `AuthenticateUser`, `GetAuthenticatedIdentity`
+e contratos específicos para consultas de autenticação, sessões e tokens. Não
+importa Prisma, JWT, Fastify ou cookies. A entidade `Session` valida UUIDs,
+datas e o digest do refresh, mantendo estado privado. `User` admite INACTIVE para
+negar acesso; não há operação administrativa de inativação nesta entrega.
+
+O login normaliza o e-mail e verifica Argon2id antes de avaliar estado e vínculos.
+Quando o e-mail não existe, verifica um hash de referência gerado uma vez no
+bootstrap, com os mesmos parâmetros do cadastro. Erros internos distinguem
+credenciais inválidas, usuário inativo e ausência de escritório ativo; todos
+resultam no mesmo HTTP 401 externo. Mais de um escritório ativo retorna 409,
+pois seleção de escritório ainda não existe.
+
+`PrismaAuthenticationRepository` consulta o usuário e seus vínculos, persiste
+Session e recupera sessão por ID para `/me`. A migration
+`20260923171012_create_sessions` acrescenta `sessions`, INACTIVE ao enum de usuário
+e índice de `memberships.user_id`, usado na busca dos vínculos no login.
+Session referencia usuário, escritório e o par do Membership com RESTRICT.
+A chave primária atende a busca por sessão; não há índices especulativos de
+expiração, usuário ou escritório em Session. As datas e o formato SHA-256 possuem
+restrições no domínio e no banco; `revokedAt` e `lastUsedAt` começam nulos.
+Não há atualização de `lastUsedAt` ou endpoint de revogação nesta entrega.
+
+`JoseAccessTokens` usa a biblioteca `jose` e HS256 fixo. O token contém `sub`,
+`sessionId`, `activeOfficeId`, `role`, `iat`, `exp`, `iss` e `aud`, sem dados
+pessoais. A verificação exige assinatura, algoritmo, tipo JWT, emissor, audiência,
+claims obrigatórias e prazo máximo de 900 segundos; rejeita emissão futura.
+O segredo base64url de pelo menos 32 bytes é obrigatório em todos os ambientes,
+sem valor padrão. `authentication.ts` compõe adaptadores e casos de uso no bootstrap.
+
+`CryptoRefreshTokens` usa 32 bytes aleatórios criptográficos e persiste somente
+SHA-256 do token. Esse hash rápido é adequado ao segredo aleatório de 256 bits;
+as senhas humanas continuam usando Argon2id. Session dura, por padrão, 604800
+segundos. O token original só sai por cookie `refresh_token`, HttpOnly,
+SameSite=Lax, Path=/api/v1/auth, sem Domain, com Max-Age/Expires e Secure em
+produção. O desenvolvimento HTTP local usa Secure=false. Produção exige HTTPS.
+
+`POST /api/v1/auth/login` aceita apenas e-mail e senha, retorna access token,
+`expiresIn` e identidade pública; não retorna refresh nem hashes no JSON.
+`GET /api/v1/auth/me` exige Bearer, valida o JWT e reconfirma sessão não revogada
+ou expirada, usuário/escritório ACTIVE e vínculo/papel atuais no banco.
+Respostas de autenticação usam Cache-Control: no-store. Cookies não autenticam
+`/me` e não existe renovação ou logout.
+
+`@fastify/rate-limit` limita o login antes do trabalho de Argon2: 10 tentativas
+por IP em 15 minutos na produção e 30 no desenvolvimento/teste, incluindo
+tentativas bem-sucedidas. Retorna 429 e Retry-After. O armazenamento é local ao
+processo, reinicia com o serviço e não coordena réplicas. `trustProxy` permanece
+desativado: X-Forwarded-For enviado pelo cliente não permite escapar do limite.
+Implantações com proxy precisam definir confiança e limite distribuído antes de
+escalar. Não há nova dependência de Redis ou proteção avançada do cadastro.
+
+`/login` guarda access token somente em um ref em memória, chama `/me` e exibe
+nome, escritório e papel em uma área provisória. Requisições usam credenciais
+para aceitar o cookie. Ao recarregar, a memória é perdida e o usuário precisa
+entrar novamente, mesmo com cookie presente. RF-005 consumirá esse cookie;
+RF-006 implementará logout. Nenhum token é gravado em localStorage/sessionStorage
+ou exibido na interface. O logger HTTP permanece desligado.
+
+Referências: [jose](https://github.com/panva/jose),
+[@fastify/cookie](https://github.com/fastify/fastify-cookie),
+[@fastify/rate-limit](https://github.com/fastify/fastify-rate-limit),
+[OWASP Authentication](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
+e [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html).
 
 ## Limites de conexão e consulta
 
@@ -174,6 +241,13 @@ O arquivo `backend/.env` é resolvido a partir do módulo, com `../.env`, tanto 
 preenche uma cópia do ambiente, sem sobrescrever valores definidos no processo.
 O exemplo ilustrativo está em `backend/.env.example`.
 
+O ambiente também exige `AUTH_JWT_SECRET` e valida `AUTH_JWT_ISSUER`,
+`AUTH_JWT_AUDIENCE`, `AUTH_ACCESS_TTL_SECONDS` (60–900; padrão 900) e
+`AUTH_REFRESH_TTL_SECONDS` (3600–604800; padrão 604800). O comando local
+`configure:auth` acrescenta segredo aleatório somente quando ausente; não exibe
+o valor e preserva as demais configurações. Não é executado automaticamente em
+produção, que deve fornecer seu próprio segredo seguro.
+
 ## Encerramento
 
 `shutdown.ts` fornece uma função com Promise compartilhada: chamadas simultâneas
@@ -217,3 +291,10 @@ e-mail antes da gravação, exercitando a restrição única do PostgreSQL. A li
 usa os identificadores e marcadores exatos dos registros criados e confirma
 ausência de resíduos. Esse comando lê a configuração local explicitamente;
 não integra a suíte unitária padrão.
+
+Após o build, `pnpm --filter ./backend run verify:auth-browser` inicia os serviços
+locais e Chrome headless com perfil temporário, cria a conta por `/register`,
+entra por `/login`, inspeciona cookie/requisições e confirma Session no PostgreSQL.
+Também testa senha errada e perda do token após reload. Nenhum segredo é impresso;
+o cleanup remove Session, Membership, User e Office próprios nessa ordem e fecha
+somente os recursos criados. A suíte unitária não depende desse comando ou do banco.

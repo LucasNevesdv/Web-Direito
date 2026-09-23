@@ -162,11 +162,10 @@ export function RegisterPage() {
           <div role="status" className="mt-8 rounded-xl border border-cyan-300/30 bg-slate-900 p-6">
             <h2 className="text-2xl font-semibold text-cyan-300">Escritório criado com sucesso</h2>
             <p className="mt-3 leading-7 text-slate-300">
-              O escritório e seu administrador foram cadastrados. O login será disponibilizado
-              na próxima etapa do produto.
+              O escritório e seu administrador foram cadastrados. Entre para acessar seu escritório.
             </p>
-            <a className="mt-5 inline-block text-cyan-300 underline underline-offset-4" href="/">
-              Voltar ao início
+            <a className="mt-5 inline-block text-cyan-300 underline underline-offset-4" href="/login">
+              Ir para o login
             </a>
           </div>
         ) : (

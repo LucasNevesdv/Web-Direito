@@ -15,20 +15,26 @@ aprovados permanecem explicitamente pendentes.
 | --- | --- |
 | RF-001 | **Concluído — criar escritório e primeiro usuário administrador no mesmo cadastro.** A página `/register` e `POST /api/v1/onboarding` recebem nome do escritório, nome do responsável, e-mail e senha, validam e normalizam os dados e criam escritório, usuário e vínculo OWNER atomicamente. Escritório e usuário começam ACTIVE. A resposta contém somente dados públicos; falhas não deixam registros parciais. Manutenção e inativação do escritório permanecem pendentes, fora deste escopo concluído. |
 | RF-002 | **Concluído como condição técnica de RF-001 — persistir usuário e vínculo inicial com o escritório.** O e-mail é único globalmente, inclusive sob concorrência, a senha é protegida com Argon2id e o vínculo inicial tem papel OWNER. RF-002 cobre esse cadastro inicial atômico; convites, gerenciamento de membros, uso de múltiplos escritórios e verificação de autorização continuam pendentes. |
-| RF-003 | Autenticar usuários e permitir encerramento da sessão. Método de autenticação, recuperação de acesso e política de sessão: pendentes. |
-| RF-004 | Autorizar cada operação sobre recursos no backend, considerando vínculo com o escritório e permissões. Negar acesso sem autorização; matriz de perfis e ações: pendente. |
-| RF-005 | Cadastrar, consultar, atualizar e inativar clientes do escritório, preservando seus vínculos e histórico. Campos e tratamento de duplicidades: pendentes. |
-| RF-006 | Cadastrar, consultar e atualizar casos e seus vínculos com clientes do mesmo escritório. Estados e cardinalidade dos relacionamentos: pendentes. |
-| RF-007 | Registrar e acompanhar processos com informações inseridas manualmente, associados ao contexto do escritório. Identificadores, estados e relação entre caso e processo: pendentes; captura automática não pertence ao MVP. |
-| RF-008 | Criar, atribuir e acompanhar tarefas, registrando alterações de responsável, estado e prazo quando houver. Estados e regras de conclusão: pendentes. |
-| RF-009 | Registrar e consultar prazos, com data, responsável e contexto de negócio; manter histórico de alterações. Horários, fusos e regras de tratamento de datas: pendentes, sem assumir cálculo jurídico automático. |
-| RF-010 | Incluir, consultar e obter documentos vinculados ao contexto de negócio autorizado. Restringir acesso ao conteúdo; armazenamento, formatos, limites e versionamento: pendentes. |
-| RF-011 | Registrar e consultar anotações no contexto de casos ou processos, aplicando controle de acesso também às alterações. Granularidade da visibilidade: pendente. |
-| RF-012 | Registrar e consultar compromissos na agenda e apresentar tarefas e prazos autorizados com suas datas. Regras de exibição, recorrência e eventuais lembretes: pendentes. |
-| RF-013 | Exibir dashboard com resumo de casos, processos, tarefas e prazos acessíveis ao usuário. Indicadores, filtros e períodos: pendentes; valores devem corresponder aos registros de origem. |
-| RF-014 | Registrar e permitir consulta autorizada da auditoria de operações relevantes, incluindo alterações, inativações e exclusões. Preservar autoria, escritório, recurso, ação e momento; eventos adicionais, retenção e acesso à auditoria: pendentes. |
+| RF-003 | **Concluído — login com e-mail e senha.** `/login` verifica Argon2id, usuário ACTIVE e único escritório ACTIVE com vínculo válido, cria Session, emite access token e envia refresh token em cookie HttpOnly. `/me` confirma identidade e contexto da sessão. |
+| RF-004 | **Parcialmente concluído — tokens e autorização.** JWT assinado, validação de algoritmo/emissor/audiência/expiração e proteção de `/me` entregues. A autorização das operações dos demais módulos e a matriz de permissões permanecem pendentes. |
+| RF-005 | **Pendente — renovação de sessão.** Usar futuramente o refresh token protegido para renovar o acesso, com política de rotação e revogação a detalhar. Nenhum endpoint de renovação foi implementado. |
+| RF-006 | **Pendente — logout.** Encerrar a sessão e limpar o cookie por um fluxo autorizado. Nenhum endpoint ou botão de logout foi implementado. |
+| RF-007 | Cadastrar, consultar, atualizar e inativar clientes do escritório, preservando seus vínculos e histórico. Campos e tratamento de duplicidades: pendentes. |
+| RF-008 | Cadastrar, consultar e atualizar casos e seus vínculos com clientes do mesmo escritório. Estados e cardinalidade dos relacionamentos: pendentes. |
+| RF-009 | Registrar e acompanhar processos com informações inseridas manualmente, associados ao contexto do escritório. Identificadores, estados e relação entre caso e processo: pendentes; captura automática não pertence ao MVP. |
+| RF-010 | Criar, atribuir e acompanhar tarefas, registrando alterações de responsável, estado e prazo quando houver. Estados e regras de conclusão: pendentes. |
+| RF-011 | Registrar e consultar prazos, com data, responsável e contexto de negócio; manter histórico de alterações. Horários, fusos e regras de tratamento de datas: pendentes, sem assumir cálculo jurídico automático. |
+| RF-012 | Incluir, consultar e obter documentos vinculados ao contexto de negócio autorizado. Restringir acesso ao conteúdo; armazenamento, formatos, limites e versionamento: pendentes. |
+| RF-013 | Registrar e consultar anotações no contexto de casos ou processos, aplicando controle de acesso também às alterações. Granularidade da visibilidade: pendente. |
+| RF-014 | Registrar e consultar compromissos na agenda e apresentar tarefas e prazos autorizados com suas datas. Regras de exibição, recorrência e eventuais lembretes: pendentes. |
+| RF-015 | Exibir dashboard com resumo de casos, processos, tarefas e prazos acessíveis ao usuário. Indicadores, filtros e períodos: pendentes; valores devem corresponder aos registros de origem. |
+| RF-016 | Registrar e permitir consulta autorizada da auditoria de operações relevantes, incluindo alterações, inativações e exclusões. Preservar autoria, escritório, recurso, ação e momento; eventos adicionais, retenção e acesso à auditoria: pendentes. |
 
 ## Requisitos não funcionais
+
+A numeração foi ajustada na entrega de RF-003: RF-005 e RF-006 identificam
+renovação e logout conforme o escopo atual. Os antigos RF-005 a RF-022 passaram
+a RF-007 a RF-024, preservando seu conteúdo e as referências nos demais documentos.
 
 Isolamento, segurança, auditoria e preservação de histórico são requisitos do
 produto. Os critérios abaixo orientam sua aceitação; metas operacionais e
@@ -37,8 +43,8 @@ escolhas de solução não informadas estão marcadas como pendentes.
 | ID | Critério de aceitação |
 | --- | --- |
 | RNF-001 | **Isolamento:** leituras, buscas, agregações, gravações e acesso a arquivos devem verificar escritório e autorização no backend. Testes com dois escritórios devem provar ausência de leitura ou alteração cruzada, inclusive por IDs fornecidos diretamente pelo cliente. |
-| RNF-002 | **Segurança de acesso:** validar entradas, negar operações não autorizadas e proteger sessões. Em produção, utilizar transporte protegido. O cadastro usa Argon2id e não persiste senha em texto puro ou no navegador. Login, verificação de e-mail, recuperação de senha, política de sessão, autenticação em dois fatores e proteção avançada contra abuso do endpoint público: pendentes. |
-| RNF-003 | **Segredos e erros:** manter credenciais fora do versionamento e das respostas; logs, respostas e auditoria não devem expor senhas ou hashes, tokens, URLs com credenciais ou conteúdo desnecessário de documentos e anotações. Testes devem conferir a sanitização de erros. |
+| RNF-002 | **Segurança de acesso:** Argon2id, sessão persistida, JWT de até 15 minutos e refresh token de até 7 dias. Login possui limite básico por IP e resposta idêntica para credenciais inválidas ou contas inativas. Produção exige HTTPS e cookie Secure. Renovação, logout, verificação de e-mail, recuperação de senha, dois fatores e proteção distribuída contra abuso permanecem pendentes. |
+| RNF-003 | **Segredos e erros:** credenciais fora do versionamento; senha, hashes e refresh token nunca aparecem no JSON. Access token é retornado somente no login e mantido apenas em memória. Refresh token é entregue somente em cookie HttpOnly. Logs e auditoria não incluem senha, hashes, tokens completos, cookies ou URLs com credenciais. |
 | RNF-004 | **Desempenho:** limitar o volume retornado nas listagens e medir tempo de resposta e erros dos fluxos principais com carga representativa. Metas de percentil 95, volume de dados e concorrência são pendentes e devem ser definidas antes da aceitação de desempenho do MVP. |
 | RNF-005 | **Disponibilidade:** distinguir serviço ativo de banco disponível por `/health` e `/ready`, com limites finitos de conexão e consulta. Meta de disponibilidade, janela de medição e procedimento de recuperação: pendentes; a infraestrutura atual não representa, por si só, garantia de alta disponibilidade. |
 | RNF-006 | **Auditoria:** permitir rastrear operações relevantes por escritório, autor, ação, recurso e instante. Preservar evidências após exclusões e restringir consulta ou manutenção dos registros; não copiar indiscriminadamente dados sensíveis para logs. Retenção e política de manutenção: pendentes. |
@@ -70,12 +76,19 @@ Critérios do fluxo implementado:
 - Transação única com rollback integral e restrição única de e-mail efetiva
   também sob concorrência; testes reais executados separadamente da suíte comum.
 - Formulário com mensagens por campo, prevenção de envio duplicado e confirmação
-  de sucesso informando que o login será disponibilizado na próxima etapa.
+  de sucesso com link para `/login`.
 
 RNF-009 é aplicado às camadas entregues; isso não conclui a arquitetura de todos
-os módulos. RF-003, RF-004, auditoria e o isolamento de consultas autenticadas
-exigido por RNF-001 permanecem pendentes. O papel OWNER armazenado não substitui
-a implementação futura da autorização.
+os módulos. RF-003 está concluído e RF-004 parcialmente concluído: `/me` exige
+token e sessão válidos e confirma usuário, escritório e vínculo no banco.
+Auditoria e isolamento dos demais módulos exigidos por RNF-001 permanecem
+pendentes; emitir tokens não conclui a autorização do produto.
+
+O login responde 200 no sucesso, 400 para corpo inválido, 401 genérico para
+credenciais ou contas indisponíveis, 409 quando há mais de um escritório ativo,
+429 para excesso de tentativas e 500 sanitizado para falhas inesperadas.
+Recarregar a página perde o access token em memória e exige novo login; o cookie
+permanece até expirar, mas não é consumido enquanto RF-005 estiver pendente.
 
 ## Funcionalidades e integrações futuras — fora do MVP
 
@@ -85,14 +98,14 @@ Não são critérios de conclusão do MVP.
 
 | ID | Escopo futuro | Definições necessárias antes da implementação |
 | --- | --- | --- |
-| RF-015 | Captura automática de informações em tribunais. | Tribunais abrangidos, fontes autorizadas, informações capturadas e atualização. |
-| RF-016 | Integração com WhatsApp. | Fluxos de comunicação, contas, permissões e fornecedor. |
-| RF-017 | Assinatura eletrônica de documentos. | Fluxos, fornecedor, acompanhamento e armazenamento dos resultados. |
-| RF-018 | Cobranças por Pix e boleto. | Provedor, criação e acompanhamento de cobranças e tratamento dos retornos. |
-| RF-019 | Portal do cliente. | Identificação do cliente, informações visíveis e ações permitidas. |
-| RF-020 | Recursos de inteligência artificial. | Casos de uso, tratamento dos dados, revisão dos resultados e critérios de qualidade. |
-| RF-021 | Aplicativo mobile. | Plataformas, funcionalidades e requisitos de segurança. |
-| RF-022 | Financeiro avançado. | Operações, relatórios e regras financeiras desejadas. |
+| RF-017 | Captura automática de informações em tribunais. | Tribunais abrangidos, fontes autorizadas, informações capturadas e atualização. |
+| RF-018 | Integração com WhatsApp. | Fluxos de comunicação, contas, permissões e fornecedor. |
+| RF-019 | Assinatura eletrônica de documentos. | Fluxos, fornecedor, acompanhamento e armazenamento dos resultados. |
+| RF-020 | Cobranças por Pix e boleto. | Provedor, criação e acompanhamento de cobranças e tratamento dos retornos. |
+| RF-021 | Portal do cliente. | Identificação do cliente, informações visíveis e ações permitidas. |
+| RF-022 | Recursos de inteligência artificial. | Casos de uso, tratamento dos dados, revisão dos resultados e critérios de qualidade. |
+| RF-023 | Aplicativo mobile. | Plataformas, funcionalidades e requisitos de segurança. |
+| RF-024 | Financeiro avançado. | Operações, relatórios e regras financeiras desejadas. |
 
 ## Pendências para detalhamento
 

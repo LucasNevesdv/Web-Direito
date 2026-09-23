@@ -103,7 +103,7 @@ describe('cadastro do escritório e de seu administrador', () => {
       }),
     });
     expect(await screen.findByRole('status')).toBeTruthy();
-    expect(screen.getByText(/O login será disponibilizado na próxima etapa/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Ir para o login' }).getAttribute('href')).toBe('/login');
     expect(screen.queryByLabelText('Senha')).toBeNull();
   });
 

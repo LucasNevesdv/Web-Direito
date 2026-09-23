@@ -68,7 +68,7 @@ describe('User', () => {
 
   it.each([
     { field: 'id', value: 'bad-id' },
-    { field: 'status', value: 'INACTIVE' },
+    { field: 'status', value: 'UNKNOWN' },
     { field: 'createdAt', value: new Date('invalid') },
     { field: 'createdAt', value: '2026-01-01' },
     { field: 'updatedAt', value: new Date('invalid') },

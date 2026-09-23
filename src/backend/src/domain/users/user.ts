@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { InvalidUserError } from './invalid-user-error.js';
 
-export type UserStatus = 'ACTIVE';
+export type UserStatus = 'ACTIVE' | 'INACTIVE';
 
 interface UserState {
   id: string;
@@ -35,7 +35,7 @@ export class User {
     if (typeof state.passwordHash !== 'string' || state.passwordHash.trim().length === 0) {
       throw new InvalidUserError('passwordHash');
     }
-    if (state.status !== 'ACTIVE') {
+    if (state.status !== 'ACTIVE' && state.status !== 'INACTIVE') {
       throw new InvalidUserError('status');
     }
     if (!(state.createdAt instanceof Date) || !Number.isFinite(state.createdAt.getTime())) {

@@ -1,6 +1,8 @@
 import { RegisterPage } from './register-page';
+import { LoginPage } from './login-page';
 
 export function App() {
+  if (window.location.pathname === '/login') return <LoginPage />;
   if (window.location.pathname === '/register') {
     return <RegisterPage />;
   }
@@ -24,6 +26,7 @@ export function App() {
         >
           Criar escritório
         </a>
+        <a href="/login" className="ml-6 inline-flex text-cyan-300 underline underline-offset-4">Entrar</a>
       </section>
     </main>
   );

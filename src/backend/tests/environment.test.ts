@@ -8,7 +8,13 @@ import {
   parseEnvironment,
 } from '../src/environment.js';
 
+const authDefaults = {
+  AUTH_JWT_SECRET: Buffer.alloc(48, 7).toString('base64url'),
+  AUTH_JWT_ISSUER: 'neodireito', AUTH_JWT_AUDIENCE: 'neodireito-web',
+  AUTH_ACCESS_TTL_SECONDS: 900, AUTH_REFRESH_TTL_SECONDS: 604800,
+};
 const validEnvironment = {
+  AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET,
   DATABASE_URL: 'postgresql://usuario:senha@localhost:5432/webdireito',
   HOST: '127.0.0.1',
   PORT: '3000',
@@ -28,7 +34,7 @@ afterEach(async () => {
 describe('environment configuration', () => {
   it('rejects a missing DATABASE_URL without revealing values', () => {
     expect(() =>
-      parseEnvironment({ PORT: '3000', NODE_ENV: 'test' }),
+      parseEnvironment({ AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET, PORT: '3000', NODE_ENV: 'test' }),
     ).toThrowError('Invalid environment configuration: DATABASE_URL');
   });
 
@@ -92,6 +98,7 @@ describe('environment configuration', () => {
 
   it('accepts a valid isolated configuration', () => {
     expect(parseEnvironment(validEnvironment)).toEqual({
+      ...authDefaults,
       DATABASE_URL: validEnvironment.DATABASE_URL,
       HOST: validEnvironment.HOST,
       PORT: 3000,
@@ -101,8 +108,9 @@ describe('environment configuration', () => {
 
   it('uses defaults for optional variables', () => {
     expect(
-      parseEnvironment({ DATABASE_URL: validEnvironment.DATABASE_URL }),
+      parseEnvironment({ DATABASE_URL: validEnvironment.DATABASE_URL, AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET }),
     ).toEqual({
+      ...authDefaults,
       DATABASE_URL: validEnvironment.DATABASE_URL,
       HOST: '127.0.0.1',
       PORT: 3000,
@@ -112,7 +120,7 @@ describe('environment configuration', () => {
 
   it('reports only variable names for malformed configuration', () => {
     expect(() =>
-      parseEnvironment({ DATABASE_URL: 'super-secret', PORT: 'invalid' }),
+      parseEnvironment({ AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET, DATABASE_URL: 'super-secret', PORT: 'invalid' }),
     ).toThrowError(new EnvironmentError(['DATABASE_URL', 'PORT']));
   });
 
@@ -127,24 +135,41 @@ describe('environment configuration', () => {
         'HOST=localhost',
         'PORT=4000',
         'NODE_ENV=development',
+        `AUTH_JWT_SECRET=${Buffer.alloc(48, 1).toString('base64url')}`,
       ].join('\n'),
     );
     const environment = {
+      AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET,
       DATABASE_URL: validEnvironment.DATABASE_URL,
       PORT: '5000',
       NODE_ENV: 'test',
     };
 
     expect(loadEnvironment(environment, environmentPath)).toEqual({
+      ...authDefaults,
       DATABASE_URL: validEnvironment.DATABASE_URL,
       HOST: 'localhost',
       PORT: 5000,
       NODE_ENV: 'test',
     });
     expect(environment).toEqual({
+      AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET,
       DATABASE_URL: validEnvironment.DATABASE_URL,
       PORT: '5000',
       NODE_ENV: 'test',
     });
+  });
+
+  it.each([undefined, '', 'short', 'not base64url!'.repeat(5)])('rejects missing or invalid JWT secrets without a fallback', (secret) => {
+    expect(() => parseEnvironment({ ...validEnvironment, NODE_ENV: 'production', AUTH_JWT_SECRET: secret }))
+      .toThrowError('Invalid environment configuration: AUTH_JWT_SECRET');
+  });
+
+  it.each([
+    ['AUTH_ACCESS_TTL_SECONDS', '0'], ['AUTH_ACCESS_TTL_SECONDS', '901'],
+    ['AUTH_REFRESH_TTL_SECONDS', '604801'], ['AUTH_REFRESH_TTL_SECONDS', 'invalid'],
+    ['AUTH_JWT_ISSUER', ''], ['AUTH_JWT_AUDIENCE', ''],
+  ])('rejects invalid %s', (field, value) => {
+    expect(() => parseEnvironment({ ...validEnvironment, [field]: value })).toThrowError(`Invalid environment configuration: ${field}`);
   });
 });

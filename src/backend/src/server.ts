@@ -1,4 +1,5 @@
 import { buildApp } from './app.js';
+import { createAuthentication } from './authentication.js';
 import { RegisterOfficeWithOwner } from './application/onboarding/register-office-with-owner.js';
 import { createPrismaClient, createPrismaHealthChecker } from './database.js';
 import { EnvironmentError, loadEnvironment } from './environment.js';
@@ -27,11 +28,13 @@ process.on('SIGTERM', handleSignal);
 try {
   const environment = loadEnvironment();
   prisma = createPrismaClient(environment.DATABASE_URL);
+  const passwords = new Argon2PasswordHasher();
   const registration = new RegisterOfficeWithOwner(
     new PrismaOfficeRegistrationRepository(prisma),
-    new Argon2PasswordHasher(),
+    passwords,
   );
-  app = buildApp(createPrismaHealthChecker(prisma), registration);
+  const authentication = await createAuthentication(prisma, environment, passwords);
+  app = buildApp(createPrismaHealthChecker(prisma), registration, authentication);
   await app.listen({
     host: environment.HOST,
     port: environment.PORT,

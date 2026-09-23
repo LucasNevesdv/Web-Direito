@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => {
   const repository = {};
   const passwordHasher = {};
   const registration = { execute: vi.fn() };
+  const authentication = {};
 
   return {
     EnvironmentError,
@@ -33,6 +34,8 @@ const mocks = vi.hoisted(() => {
     repository,
     passwordHasher,
     registration,
+    authentication,
+    createAuthentication: vi.fn(async () => authentication),
     PrismaOfficeRegistrationRepository: vi.fn(function () { return repository; }),
     Argon2PasswordHasher: vi.fn(function () { return passwordHasher; }),
     RegisterOfficeWithOwner: vi.fn(function () { return registration; }),
@@ -44,6 +47,7 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('../src/app.js', () => ({ buildApp: mocks.buildApp }));
+vi.mock('../src/authentication.js', () => ({ createAuthentication: mocks.createAuthentication }));
 vi.mock('../src/database.js', () => ({
   createPrismaClient: mocks.createPrismaClient,
   createPrismaHealthChecker: mocks.createPrismaHealthChecker,
@@ -115,7 +119,8 @@ describe('backend bootstrap', () => {
     expect(mocks.RegisterOfficeWithOwner).toHaveBeenCalledWith(
       mocks.repository, mocks.passwordHasher,
     );
-    expect(mocks.buildApp).toHaveBeenCalledWith(mocks.checker, mocks.registration);
+    expect(mocks.createAuthentication).toHaveBeenCalledWith(mocks.prisma, mocks.environment, mocks.passwordHasher);
+    expect(mocks.buildApp).toHaveBeenCalledWith(mocks.checker, mocks.registration, mocks.authentication);
     expect(mocks.app.listen).toHaveBeenCalledWith({
       host: mocks.environment.HOST,
       port: mocks.environment.PORT,

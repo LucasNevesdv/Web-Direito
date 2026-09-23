@@ -1,11 +1,12 @@
 # Legal System
 
 SaaS jurídico Legal System, com cadastro inicial de escritório e primeiro
-administrador disponível. Login e módulos de gestão permanecem nas próximas etapas.
+administrador, login e consulta da identidade autenticada disponíveis. Os módulos
+de gestão permanecem nas próximas etapas.
 
 ## Requisitos
 
-- Node.js 20 ou superior
+- Node.js 20.19 ou superior (verificado com Node.js 24 no Windows)
 - pnpm 9 ou superior
 - PostgreSQL configurado para o backend
 
@@ -25,6 +26,18 @@ pnpm --filter ./backend run prisma:generate
 As credenciais locais ficam em `backend/.env`. Se esse arquivo ainda não existir,
 crie-o usando `backend/.env.example` como referência e informe sua conexão
 PostgreSQL. Preserve qualquer `.env` existente; não versione credenciais.
+
+Configure uma vez o segredo local de autenticação, sem exibi-lo:
+
+```bash
+pnpm --filter ./backend run configure:auth
+```
+
+O comando acrescenta `AUTH_JWT_SECRET` apenas se ausente e preserva as demais
+configurações. Em produção, forneça um segredo aleatório próprio de pelo menos
+32 bytes em base64url; não há segredo padrão. `backend/.env.example` documenta
+emissor, audiência e prazos: access token 900 segundos e refresh 604800 segundos.
+Todas essas variáveis passam pela validação do ambiente.
 
 Depois de configurar a conexão, aplique as migrations existentes sem recriar o
 banco:
@@ -56,9 +69,20 @@ porta, defina `BACKEND_PROXY_TARGET` no ambiente do processo do frontend. O padr
 fixa de produção no bundle.
 
 O cadastro cria escritório, usuário e vínculo OWNER atomicamente. A confirmação
-informa que o login será disponibilizado na próxima etapa; não há sessão ou
-token automático. A API responde 201 no sucesso, 400 para dados inválidos, 409
+oferece link para `/login`; não há sessão ou token automático no cadastro.
+A API responde 201 no sucesso, 400 para dados inválidos, 409
 para e-mail já cadastrado e 500 com erro genérico.
+
+Em `/login`, informe e-mail e senha. O frontend chama `POST /api/v1/auth/login`,
+mantém access token só em memória e consulta `GET /api/v1/auth/me` para mostrar
+usuário, escritório e papel. O refresh fica exclusivamente em cookie HttpOnly,
+SameSite=Lax e Path=/api/v1/auth; Secure em produção e desligado no HTTP local.
+O banco armazena somente o hash do refresh. Recarregar a página exige novo login:
+o cookie será usado somente na renovação RF-005. Logout RF-006 ainda não existe.
+
+O login limita todas as tentativas por IP em 15 minutos: 30 no desenvolvimento
+e 10 em produção. O controle é local a cada processo. Mais de um escritório
+ativo gera conflito explícito até existir seleção de escritório.
 
 ## Verificações
 
@@ -88,12 +112,18 @@ As verificações reais são optativas e usam explicitamente a configuração lo
 ```bash
 pnpm --filter ./backend run verify:office-repository
 pnpm --filter ./backend run verify:onboarding
+pnpm --filter ./backend run verify:auth-browser
 ```
 
 O primeiro comando verifica criação e recuperação de um escritório. O segundo
 exercita o endpoint com PostgreSQL, proteção da senha, rollback após falha no
 vínculo e conflito concorrente de e-mail. Ambos removem somente os registros
 temporários criados por eles e verificam a limpeza; não integram `pnpm test`.
+O terceiro comando exige build atualizado e Chrome instalado; usa o Chrome do
+caminho padrão do Windows ou `CHROME_PATH` informado no ambiente. Preenche os
+formulários reais, testa cookie, `/me`, senha errada e sessão no PostgreSQL,
+remove os quatro registros temporários e fecha seus processos. Configura o proxy
+temporário usando HOST/PORT locais, sem sobrescrever `.env`.
 
 O cancelamento da consulta de prontidão é feito pelo PostgreSQL após 5 segundos,
 com `SET LOCAL statement_timeout`, restrito à transação. O cliente também fixa
@@ -104,8 +134,8 @@ Detalhes da composição, encerramento e limites estão em
 [`docs/architecture.md`](docs/architecture.md).
 
 Para servir o frontend compilado em produção, configure fallback de rotas da
-SPA para `/register` e um proxy reverso de `/api` para o backend na mesma origem.
+SPA para `/register` e `/login` e um proxy reverso de `/api` para o backend na mesma origem.
 O proxy de desenvolvimento do Vite não substitui essa configuração de produção.
-Login, verificação de e-mail, recuperação de senha, convites, gerenciamento de
+Renovação, logout, verificação de e-mail, recuperação de senha, convites, gerenciamento de
 membros, autenticação em dois fatores e proteção avançada contra abuso do cadastro
 público permanecem pendentes.

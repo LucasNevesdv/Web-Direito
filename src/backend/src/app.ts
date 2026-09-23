@@ -2,10 +2,12 @@ import Fastify from 'fastify';
 import type { RegisterOfficeWithOwner } from './application/onboarding/register-office-with-owner.js';
 import type { DatabaseHealthChecker } from './database-health-checker.js';
 import { registerOnboardingRoute } from './presentation/onboarding-route.js';
+import { registerAuthenticationRoutes, type AuthenticationRoutes } from './presentation/authentication-routes.js';
 
 export function buildApp(
   databaseHealthChecker: DatabaseHealthChecker,
   registration?: Pick<RegisterOfficeWithOwner, 'execute'>,
+  authentication?: AuthenticationRoutes,
 ) {
   const app = Fastify({ logger: false });
 
@@ -23,6 +25,7 @@ export function buildApp(
   if (registration) {
     registerOnboardingRoute(app, registration);
   }
+  if (authentication) registerAuthenticationRoutes(app, authentication);
 
   return app;
 }
