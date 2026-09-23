@@ -6,3 +6,59 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum OfficeStatus {
+  ACTIVE
+  INACTIVE
+
+  @@map("office_status")
+}
+
+model Office {
+  id          String       @id @db.Uuid
+  name        String       @db.VarChar(120)
+  status      OfficeStatus @default(ACTIVE)
+  createdAt   DateTime     @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @map("updated_at") @db.Timestamptz(3)
+  memberships Membership[]
+
+  @@map("offices")
+}
+
+enum UserStatus {
+  ACTIVE
+
+  @@map("user_status")
+}
+
+enum MembershipRole {
+  OWNER
+
+  @@map("membership_role")
+}
+
+model User {
+  id           String       @id @db.Uuid
+  name         String       @db.VarChar(120)
+  email        String       @unique @db.VarChar(254)
+  passwordHash String       @map("password_hash") @db.Text
+  status       UserStatus   @default(ACTIVE)
+  createdAt    DateTime     @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @map("updated_at") @db.Timestamptz(3)
+  memberships  Membership[]
+
+  @@map("users")
+}
+
+model Membership {
+  id        String         @id @db.Uuid
+  officeId  String         @map("office_id") @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  role      MembershipRole
+  createdAt DateTime       @map("created_at") @db.Timestamptz(3)
+  office    Office         @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([officeId, userId])
+  @@map("memberships")
+}

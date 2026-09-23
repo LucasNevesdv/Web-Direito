@@ -11,23 +11,80 @@ estão em [requirements.md](requirements.md) e políticas pendentes em
 | --- | --- | --- |
 | Fundação técnica | Concluída | Workspace pnpm em `src/`, backend e frontend organizados e comandos de lint, typecheck, testes e build disponíveis e validados. |
 | TASK-002 — PostgreSQL e Prisma | Concluída | Cliente Prisma e ambiente configurados; aplicação desacoplada da infraestrutura; `/health` independente do banco e `/ready` com consulta real; limites efetivos de consulta, cleanup e testes validados, incluindo conexão local. |
-| TASK-002.1 — Documentação inicial | Concluída nesta entrega | Visão, requisitos, regras e roadmap preenchidos; escopo do MVP separado do pós-MVP; hipóteses e pendências explícitas, sem decisões jurídicas ou comerciais inventadas. |
+| TASK-002.1 — Documentação inicial | Concluída | Visão, requisitos, regras e roadmap preenchidos; escopo do MVP separado do pós-MVP; hipóteses e pendências explícitas, sem decisões jurídicas ou comerciais inventadas. |
 
 A base técnica concluída não significa que autenticação, isolamento dos dados de
 negócio ou os módulos do produto já estejam implementados. A descrição técnica
 atual permanece em [architecture.md](architecture.md); os próximos módulos devem
 seguir Clean Architecture, com PostgreSQL e Prisma como infraestrutura.
 
+## Progresso da TASK-003
+
+**Domínio e persistência de escritórios: concluída no escopo da TASK-003.** Entidade `Office` com
+UUID, nome normalizado, estado e datas; caso de uso `CreateOffice`; contrato
+específico, repositórios em memória e Prisma e mapper organizados em camadas.
+O schema e a primeira migration introduzem a tabela de escritórios.
+
+Schema formatado e validado, Prisma Client gerado e migration
+`20260922163757_create_offices` gerada pelo Prisma, revisada e aplicada.
+Confirmadas a tabela `offices` e a conclusão da migration em `_prisma_migrations`.
+Na validação da TASK-003, lint, typecheck, build e os 85 testes então existentes
+passaram (84 no backend e 1 no frontend). A verificação real do repositório confirmou criação e recuperação
+dos cinco campos, remoção do único registro temporário, ausência de resíduos e
+desconexão do Prisma.
+
+Essa entrega preparou o domínio e a persistência utilizados no cadastro público
+descrito abaixo. Autenticação, autorização e manutenção do escritório continuam
+fora do escopo concluído da TASK-003.
+
+## Cadastro público — RF-001 e RF-002 concluídos
+
+**RF-001: concluído no escopo de criar escritório e primeiro administrador no
+mesmo cadastro. RF-002: concluído como condição técnica da atomicidade de RF-001,
+com usuário e vínculo iniciais.**
+
+A página `/register` envia o cadastro para `POST /api/v1/onboarding`; o backend
+valida os dados, protege a senha com Argon2id e persiste escritório, usuário e
+vínculo OWNER na mesma transação. O e-mail normalizado possui restrição única
+global, com conflito previsível em concorrência. A interface trata erros de
+campo, conflito, carregamento e sucesso, sem persistir senha no navegador ou
+iniciar sessão.
+
+A migration `20260923160423_create_users_and_memberships` foi revisada e aplicada,
+preservando a migration de escritórios. Os critérios de verificação desta entrega
+incluem resposta pública sem dados secretos, rollback dos três registros após
+falha no vínculo, conflito concorrente e remoção dos dados temporários. O comando
+optativo `verify:onboarding` exercita esses critérios no PostgreSQL local;
+testes unitários e de interface continuam independentes do banco.
+
+Na verificação desta entrega, lint, typecheck, build e os 228 testes passaram
+(208 no backend e 20 no frontend). O endpoint real
+retornou 201, 400 e 409 conforme o cenário; `/health` e `/ready` retornaram 200.
+A falha simulada no vínculo ocorreu após gravar escritório e usuário na transação,
+e a consulta posterior confirmou rollback integral. Dois cadastros concorrentes
+com o mesmo e-mail produziram um sucesso e um conflito, com apenas um conjunto
+completo persistido. A limpeza confirmou ausência de registros temporários.
+Também foram verificados `/register` e o envio pelo proxy Vite usando o backend
+compilado.
+
+Login, verificação de e-mail, recuperação de senha, convites, gerenciamento de
+membros, autenticação em dois fatores e proteção avançada contra abuso do endpoint
+público permanecem pendentes. Manutenção e inativação de escritórios também não
+foram implementadas. A conclusão de RF-001 e RF-002 não conclui toda a área de
+escritórios e usuários nem implementa auditoria ou autorização entre escritórios.
+
 ## Etapas restantes do MVP
 
-Todas as etapas abaixo estão planejadas. Segurança, isolamento e registro das
-operações relevantes devem acompanhar cada módulo desde o início; a etapa 9
-consolida e verifica esses controles, sem adiar sua aplicação.
+A etapa 1 mantém as operações posteriores ao cadastro em andamento; RF-001 e
+RF-002 estão concluídos no recorte acima. As demais etapas permanecem planejadas.
+Segurança, isolamento e registro das operações relevantes devem acompanhar cada
+módulo desde o início; a etapa 9 consolida e verifica esses controles, sem adiar
+sua aplicação.
 
 | Ordem | Etapa e requisitos | Critérios para concluir |
 | --- | --- | --- |
-| 1 | Escritórios e usuários — RF-001, RF-002 | Definir P-001; implementar cadastro e vínculos com identificação do escritório proprietário; validar consistência e impedir relações entre dados de escritórios distintos. |
-| 2 | Autenticação e autorização — RF-003, RF-004 | Definir P-002 e P-003; autenticar, encerrar sessões e aplicar permissões no backend; testar acessos permitidos, negados e tentativas de acesso a outro escritório. Não disponibilizar dados de negócio a usuários finais antes desses controles. |
+| 1 | Escritórios e usuários — **Cadastro RF-001 e RF-002 concluído; evolução pendente** | Concluir decisões de P-001 e implementar manutenção de escritórios, convites e gerenciamento de membros sob autorização. Preservar unicidade, histórico aplicável e consistência dos vínculos; o cadastro inicial atômico já está entregue. |
+| 2 | Autenticação e autorização — RF-003, RF-004 | Definir P-002 e P-003; implementar login, verificação de e-mail, recuperação de senha, sessões, autenticação em dois fatores e permissões; testar acessos permitidos, negados e tentativas de acesso a outro escritório. Definir e implementar proteção avançada contra abuso em P-010. Não disponibilizar consultas ou alterações de dados de negócio a usuários finais antes dos controles de acesso. |
 | 3 | Clientes — RF-005 | Definir P-004 e a política aplicável de P-008; validar cadastro, consulta, edição e inativação sem perda de histórico ou vínculos, respeitando permissões. |
 | 4 | Casos e processos — RF-006, RF-007 | Definir P-005; validar cadastro e atualização manual, estados e vínculos aprovados com clientes; comprovar consistência e isolamento. Captura automática permanece fora desta etapa. |
 | 5 | Tarefas e prazos — RF-008, RF-009 | Resolver as definições aplicáveis de P-006 e P-008; validar responsáveis, acompanhamento e alterações de datas ou estados, mantendo autoria e histórico. Não presumir regras jurídicas de cálculo. |

@@ -13,8 +13,8 @@ aprovados permanecem explicitamente pendentes.
 
 | ID | Requisito e resultado esperado |
 | --- | --- |
-| RF-001 | Cadastrar e manter escritórios, identificando o escritório proprietário de cada registro de negócio. Campos obrigatórios e ciclo de vida do escritório: pendentes. |
-| RF-002 | Cadastrar usuários e manter seus vínculos com escritórios, permitindo verificar se o vínculo autoriza acesso. Convites, administração dos vínculos e participação em múltiplos escritórios: pendentes. |
+| RF-001 | **Concluído — criar escritório e primeiro usuário administrador no mesmo cadastro.** A página `/register` e `POST /api/v1/onboarding` recebem nome do escritório, nome do responsável, e-mail e senha, validam e normalizam os dados e criam escritório, usuário e vínculo OWNER atomicamente. Escritório e usuário começam ACTIVE. A resposta contém somente dados públicos; falhas não deixam registros parciais. Manutenção e inativação do escritório permanecem pendentes, fora deste escopo concluído. |
+| RF-002 | **Concluído como condição técnica de RF-001 — persistir usuário e vínculo inicial com o escritório.** O e-mail é único globalmente, inclusive sob concorrência, a senha é protegida com Argon2id e o vínculo inicial tem papel OWNER. RF-002 cobre esse cadastro inicial atômico; convites, gerenciamento de membros, uso de múltiplos escritórios e verificação de autorização continuam pendentes. |
 | RF-003 | Autenticar usuários e permitir encerramento da sessão. Método de autenticação, recuperação de acesso e política de sessão: pendentes. |
 | RF-004 | Autorizar cada operação sobre recursos no backend, considerando vínculo com o escritório e permissões. Negar acesso sem autorização; matriz de perfis e ações: pendente. |
 | RF-005 | Cadastrar, consultar, atualizar e inativar clientes do escritório, preservando seus vínculos e histórico. Campos e tratamento de duplicidades: pendentes. |
@@ -37,15 +37,45 @@ escolhas de solução não informadas estão marcadas como pendentes.
 | ID | Critério de aceitação |
 | --- | --- |
 | RNF-001 | **Isolamento:** leituras, buscas, agregações, gravações e acesso a arquivos devem verificar escritório e autorização no backend. Testes com dois escritórios devem provar ausência de leitura ou alteração cruzada, inclusive por IDs fornecidos diretamente pelo cliente. |
-| RNF-002 | **Segurança de acesso:** validar entradas, negar operações não autorizadas e proteger sessões. Em produção, utilizar transporte protegido; se houver senhas geridas pelo produto, não armazená-las em texto puro. Política de sessão, proteção contra tentativas abusivas e fatores de autenticação: pendentes. |
-| RNF-003 | **Segredos e erros:** manter credenciais fora do versionamento e das respostas; logs não devem expor senhas, tokens, URLs com credenciais ou conteúdo desnecessário de documentos e anotações. Testes devem conferir a sanitização de erros. |
+| RNF-002 | **Segurança de acesso:** validar entradas, negar operações não autorizadas e proteger sessões. Em produção, utilizar transporte protegido. O cadastro usa Argon2id e não persiste senha em texto puro ou no navegador. Login, verificação de e-mail, recuperação de senha, política de sessão, autenticação em dois fatores e proteção avançada contra abuso do endpoint público: pendentes. |
+| RNF-003 | **Segredos e erros:** manter credenciais fora do versionamento e das respostas; logs, respostas e auditoria não devem expor senhas ou hashes, tokens, URLs com credenciais ou conteúdo desnecessário de documentos e anotações. Testes devem conferir a sanitização de erros. |
 | RNF-004 | **Desempenho:** limitar o volume retornado nas listagens e medir tempo de resposta e erros dos fluxos principais com carga representativa. Metas de percentil 95, volume de dados e concorrência são pendentes e devem ser definidas antes da aceitação de desempenho do MVP. |
 | RNF-005 | **Disponibilidade:** distinguir serviço ativo de banco disponível por `/health` e `/ready`, com limites finitos de conexão e consulta. Meta de disponibilidade, janela de medição e procedimento de recuperação: pendentes; a infraestrutura atual não representa, por si só, garantia de alta disponibilidade. |
 | RNF-006 | **Auditoria:** permitir rastrear operações relevantes por escritório, autor, ação, recurso e instante. Preservar evidências após exclusões e restringir consulta ou manutenção dos registros; não copiar indiscriminadamente dados sensíveis para logs. Retenção e política de manutenção: pendentes. |
 | RNF-007 | **Integridade e histórico:** impedir vínculos entre registros de escritórios diferentes e alterações que deixem dados inconsistentes. Inativação de cliente e atualização de tarefa ou prazo devem preservar o histórico exigido pelas regras de negócio. |
 | RNF-008 | **Recuperação:** antes da liberação do MVP, definir e validar restauração de dados e documentos a partir de cópias protegidas. Frequência, retenção, perda de dados tolerável (RPO) e tempo de recuperação (RTO): pendentes; não há política já implantada declarada nesta documentação. |
 | RNF-009 | **Arquitetura:** manter Clean Architecture no backend, com regras e contratos da aplicação independentes de Prisma e demais detalhes de infraestrutura. PostgreSQL e Prisma permanecem como escolhas confirmadas; criar abstrações somente quando utilizadas. |
-| RNF-010 | **Verificabilidade:** validar cada entrega com testes de sucesso, falha, autorização e isolamento pertinentes, além de lint, typecheck, testes e build do workspace. Testes automatizados devem usar configuração isolada e não ler o `.env` real. |
+| RNF-010 | **Verificabilidade:** validar cada entrega com testes de sucesso, falha, autorização e isolamento pertinentes, além de lint, typecheck, testes e build do workspace. A suíte unitária usa configuração isolada, sem PostgreSQL ou leitura do `.env` real. Verificações reais são optativas, executadas separadamente com a configuração local e limpeza comprovada dos próprios registros temporários. |
+
+## Alcance das entregas de escritórios e cadastro
+
+A TASK-003 concluiu domínio e persistência de `Office`: `CreateOffice`, contrato,
+mapper e repositórios específicos. Essa criação interna continua disponível,
+sem endpoint próprio de atualização ou exclusão.
+
+RF-001 entrega o cadastro público completo sobre essa base. RF-002 foi atendido
+como condição técnica da atomicidade de RF-001, limitado ao usuário e vínculo
+iniciais. Esse recorte explicita a conclusão do cadastro sem declarar concluídos
+manutenção do escritório, convites ou gerenciamento de membros.
+
+Critérios do fluxo implementado:
+
+- Nomes de 2 a 120 caracteres após trim; e-mail validado, normalizado e único;
+  senha de 12 a 128 caracteres e confirmação igual somente no frontend.
+- IDs, papel, estado e datas definidos no servidor; somente OWNER no primeiro
+  vínculo; rejeição de campos extras na API.
+- HTTP 201 com escritório, ID/nome/e-mail do usuário e papel; HTTP 400 para
+  entrada inválida, 409 para e-mail existente e 500 genérico. Sem hash, senha,
+  token ou início automático de sessão.
+- Transação única com rollback integral e restrição única de e-mail efetiva
+  também sob concorrência; testes reais executados separadamente da suíte comum.
+- Formulário com mensagens por campo, prevenção de envio duplicado e confirmação
+  de sucesso informando que o login será disponibilizado na próxima etapa.
+
+RNF-009 é aplicado às camadas entregues; isso não conclui a arquitetura de todos
+os módulos. RF-003, RF-004, auditoria e o isolamento de consultas autenticadas
+exigido por RNF-001 permanecem pendentes. O papel OWNER armazenado não substitui
+a implementação futura da autorização.
 
 ## Funcionalidades e integrações futuras — fora do MVP
 
@@ -66,7 +96,7 @@ Não são critérios de conclusão do MVP.
 
 ## Pendências para detalhamento
 
-As políticas de produto P-001 a P-009 estão centralizadas em
+As políticas de produto P-001 a P-010 estão centralizadas em
 [business-rules.md](business-rules.md). Cada etapa deve resolver as pendências
 que afetam seus critérios de aceitação antes de ser considerada concluída.
 Também faltam metas mensuráveis de desempenho, disponibilidade, recuperação e

@@ -9,10 +9,13 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "verify:office-repository": "tsx tests/integration/prisma-offices-repository.check.ts",
+    "verify:onboarding": "tsx tests/integration/onboarding.check.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",
+    "argon2": "0.44.0",
     "dotenv": "^16.6.1",
     "fastify": "^5.0.0",
     "zod": "^3.23.8"

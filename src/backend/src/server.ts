@@ -1,6 +1,9 @@
 import { buildApp } from './app.js';
+import { RegisterOfficeWithOwner } from './application/onboarding/register-office-with-owner.js';
 import { createPrismaClient, createPrismaHealthChecker } from './database.js';
 import { EnvironmentError, loadEnvironment } from './environment.js';
+import { PrismaOfficeRegistrationRepository } from './infrastructure/prisma/prisma-office-registration-repository.js';
+import { Argon2PasswordHasher } from './infrastructure/security/argon2-password-hasher.js';
 import { createShutdown } from './shutdown.js';
 
 let prisma: ReturnType<typeof createPrismaClient> | undefined;
@@ -24,7 +27,11 @@ process.on('SIGTERM', handleSignal);
 try {
   const environment = loadEnvironment();
   prisma = createPrismaClient(environment.DATABASE_URL);
-  app = buildApp(createPrismaHealthChecker(prisma));
+  const registration = new RegisterOfficeWithOwner(
+    new PrismaOfficeRegistrationRepository(prisma),
+    new Argon2PasswordHasher(),
+  );
+  app = buildApp(createPrismaHealthChecker(prisma), registration);
   await app.listen({
     host: environment.HOST,
     port: environment.PORT,

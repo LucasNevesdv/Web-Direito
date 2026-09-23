@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => {
   };
   const prisma = { $disconnect: vi.fn(async () => {}) };
   const checker = { check: vi.fn(async () => {}) };
+  const repository = {};
+  const passwordHasher = {};
+  const registration = { execute: vi.fn() };
 
   return {
     EnvironmentError,
@@ -27,6 +30,12 @@ const mocks = vi.hoisted(() => {
     app,
     prisma,
     checker,
+    repository,
+    passwordHasher,
+    registration,
+    PrismaOfficeRegistrationRepository: vi.fn(function () { return repository; }),
+    Argon2PasswordHasher: vi.fn(function () { return passwordHasher; }),
+    RegisterOfficeWithOwner: vi.fn(function () { return registration; }),
     loadEnvironment: vi.fn(() => environment),
     createPrismaClient: vi.fn(() => prisma),
     createPrismaHealthChecker: vi.fn(() => checker),
@@ -42,6 +51,15 @@ vi.mock('../src/database.js', () => ({
 vi.mock('../src/environment.js', () => ({
   EnvironmentError: mocks.EnvironmentError,
   loadEnvironment: mocks.loadEnvironment,
+}));
+vi.mock('../src/application/onboarding/register-office-with-owner.js', () => ({
+  RegisterOfficeWithOwner: mocks.RegisterOfficeWithOwner,
+}));
+vi.mock('../src/infrastructure/prisma/prisma-office-registration-repository.js', () => ({
+  PrismaOfficeRegistrationRepository: mocks.PrismaOfficeRegistrationRepository,
+}));
+vi.mock('../src/infrastructure/security/argon2-password-hasher.js', () => ({
+  Argon2PasswordHasher: mocks.Argon2PasswordHasher,
 }));
 
 const signalHandlers = new Map<string, () => void>();
@@ -84,7 +102,7 @@ function triggerSignal(signal: 'SIGINT' | 'SIGTERM'): void {
 }
 
 describe('backend bootstrap', () => {
-  it('composes the Prisma checker and listens on the validated host and port', async () => {
+  it('composes registration, hashing and readiness and listens on the validated host and port', async () => {
     await import('../src/server.js');
 
     expect(mocks.loadEnvironment).toHaveBeenCalledOnce();
@@ -92,7 +110,12 @@ describe('backend bootstrap', () => {
       mocks.environment.DATABASE_URL,
     );
     expect(mocks.createPrismaHealthChecker).toHaveBeenCalledWith(mocks.prisma);
-    expect(mocks.buildApp).toHaveBeenCalledWith(mocks.checker);
+    expect(mocks.PrismaOfficeRegistrationRepository).toHaveBeenCalledWith(mocks.prisma);
+    expect(mocks.Argon2PasswordHasher).toHaveBeenCalledOnce();
+    expect(mocks.RegisterOfficeWithOwner).toHaveBeenCalledWith(
+      mocks.repository, mocks.passwordHasher,
+    );
+    expect(mocks.buildApp).toHaveBeenCalledWith(mocks.checker, mocks.registration);
     expect(mocks.app.listen).toHaveBeenCalledWith({
       host: mocks.environment.HOST,
       port: mocks.environment.PORT,
@@ -187,6 +210,9 @@ describe('backend bootstrap', () => {
     expect(mocks.createPrismaClient).not.toHaveBeenCalled();
     expect(mocks.createPrismaHealthChecker).not.toHaveBeenCalled();
     expect(mocks.buildApp).not.toHaveBeenCalled();
+    expect(mocks.PrismaOfficeRegistrationRepository).not.toHaveBeenCalled();
+    expect(mocks.Argon2PasswordHasher).not.toHaveBeenCalled();
+    expect(mocks.RegisterOfficeWithOwner).not.toHaveBeenCalled();
     expect(mocks.app.listen).not.toHaveBeenCalled();
     expect(mocks.app.close).not.toHaveBeenCalled();
     expect(mocks.prisma.$disconnect).not.toHaveBeenCalled();
