@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import type { RateLimiter } from '../application/security/rate-limiter.js';
+import { rateLimitHook } from './rate-limit-hook.js';
 import { z } from 'zod';
 import { EmailAlreadyRegisteredError } from '../application/onboarding/email-already-registered-error.js';
 import { InvalidRegistrationError } from '../application/onboarding/invalid-registration-error.js';
@@ -95,6 +97,7 @@ const errorResponseSchema = {
 export function registerOnboardingRoute(
   app: FastifyInstance,
   registration: Pick<RegisterOfficeWithOwner, 'execute'>,
+  limiter: RateLimiter,
 ): void {
   app.register(async (onboarding) => {
     onboarding.setErrorHandler((error, _request, reply) => {
@@ -127,6 +130,7 @@ export function registerOnboardingRoute(
     });
 
     onboarding.post('/api/v1/onboarding', {
+      onRequest: rateLimitHook(limiter, 'onboarding-ip'),
       bodyLimit: 16 * 1024,
       schema: {
         response: {

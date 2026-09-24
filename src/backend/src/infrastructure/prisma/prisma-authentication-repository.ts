@@ -33,4 +33,21 @@ export class PrismaAuthenticationRepository implements AuthenticationRepository 
     });
     return record ? { session: Session.restore(record), account: toAccount(record.user) } : null;
   }
+
+  async rotateSession(input: { id: string; currentHash: string; nextHash: string; now: Date }): Promise<boolean> {
+    const result = await this.prisma.session.updateMany({
+      where: {
+        id: input.id, refreshTokenHash: input.currentHash, revokedAt: null, expiresAt: { gt: input.now },
+        user: { status: 'ACTIVE' }, office: { status: 'ACTIVE' }, membership: { role: 'OWNER' },
+      },
+      data: { refreshTokenHash: input.nextHash, lastUsedAt: input.now, updatedAt: input.now },
+    });
+    return result.count === 1;
+  }
+
+  async revokeSession(id: string, now: Date): Promise<void> {
+    await this.prisma.session.updateMany({
+      where: { id, revokedAt: null }, data: { revokedAt: now, updatedAt: now },
+    });
+  }
 }

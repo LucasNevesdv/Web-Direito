@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { rateLimiterFixture } from './support/rate-limiter-fixture.js';
 import { EmailAlreadyRegisteredError } from '../src/application/onboarding/email-already-registered-error.js';
 import { InvalidRegistrationError } from '../src/application/onboarding/invalid-registration-error.js';
 import type { RegisterOfficeWithOwner } from '../src/application/onboarding/register-office-with-owner.js';
@@ -31,7 +32,7 @@ function createApp() {
   const execute = vi.fn<RegisterOfficeWithOwner['execute']>()
     .mockResolvedValue(publicResult);
   const check = vi.fn().mockResolvedValue(undefined);
-  const app = buildApp({ check }, { execute });
+  const app = buildApp({ check }, { execute }, undefined, { limiter: rateLimiterFixture().limiter });
   apps.push(app);
   return { app, execute, check };
 }

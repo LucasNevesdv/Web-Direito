@@ -36,6 +36,27 @@ function isHost(value: string): boolean {
 }
 
 const environmentSchema = z.object({
+  RATE_LIMIT_HMAC_SECRET: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/)
+    .refine((value) => Buffer.from(value, 'base64url').length >= 32).optional(),
+  RATE_LIMIT_ONBOARDING_MAX: z.coerce.number().int().min(1).max(10000).default(10),
+  RATE_LIMIT_ONBOARDING_WINDOW_SECONDS: z.coerce.number().int().min(1).max(86400).default(900),
+  RATE_LIMIT_LOGIN_IP_MAX: z.coerce.number().int().min(1).max(10000).default(30),
+  RATE_LIMIT_LOGIN_IDENTITY_MAX: z.coerce.number().int().min(1).max(10000).default(5),
+  RATE_LIMIT_LOGIN_WINDOW_SECONDS: z.coerce.number().int().min(1).max(86400).default(900),
+  RATE_LIMIT_REFRESH_MAX: z.coerce.number().int().min(1).max(10000).default(30),
+  RATE_LIMIT_REFRESH_WINDOW_SECONDS: z.coerce.number().int().min(1).max(86400).default(60),
+  RATE_LIMIT_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(1000).max(3600000).default(60000),
+  TRUST_PROXY: z.string().default('').refine((value) => value === '' || value.split(',').every((entry) => {
+    const [address, bits, extra] = entry.trim().split('/');
+    const version = isIP(address);
+    return version !== 0 && !extra && (bits === undefined || (/^\d{1,3}$/.test(bits) && Number(bits) > 0 && Number(bits) <= (version === 4 ? 32 : 128)));
+  })).transform((value) => value ? value.split(',').map((entry) => entry.trim()) : false as const),
+  AUTH_FRONTEND_ORIGIN: z.string().url().refine((value) => {
+    try {
+      const url = new URL(value);
+      return ['http:', 'https:'].includes(url.protocol) && url.origin === value && !url.username && !url.password;
+    } catch { return false; }
+  }).default('http://localhost:5173'),
   DATABASE_URL: z.string().trim().refine(isPostgreSqlUrl),
   HOST: z.string().refine(isHost).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
@@ -48,6 +69,10 @@ const environmentSchema = z.object({
   AUTH_JWT_AUDIENCE: z.string().trim().min(1).max(200).default('neodireito-web'),
   AUTH_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(900),
   AUTH_REFRESH_TTL_SECONDS: z.coerce.number().int().min(3600).max(604800).default(604800),
+}).superRefine((value, context) => {
+  if (value.NODE_ENV === 'production' && !value.AUTH_FRONTEND_ORIGIN.startsWith('https://')) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['AUTH_FRONTEND_ORIGIN'], message: 'HTTPS required' });
+  }
 });
 
 export type Environment = z.infer<typeof environmentSchema>;
@@ -62,7 +87,7 @@ export class EnvironmentError extends Error {
 export function parseEnvironment(
   input: Record<string, unknown>,
 ): Environment {
-  const result = environmentSchema.safeParse(input);
+  const result = environmentSchema.safeParse({ RATE_LIMIT_LOGIN_IP_MAX: input.NODE_ENV === 'production' ? 10 : 30, ...input });
 
   if (!result.success) {
     const variables = [

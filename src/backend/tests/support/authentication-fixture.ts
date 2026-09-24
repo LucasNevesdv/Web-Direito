@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { vi } from 'vitest';
 import { AuthenticateUser } from '../../src/application/authentication/authenticate-user.js';
 import { GetAuthenticatedIdentity } from '../../src/application/authentication/get-authenticated-identity.js';
+import { RefreshSession } from '../../src/application/authentication/refresh-session.js';
+import { LogoutSession } from '../../src/application/authentication/logout-session.js';
 import type { AuthenticationAccount, AuthenticationRepository } from '../../src/application/authentication/authentication-contracts.js';
 import { Session } from '../../src/domain/sessions/session.js';
 import { User } from '../../src/domain/users/user.js';
@@ -29,6 +31,16 @@ export async function authenticationFixture() {
       const session = sessions.get(id);
       return session ? { session, account } : null;
     }),
+    rotateSession: vi.fn(async ({ id, currentHash, nextHash, now }) => {
+      const session = sessions.get(id);
+      if (!session || !session.isActive(now) || session.toPersistence().refreshTokenHash !== currentHash) return false;
+      sessions.set(id, Session.restore({ ...session.toPersistence(), refreshTokenHash: nextHash, lastUsedAt: now, updatedAt: now }));
+      return true;
+    }),
+    revokeSession: vi.fn(async (id, now) => {
+      const session = sessions.get(id);
+      if (session && !session.toPersistence().revokedAt) sessions.set(id, Session.restore({ ...session.toPersistence(), revokedAt: now, updatedAt: now }));
+    }),
   };
   const passwords = { verify: vi.fn((hash: string, password: string) => hasher.verify(hash, password)) };
   const tokens = new JoseAccessTokens(testSecret, 'test-issuer', 'test-audience', 900);
@@ -37,5 +49,7 @@ export async function authenticationFixture() {
     referencePasswordHash, accessTtlSeconds: 900, refreshTtlSeconds: 604800,
   });
   const identity = new GetAuthenticatedIdentity(repository, tokens);
-  return { account, sessions, repository, passwords, tokens, refresh, login, identity, referencePasswordHash };
+  const refreshSession = new RefreshSession(repository, refresh, tokens, 900);
+  const logout = new LogoutSession(repository, refresh);
+  return { account, sessions, repository, passwords, tokens, refresh, login, identity, refreshSession, logout, referencePasswordHash };
 }

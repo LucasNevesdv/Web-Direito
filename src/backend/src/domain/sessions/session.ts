@@ -47,10 +47,10 @@ export class Session {
     });
   }
 
-  static create(input: { userId: string; activeOfficeId: string; refreshTokenHash: string; expiresAt: Date; now?: Date }): Session {
+  static create(input: { id?: string; userId: string; activeOfficeId: string; refreshTokenHash: string; expiresAt: Date; now?: Date }): Session {
     const now = input.now ?? new Date();
     return new Session({
-      id: randomUUID(), userId: input.userId, activeOfficeId: input.activeOfficeId,
+      id: input.id ?? randomUUID(), userId: input.userId, activeOfficeId: input.activeOfficeId,
       refreshTokenHash: input.refreshTokenHash, expiresAt: input.expiresAt,
       createdAt: now, updatedAt: now, revokedAt: null, lastUsedAt: null,
     });

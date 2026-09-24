@@ -1,9 +1,32 @@
 import { RegisterPage } from './register-page';
 import { LoginPage } from './login-page';
+import { useEffect, useSyncExternalStore } from 'react';
+import { AuthProvider, useAuth } from './auth-context';
+import type { AuthClient } from './auth-client';
+import { authClient } from './authentication';
+import { navigate } from './routing';
 
-export function App() {
-  if (window.location.pathname === '/login') return <LoginPage />;
-  if (window.location.pathname === '/register') {
+const subscribePath = (listener: () => void) => {
+  window.addEventListener('popstate', listener);
+  return () => window.removeEventListener('popstate', listener);
+};
+
+export function App({ client = authClient }: { client?: AuthClient }) {
+  return <AuthProvider client={client}><Routes /></AuthProvider>;
+}
+
+function Routes() {
+  const { status } = useAuth();
+  const path = useSyncExternalStore(subscribePath, () => window.location.pathname);
+  useEffect(() => {
+    if (path === '/login' && status === 'authenticated') navigate('/app');
+    if (path !== '/' && path !== '/register' && path !== '/login' && status === 'unauthenticated') navigate('/login');
+  }, [path, status]);
+  if (path !== '/' && path !== '/register') {
+    if (status === 'loading') return <main className="min-h-screen bg-slate-950 p-12 text-slate-100"><p role="status">Restaurando sessão…</p></main>;
+    return <LoginPage />;
+  }
+  if (path === '/register') {
     return <RegisterPage />;
   }
 

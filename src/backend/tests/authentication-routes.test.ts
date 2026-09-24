@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { InactiveOfficeError, InactiveUserError, InvalidCredentialsError, MultipleActiveOfficesError } from '../src/application/authentication/authentication-errors.js';
 import { authenticationFixture, testPassword, testSecret } from './support/authentication-fixture.js';
+import { rateLimiterFixture } from './support/rate-limiter-fixture.js';
 
 const apps: ReturnType<typeof buildApp>[] = [];
 afterEach(async () => { await Promise.all(apps.splice(0).map((app) => app.close())); });
@@ -11,11 +12,12 @@ async function setup(secureCookie = false, loginLimit = 30) {
   const fixture = await authenticationFixture();
   const app = buildApp({ check: async () => {} }, undefined, {
     login: fixture.login, identity: fixture.identity, secureCookie,
-    refreshTtlSeconds: 604800, loginLimit, loginWindowMs: 900000,
-  });
+    refresh: fixture.refreshSession, logout: fixture.logout, frontendOrigin: 'http://localhost:5173',
+    refreshTtlSeconds: 604800,
+  }, { limiter: rateLimiterFixture({ 'login-ip': { limit: loginLimit } }).limiter });
   apps.push(app);
   const login = (payload: Record<string, unknown> = { email: fixture.account.user.email, password: testPassword }) =>
-    app.inject({ method: 'POST', url: '/api/v1/auth/login', payload });
+    app.inject({ method: 'POST', url: '/api/v1/auth/login', headers: { origin: 'http://localhost:5173' }, payload });
   return { ...fixture, app, postLogin: login };
 }
 
@@ -83,7 +85,7 @@ describe('authentication HTTP contract', () => {
 
   it('sanitizes malformed JSON and unexpected errors', async () => {
     const fixture = await setup();
-    const malformed = await fixture.app.inject({ method: 'POST', url: '/api/v1/auth/login', headers: { 'content-type': 'application/json' }, payload: '{"password":"private-fixture"' });
+    const malformed = await fixture.app.inject({ method: 'POST', url: '/api/v1/auth/login', headers: { origin: 'http://localhost:5173', 'content-type': 'application/json' }, payload: '{"password":"private-fixture"' });
     expect(malformed.statusCode).toBe(400);
     expect(malformed.body).not.toContain('private-fixture');
     vi.spyOn(fixture.login, 'execute').mockRejectedValueOnce(new Error('database-internal-detail'));
@@ -121,7 +123,7 @@ describe('authentication HTTP contract', () => {
     expect(fixture.passwords.verify).toHaveBeenCalledTimes(2);
     expect((await fixture.app.inject('/health')).statusCode).toBe(200);
     expect((await fixture.app.inject('/ready')).statusCode).toBe(200);
-    const spoof = await fixture.app.inject({ method: 'POST', url: '/api/v1/auth/login', headers: { 'x-forwarded-for': '203.0.113.42' }, payload: { email: 'unknown@example.test', password: 'wrong' } });
+    const spoof = await fixture.app.inject({ method: 'POST', url: '/api/v1/auth/login', headers: { origin: 'http://localhost:5173', 'x-forwarded-for': '203.0.113.42' }, payload: { email: 'unknown@example.test', password: 'wrong' } });
     expect(spoof.statusCode).toBe(429);
   });
 });

@@ -13,11 +13,11 @@
     "verify:office-repository": "tsx tests/integration/prisma-offices-repository.check.ts",
     "verify:onboarding": "tsx tests/integration/onboarding.check.ts",
     "configure:auth": "node scripts/configure-auth.mjs",
-    "verify:auth-browser": "node tests/integration/authentication-browser.check.mjs"
+    "verify:auth-browser": "node tests/integration/authentication-browser.check.mjs",
+    "verify:rate-limit": "node tests/integration/distributed-rate-limit.check.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11",
-    "@fastify/rate-limit": "10",
     "@prisma/client": "^6.16.2",
     "argon2": "0.44.0",
     "dotenv": "^16.6.1",

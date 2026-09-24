@@ -10,6 +10,8 @@ export interface AuthenticationRepository {
   findByEmail(email: string): Promise<AuthenticationAccount | null>;
   createSession(session: Session): Promise<void>;
   findSession(id: string): Promise<{ session: Session; account: AuthenticationAccount } | null>;
+  rotateSession(input: { id: string; currentHash: string; nextHash: string; now: Date }): Promise<boolean>;
+  revokeSession(id: string, now: Date): Promise<void>;
 }
 
 export interface AccessClaims {
@@ -25,7 +27,9 @@ export interface AccessTokens {
 }
 
 export interface RefreshTokens {
-  generate(): { token: string; hash: string };
+  generate(sessionId?: string): { sessionId: string; token: string; hash: string };
+  parse(token: string): { sessionId: string; hash: string } | null;
+  matches(receivedHash: string, storedHash: string): boolean;
 }
 
 export interface PublicIdentity {

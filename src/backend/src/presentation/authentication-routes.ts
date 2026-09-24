@@ -1,19 +1,23 @@
 import cookie from '@fastify/cookie';
-import rateLimit from '@fastify/rate-limit';
+import type { RateLimiter } from '../application/security/rate-limiter.js';
+import { rateLimitHook } from './rate-limit-hook.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AuthenticateUser } from '../application/authentication/authenticate-user.js';
 import type { GetAuthenticatedIdentity } from '../application/authentication/get-authenticated-identity.js';
+import type { RefreshSession } from '../application/authentication/refresh-session.js';
+import type { LogoutSession } from '../application/authentication/logout-session.js';
 import type { PublicIdentity } from '../application/authentication/authentication-contracts.js';
 import { InactiveOfficeError, InactiveUserError, InvalidAccessTokenError, InvalidCredentialsError, MultipleActiveOfficesError } from '../application/authentication/authentication-errors.js';
 
 export interface AuthenticationRoutes {
   login: Pick<AuthenticateUser, 'execute'>;
   identity: Pick<GetAuthenticatedIdentity, 'execute'>;
+  refresh: Pick<RefreshSession, 'execute'>;
+  logout: Pick<LogoutSession, 'execute'>;
+  frontendOrigin: string;
   secureCookie: boolean;
   refreshTtlSeconds: number;
-  loginLimit: number;
-  loginWindowMs: number;
 }
 
 const loginBody = z.object({
@@ -30,22 +34,36 @@ function publicResponse(identity: PublicIdentity): PublicIdentity {
   };
 }
 
-export function registerAuthenticationRoutes(app: FastifyInstance, services: AuthenticationRoutes): void {
+export function registerAuthenticationRoutes(app: FastifyInstance, services: AuthenticationRoutes, limiter: RateLimiter): void {
+  const cookieOptions = {
+    httpOnly: true, sameSite: 'lax' as const, path: '/api/v1/auth', secure: services.secureCookie,
+  };
   app.register(async (auth) => {
     await auth.register(cookie);
-    await auth.register(rateLimit, {
-      global: false, hook: 'onRequest', keyGenerator: (request) => request.ip,
-      errorResponseBuilder: () => ({ statusCode: 429, ...tooManyAttempts }),
-    });
     auth.addHook('onSend', async (_request, reply, payload) => {
       reply.header('Cache-Control', 'no-store');
       return payload;
+    });
+    auth.addHook('onRequest', async (request, reply) => {
+      // Same-origin proxy deployment: never trust Host/X-Forwarded-Host as the allowed origin.
+      if (request.method === 'POST' && request.headers.origin !== services.frontendOrigin) {
+        return reply.status(403).send({ error: 'FORBIDDEN', message: 'Solicitação não permitida.' });
+      }
+      if ((request.headers.cookie?.length ?? 0) > 4096) {
+        reply.clearCookie('refresh_token', cookieOptions);
+        if (request.routeOptions.url === '/api/v1/auth/logout') {
+          await services.logout.execute(request.cookies.refresh_token);
+          return reply.status(204).send();
+        }
+        throw new InvalidAccessTokenError();
+      }
     });
     auth.setErrorHandler((error, _request, reply) => {
       if (error instanceof InvalidCredentialsError || error instanceof InactiveUserError || error instanceof InactiveOfficeError) {
         return reply.status(401).send(invalidCredentials);
       }
       if (error instanceof InvalidAccessTokenError) {
+        if (_request.routeOptions.url === '/api/v1/auth/refresh') reply.clearCookie('refresh_token', cookieOptions);
         return reply.status(401).send({ error: 'UNAUTHORIZED', message: 'Entre novamente para continuar.' });
       }
       if (error instanceof MultipleActiveOfficesError) {
@@ -61,7 +79,8 @@ export function registerAuthenticationRoutes(app: FastifyInstance, services: Aut
 
     auth.post('/api/v1/auth/login', {
       bodyLimit: 4 * 1024,
-      config: { rateLimit: { max: services.loginLimit, timeWindow: services.loginWindowMs } },
+      onRequest: rateLimitHook(limiter, 'login-ip'),
+      preValidation: rateLimitHook(limiter, 'login-identity'),
     }, async (request, reply) => {
       const parsed = loginBody.safeParse(request.body);
       if (!parsed.success) {
@@ -74,13 +93,33 @@ export function registerAuthenticationRoutes(app: FastifyInstance, services: Aut
       }
       const result = await services.login.execute(parsed.data);
       reply.setCookie('refresh_token', result.refreshToken, {
-        httpOnly: true, sameSite: 'lax', path: '/api/v1/auth', secure: services.secureCookie,
+        ...cookieOptions,
         maxAge: services.refreshTtlSeconds, expires: result.refreshExpiresAt,
       });
       return reply.send({
         accessToken: result.response.accessToken, expiresIn: result.response.expiresIn,
         ...publicResponse(result.response),
       });
+    });
+
+    auth.post('/api/v1/auth/refresh', {
+      bodyLimit: 1024,
+      onRequest: rateLimitHook(limiter, 'refresh-ip'),
+    }, async (request, reply) => {
+      // No token accepted from query or body, including when a valid cookie is present.
+      if (request.body !== undefined || Object.keys(request.query as object).length) throw new InvalidAccessTokenError();
+      const result = await services.refresh.execute(request.cookies.refresh_token);
+      reply.setCookie('refresh_token', result.refreshToken, {
+        ...cookieOptions, expires: result.refreshExpiresAt,
+        maxAge: Math.max(0, Math.floor((result.refreshExpiresAt.getTime() - Date.now()) / 1000)),
+      });
+      return reply.send({ accessToken: result.response.accessToken, expiresIn: result.response.expiresIn, ...publicResponse(result.response) });
+    });
+
+    auth.post('/api/v1/auth/logout', { bodyLimit: 1024 }, async (request, reply) => {
+      try { await services.logout.execute(request.cookies.refresh_token); }
+      finally { reply.clearCookie('refresh_token', cookieOptions); }
+      return reply.status(204).send();
     });
 
     auth.get('/api/v1/auth/me', async (request, reply) => {

@@ -35,6 +35,8 @@ const mocks = vi.hoisted(() => {
     passwordHasher,
     registration,
     authentication,
+    limiter: {},
+    cleanup: { stop: vi.fn(async () => {}) },
     createAuthentication: vi.fn(async () => authentication),
     PrismaOfficeRegistrationRepository: vi.fn(function () { return repository; }),
     Argon2PasswordHasher: vi.fn(function () { return passwordHasher; }),
@@ -48,6 +50,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('../src/app.js', () => ({ buildApp: mocks.buildApp }));
 vi.mock('../src/authentication.js', () => ({ createAuthentication: mocks.createAuthentication }));
+vi.mock('../src/rate-limiting.js', () => ({ createRateLimiting: () => ({ limiter: mocks.limiter, startCleanup: () => mocks.cleanup }) }));
 vi.mock('../src/database.js', () => ({
   createPrismaClient: mocks.createPrismaClient,
   createPrismaHealthChecker: mocks.createPrismaHealthChecker,
@@ -120,7 +123,7 @@ describe('backend bootstrap', () => {
       mocks.repository, mocks.passwordHasher,
     );
     expect(mocks.createAuthentication).toHaveBeenCalledWith(mocks.prisma, mocks.environment, mocks.passwordHasher);
-    expect(mocks.buildApp).toHaveBeenCalledWith(mocks.checker, mocks.registration, mocks.authentication);
+    expect(mocks.buildApp).toHaveBeenCalledWith(mocks.checker, mocks.registration, mocks.authentication, { limiter: mocks.limiter, trustProxy: undefined });
     expect(mocks.app.listen).toHaveBeenCalledWith({
       host: mocks.environment.HOST,
       port: mocks.environment.PORT,
@@ -201,6 +204,7 @@ describe('backend bootstrap', () => {
     });
     expect(mocks.app.close).toHaveBeenCalledOnce();
     expect(process.exitCode).toBeUndefined();
+    expect(mocks.cleanup.stop).toHaveBeenCalledOnce();
     expect(console.error).not.toHaveBeenCalled();
     expect(process.exit).not.toHaveBeenCalled();
   });

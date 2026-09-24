@@ -6,13 +6,16 @@ import { EnvironmentError, loadEnvironment } from './environment.js';
 import { PrismaOfficeRegistrationRepository } from './infrastructure/prisma/prisma-office-registration-repository.js';
 import { Argon2PasswordHasher } from './infrastructure/security/argon2-password-hasher.js';
 import { createShutdown } from './shutdown.js';
+import { createRateLimiting } from './rate-limiting.js';
 
 let prisma: ReturnType<typeof createPrismaClient> | undefined;
 let app: ReturnType<typeof buildApp> | undefined;
+let cleanup: { stop(): Promise<void> } | undefined;
 
 const shutdown = createShutdown(
   { close: async () => { await app?.close(); } },
   { $disconnect: async () => { await prisma?.$disconnect(); } },
+  { stop: async () => { await cleanup?.stop(); } },
 );
 
 function handleSignal(): void {
@@ -34,11 +37,13 @@ try {
     passwords,
   );
   const authentication = await createAuthentication(prisma, environment, passwords);
-  app = buildApp(createPrismaHealthChecker(prisma), registration, authentication);
+  const rateLimiting = createRateLimiting(prisma, environment);
+  app = buildApp(createPrismaHealthChecker(prisma), registration, authentication, { limiter: rateLimiting.limiter, trustProxy: environment.TRUST_PROXY });
   await app.listen({
     host: environment.HOST,
     port: environment.PORT,
   });
+  cleanup = rateLimiting.startCleanup();
 } catch (error) {
   process.exitCode = 1;
   console.error(

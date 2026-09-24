@@ -1,12 +1,17 @@
 export function createShutdown(
   app: { close(): Promise<unknown> },
   database: { $disconnect(): Promise<void> },
+  background?: { stop(): Promise<void> },
 ): () => Promise<void> {
   let shutdownPromise: Promise<void> | undefined;
 
   return () => {
     shutdownPromise ??= Promise.resolve().then(async () => {
       const errors: unknown[] = [];
+
+      if (background) {
+        try { await background.stop(); } catch (error) { errors.push(error); }
+      }
 
       try {
         await app.close();

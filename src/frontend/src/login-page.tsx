@@ -1,9 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react';
-
-interface Identity {
-  user: { id: string; name: string; email: string };
-  office: { id: string; name: string; role: 'OWNER' };
-}
+import { LoginError } from './auth-client';
+import { useAuth } from './auth-context';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -11,8 +8,7 @@ export function LoginPage() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [identity, setIdentity] = useState<Identity | null>(null);
-  const accessToken = useRef<string | null>(null);
+  const { client, identity } = useAuth();
   const pending = useRef(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -30,40 +26,22 @@ export function LoginPage() {
     }
     pending.current = true;
     setLoading(true);
-    accessToken.current = null;
     try {
-      const response = await fetch('/api/v1/auth/login', {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalizedEmail, password }),
-      });
-      if (response.status === 401) {
+      await client.login(normalizedEmail, password);
+      setPassword('');
+    } catch (error) {
+      const status = error instanceof LoginError ? error.status : 500;
+      if (status === 401) {
         setMessage('Não foi possível entrar. Confira suas credenciais.');
-      } else if (response.status === 429) {
+      } else if (status === 429) {
         setMessage('Muitas tentativas. Aguarde antes de tentar novamente.');
-      } else if (response.status === 409) {
+      } else if (status === 409) {
         setMessage('A seleção entre escritórios ainda não está disponível.');
-      } else if (response.status === 400) {
+      } else if (status === 400) {
         setMessage('Confira o e-mail e a senha informados.');
-      } else if (response.status !== 200) {
-        setMessage('Não foi possível entrar. Tente novamente em instantes.');
       } else {
-        const result: { accessToken?: unknown } = await response.json();
-        if (typeof result.accessToken !== 'string') throw new Error('Invalid login response');
-        accessToken.current = result.accessToken;
-        const me = await fetch('/api/v1/auth/me', {
-          credentials: 'include', headers: { Authorization: `Bearer ${accessToken.current}` },
-        });
-        if (me.status !== 200) throw new Error('Identity unavailable');
-        const current: Identity = await me.json();
-        if (typeof current.user?.name !== 'string' || typeof current.office?.name !== 'string' || current.office.role !== 'OWNER') {
-          throw new Error('Invalid identity response');
-        }
-        setPassword('');
-        setIdentity(current);
+        setMessage('Não foi possível entrar. Tente novamente em instantes.');
       }
-    } catch {
-      accessToken.current = null;
-      setMessage('Não foi possível entrar. Tente novamente em instantes.');
     } finally {
       pending.current = false;
       setLoading(false);
@@ -80,8 +58,10 @@ export function LoginPage() {
             <h2 className="text-2xl text-cyan-300">Olá, {identity.user.name}</h2>
             <p>Escritório: <strong>{identity.office.name}</strong></p>
             <p>Papel: <strong>{identity.office.role}</strong></p>
-            <p className="text-sm leading-6 text-slate-300">Esta é uma área autenticada provisória. O logout será implementado posteriormente.</p>
-            <p className="text-sm leading-6 text-slate-300">Ao atualizar esta página, será necessário entrar novamente até a renovação de sessão estar disponível.</p>
+            <p className="text-sm leading-6 text-slate-300">Esta é uma área autenticada provisória.</p>
+            <button type="button" onClick={() => {
+              void client.logout().catch(() => setMessage('Não foi possível encerrar a sessão no servidor. Tente novamente.'));
+            }} className="rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950">Sair</button>
           </div>
         ) : (
           <form noValidate onSubmit={submit} aria-busy={loading} className="mt-8">

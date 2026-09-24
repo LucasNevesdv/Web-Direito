@@ -1,6 +1,6 @@
 // Opt-in verification against the configured local PostgreSQL, outside Vitest.
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import { RegisterOfficeWithOwner } from '../../src/application/onboarding/register-office-with-owner.js';
@@ -9,12 +9,16 @@ import { createPrismaClient, createPrismaHealthChecker } from '../../src/databas
 import { loadEnvironment } from '../../src/environment.js';
 import { PrismaOfficeRegistrationRepository } from '../../src/infrastructure/prisma/prisma-office-registration-repository.js';
 import { Argon2PasswordHasher } from '../../src/infrastructure/security/argon2-password-hasher.js';
+import { createRateLimiting } from '../../src/rate-limiting.js';
+import { HmacRateLimitKeys } from '../../src/infrastructure/security/hmac-rate-limit-keys.js';
 
 const runId = randomUUID();
 const scenarios = ['success', 'rollback', 'race-one', 'race-two'];
 const officeNames = scenarios.map((scenario) => `RF001 verification ${runId} ${scenario}`);
 const emails = ['success', 'rollback', 'race'].map((scenario) => `rf001-${runId}-${scenario}@example.invalid`);
 const secret = `${randomUUID()}${randomUUID()}`;
+const rateSecret = randomBytes(48).toString('base64url');
+const rateHash = new HmacRateLimitKeys(rateSecret).digest('onboarding-ip', '127.0.0.1');
 const apps: FastifyInstance[] = [];
 let prisma: ReturnType<typeof createPrismaClient> | undefined;
 let ownsRecords = false;
@@ -51,7 +55,9 @@ async function register(base: string, officeName: string, email: string) {
 }
 
 try {
-  prisma = createPrismaClient(loadEnvironment().DATABASE_URL);
+  const environment = loadEnvironment();
+  prisma = createPrismaClient(environment.DATABASE_URL);
+  const security = createRateLimiting(prisma, { ...environment, RATE_LIMIT_HMAC_SECRET: rateSecret });
   await prisma.$queryRaw`SELECT 1`;
   assert.equal(await prisma.office.count({ where: { name: { in: officeNames } } }), 0);
   assert.equal(await prisma.user.count({ where: { email: { in: emails } } }), 0);
@@ -59,7 +65,7 @@ try {
   const hasher = new Argon2PasswordHasher();
   const repository = new PrismaOfficeRegistrationRepository(prisma);
   const checker = createPrismaHealthChecker(prisma);
-  const base = await listen(buildApp(checker, new RegisterOfficeWithOwner(repository, hasher)));
+  const base = await listen(buildApp(checker, new RegisterOfficeWithOwner(repository, hasher), undefined, security));
 
   phase = 'real_http_onboarding';
   assert.equal((await fetch(`${base}/health`)).status, 200);
@@ -113,7 +119,7 @@ try {
   });
   const failingBase = await listen(buildApp(checker, new RegisterOfficeWithOwner(
     new PrismaOfficeRegistrationRepository(failingClient), hasher,
-  )));
+  ), undefined, security));
   const rolledBack = await register(failingBase, officeNames[1], emails[1]);
   assert.equal(rolledBack.status, 500);
   assert.equal(JSON.stringify(rolledBack.body).includes('Controlled membership'), false);
@@ -150,7 +156,7 @@ try {
     },
     register: (data) => repository.register(data),
   };
-  const racingBase = await listen(buildApp(checker, new RegisterOfficeWithOwner(racingRepository, hasher)));
+  const racingBase = await listen(buildApp(checker, new RegisterOfficeWithOwner(racingRepository, hasher), undefined, security));
   const raced = await Promise.all([
     register(racingBase, officeNames[2], emails[2]),
     register(racingBase, officeNames[3], emails[2]),
@@ -170,6 +176,7 @@ try {
     try {
       if (ownsRecords) {
         await prisma.$transaction(async (transaction) => {
+          await transaction.rateLimitBucket.deleteMany({ where: { keyHash: rateHash } });
           await transaction.membership.deleteMany({
             where: { OR: [{ office: { name: { in: officeNames } } }, { user: { email: { in: emails } } }] },
           });
@@ -181,7 +188,7 @@ try {
           + await prisma.membership.count({
             where: { OR: [{ office: { name: { in: officeNames } } }, { user: { email: { in: emails } } }] },
           });
-        assert.equal(remaining, 0);
+        assert.equal(remaining + await prisma.rateLimitBucket.count({ where: { keyHash: rateHash } }), 0);
         report('temporary_records_cleanup', { remaining });
       }
     } catch {

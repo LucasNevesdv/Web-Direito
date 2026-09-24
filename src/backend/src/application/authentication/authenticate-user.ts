@@ -32,6 +32,7 @@ export class AuthenticateUser {
     const refresh = this.refreshTokens.generate();
     const now = this.clock();
     const session = Session.create({
+      id: refresh.sessionId,
       userId: account.user.id, activeOfficeId: membership.office.id, refreshTokenHash: refresh.hash,
       expiresAt: new Date(now.getTime() + this.options.refreshTtlSeconds * 1000), now,
     });

@@ -2,6 +2,18 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model RateLimitBucket {
+  scope       String   @db.VarChar(32)
+  keyHash     String   @map("key_hash") @db.Char(64)
+  windowStart DateTime @map("window_start") @db.Timestamptz(3)
+  count       Int
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@id([scope, keyHash, windowStart])
+  @@index([expiresAt])
+  @@map("rate_limit_buckets")
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -82,5 +94,6 @@ model Session {
   office           Office     @relation(fields: [activeOfficeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   membership       Membership @relation(fields: [activeOfficeId, userId], references: [officeId, userId], onDelete: Restrict, onUpdate: Restrict)
 
+  @@index([expiresAt])
   @@map("sessions")
 }

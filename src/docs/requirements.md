@@ -16,9 +16,9 @@ aprovados permanecem explicitamente pendentes.
 | RF-001 | **Concluído — criar escritório e primeiro usuário administrador no mesmo cadastro.** A página `/register` e `POST /api/v1/onboarding` recebem nome do escritório, nome do responsável, e-mail e senha, validam e normalizam os dados e criam escritório, usuário e vínculo OWNER atomicamente. Escritório e usuário começam ACTIVE. A resposta contém somente dados públicos; falhas não deixam registros parciais. Manutenção e inativação do escritório permanecem pendentes, fora deste escopo concluído. |
 | RF-002 | **Concluído como condição técnica de RF-001 — persistir usuário e vínculo inicial com o escritório.** O e-mail é único globalmente, inclusive sob concorrência, a senha é protegida com Argon2id e o vínculo inicial tem papel OWNER. RF-002 cobre esse cadastro inicial atômico; convites, gerenciamento de membros, uso de múltiplos escritórios e verificação de autorização continuam pendentes. |
 | RF-003 | **Concluído — login com e-mail e senha.** `/login` verifica Argon2id, usuário ACTIVE e único escritório ACTIVE com vínculo válido, cria Session, emite access token e envia refresh token em cookie HttpOnly. `/me` confirma identidade e contexto da sessão. |
-| RF-004 | **Parcialmente concluído — tokens e autorização.** JWT assinado, validação de algoritmo/emissor/audiência/expiração e proteção de `/me` entregues. A autorização das operações dos demais módulos e a matriz de permissões permanecem pendentes. |
-| RF-005 | **Pendente — renovação de sessão.** Usar futuramente o refresh token protegido para renovar o acesso, com política de rotação e revogação a detalhar. Nenhum endpoint de renovação foi implementado. |
-| RF-006 | **Pendente — logout.** Encerrar a sessão e limpar o cookie por um fluxo autorizado. Nenhum endpoint ou botão de logout foi implementado. |
+| RF-004 | **Concluído — emissão e gerenciamento de tokens.** JWT de até 15 minutos, refresh identificável com segredo de 256 bits, somente SHA-256 no banco, rotação atômica e revogação por reutilização. A autorização das operações dos demais módulos e a matriz de permissões permanecem pendentes como evolução de segurança. |
+| RF-005 | **Concluído — renovação de sessão.** POST `/api/v1/auth/refresh` usa apenas cookie HttpOnly, reconfirma sessão/identidade/vínculo, rotaciona o refresh e preserva a expiração absoluta de sete dias. Frontend restaura após recarga, coordena renovação entre abas por Web Locks/BroadcastChannel e repete cada requisição com 401 uma única vez. Expiração e falha definitiva se propagam; fallback seguro está documentado na arquitetura. |
+| RF-006 | **Concluído — logout.** POST `/api/v1/auth/logout` revoga a sessão, limpa o cookie e retorna 204 de forma idempotente. Botão Sair limpa memória e identidade nas abas conectadas e volta ao login; guard impede exibir conteúdo protegido pelo botão Voltar. |
 | RF-007 | Cadastrar, consultar, atualizar e inativar clientes do escritório, preservando seus vínculos e histórico. Campos e tratamento de duplicidades: pendentes. |
 | RF-008 | Cadastrar, consultar e atualizar casos e seus vínculos com clientes do mesmo escritório. Estados e cardinalidade dos relacionamentos: pendentes. |
 | RF-009 | Registrar e acompanhar processos com informações inseridas manualmente, associados ao contexto do escritório. Identificadores, estados e relação entre caso e processo: pendentes; captura automática não pertence ao MVP. |
@@ -43,8 +43,8 @@ escolhas de solução não informadas estão marcadas como pendentes.
 | ID | Critério de aceitação |
 | --- | --- |
 | RNF-001 | **Isolamento:** leituras, buscas, agregações, gravações e acesso a arquivos devem verificar escritório e autorização no backend. Testes com dois escritórios devem provar ausência de leitura ou alteração cruzada, inclusive por IDs fornecidos diretamente pelo cliente. |
-| RNF-002 | **Segurança de acesso:** Argon2id, sessão persistida, JWT de até 15 minutos e refresh token de até 7 dias. Login possui limite básico por IP e resposta idêntica para credenciais inválidas ou contas inativas. Produção exige HTTPS e cookie Secure. Renovação, logout, verificação de e-mail, recuperação de senha, dois fatores e proteção distribuída contra abuso permanecem pendentes. |
-| RNF-003 | **Segredos e erros:** credenciais fora do versionamento; senha, hashes e refresh token nunca aparecem no JSON. Access token é retornado somente no login e mantido apenas em memória. Refresh token é entregue somente em cookie HttpOnly. Logs e auditoria não incluem senha, hashes, tokens completos, cookies ou URLs com credenciais. |
+| RNF-002 | **Segurança de acesso:** Argon2id, sessão absoluta de até 7 dias, JWT de até 15 minutos, rotação e logout. Cadastro/login/refresh têm limites atômicos compartilhados no PostgreSQL, incluindo IP + e-mail normalizado no login; chaves HMAC, políticas configuráveis, 429/Retry-After, falha fechada com 503 e limpeza concorrente de expirados. Proxy confiável somente por lista explícita. Falhas de credenciais/renovação são genéricas. POST com Origin autorizado, SameSite=Lax, produção HTTPS e Secure. Verificação de e-mail, recuperação de senha e dois fatores permanecem pendentes. |
+| RNF-003 | **Segredos e erros:** credenciais fora do versionamento; senha, hashes e refresh token nunca aparecem no JSON. Access token é retornado somente no login/refresh e mantido apenas em memória. Refresh token é entregue somente em cookie HttpOnly. Nenhum token em localStorage/sessionStorage/IndexedDB. Logs e auditoria não incluem senha, hashes, tokens completos, cookies ou URLs com credenciais. |
 | RNF-004 | **Desempenho:** limitar o volume retornado nas listagens e medir tempo de resposta e erros dos fluxos principais com carga representativa. Metas de percentil 95, volume de dados e concorrência são pendentes e devem ser definidas antes da aceitação de desempenho do MVP. |
 | RNF-005 | **Disponibilidade:** distinguir serviço ativo de banco disponível por `/health` e `/ready`, com limites finitos de conexão e consulta. Meta de disponibilidade, janela de medição e procedimento de recuperação: pendentes; a infraestrutura atual não representa, por si só, garantia de alta disponibilidade. |
 | RNF-006 | **Auditoria:** permitir rastrear operações relevantes por escritório, autor, ação, recurso e instante. Preservar evidências após exclusões e restringir consulta ou manutenção dos registros; não copiar indiscriminadamente dados sensíveis para logs. Retenção e política de manutenção: pendentes. |
@@ -79,7 +79,7 @@ Critérios do fluxo implementado:
   de sucesso com link para `/login`.
 
 RNF-009 é aplicado às camadas entregues; isso não conclui a arquitetura de todos
-os módulos. RF-003 está concluído e RF-004 parcialmente concluído: `/me` exige
+os módulos. RF-003 a RF-006 estão concluídos no recorte de autenticação: `/me` exige
 token e sessão válidos e confirma usuário, escritório e vínculo no banco.
 Auditoria e isolamento dos demais módulos exigidos por RNF-001 permanecem
 pendentes; emitir tokens não conclui a autorização do produto.
@@ -87,8 +87,10 @@ pendentes; emitir tokens não conclui a autorização do produto.
 O login responde 200 no sucesso, 400 para corpo inválido, 401 genérico para
 credenciais ou contas indisponíveis, 409 quando há mais de um escritório ativo,
 429 para excesso de tentativas e 500 sanitizado para falhas inesperadas.
-Recarregar a página perde o access token em memória e exige novo login; o cookie
-permanece até expirar, mas não é consumido enquanto RF-005 estiver pendente.
+Recarregar restaura a sessão por refresh antes de exibir conteúdo protegido.
+Reutilização revoga toda a sessão. Sem blacklist, JWT emitido pode conservar
+validade residual de até 15 minutos após revogação; `/me` já consulta o banco
+e nega imediatamente. Sessões do formato antigo de refresh exigem novo login.
 
 ## Funcionalidades e integrações futuras — fora do MVP
 

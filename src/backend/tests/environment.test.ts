@@ -9,6 +9,11 @@ import {
 } from '../src/environment.js';
 
 const authDefaults = {
+  RATE_LIMIT_ONBOARDING_MAX: 10, RATE_LIMIT_ONBOARDING_WINDOW_SECONDS: 900,
+  RATE_LIMIT_LOGIN_IP_MAX: 30, RATE_LIMIT_LOGIN_IDENTITY_MAX: 5, RATE_LIMIT_LOGIN_WINDOW_SECONDS: 900,
+  RATE_LIMIT_REFRESH_MAX: 30, RATE_LIMIT_REFRESH_WINDOW_SECONDS: 60,
+  RATE_LIMIT_CLEANUP_INTERVAL_MS: 60000, TRUST_PROXY: false,
+  AUTH_FRONTEND_ORIGIN: 'http://localhost:5173',
   AUTH_JWT_SECRET: Buffer.alloc(48, 7).toString('base64url'),
   AUTH_JWT_ISSUER: 'neodireito', AUTH_JWT_AUDIENCE: 'neodireito-web',
   AUTH_ACCESS_TTL_SECONDS: 900, AUTH_REFRESH_TTL_SECONDS: 604800,
@@ -32,6 +37,13 @@ afterEach(async () => {
 });
 
 describe('environment configuration', () => {
+  it.each(['https://app.example.test/', 'https://app.example.test/path', 'https://user:secret@app.example.test', 'null', 'ftp://example.test'])('rejects non-origin frontend configuration (case %#)', (origin) => {
+    expect(() => parseEnvironment({ ...validEnvironment, AUTH_FRONTEND_ORIGIN: origin })).toThrow('AUTH_FRONTEND_ORIGIN');
+  });
+  it('requires an explicit HTTPS frontend origin in production', () => {
+    expect(() => parseEnvironment({ ...validEnvironment, NODE_ENV: 'production' })).toThrow('AUTH_FRONTEND_ORIGIN');
+    expect(parseEnvironment({ ...validEnvironment, NODE_ENV: 'production', AUTH_FRONTEND_ORIGIN: 'https://app.example.test' }).AUTH_FRONTEND_ORIGIN).toBe('https://app.example.test');
+  });
   it('rejects a missing DATABASE_URL without revealing values', () => {
     expect(() =>
       parseEnvironment({ AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET, PORT: '3000', NODE_ENV: 'test' }),

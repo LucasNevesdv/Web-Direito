@@ -77,33 +77,94 @@ escritórios e usuários nem implementa auditoria ou autorização entre escrit�
 
 RF-003 concluído: login por e-mail/senha, Session persistida, access token de
 15 minutos, refresh protegido de 7 dias, `/me` autenticado e área provisória
-no frontend. RF-004 está parcialmente concluído pela emissão/validação de tokens
-e proteção de `/me`; autorização dos demais módulos permanece pendente.
-RF-005 (renovação) e RF-006 (logout) permanecem pendentes, sem endpoints.
+no frontend. O gerenciamento dos tokens, a renovação e o logout foram concluídos
+na entrega RF-004/RF-005/RF-006 abaixo. Autorização dos demais módulos permanece pendente.
 
 A migration `20260923171012_create_sessions` foi revisada e aplicada sem remover
 dados ou migrations anteriores. Usuário INACTIVE é reconhecido para negar acesso.
-Recarregar a página exige novo login: o token em memória é perdido e o cookie
-somente será consumido por RF-005. A numeração dos requisitos posteriores foi
+Na versão inicial de RF-003, recarregar exigia novo login; esse limite foi
+resolvido por RF-005. A numeração dos requisitos posteriores foi
 ajustada em [requirements.md](requirements.md), preservando os módulos planejados.
 
 Critérios desta entrega: login pelo navegador real após cadastro, cookie protegido,
 consulta de identidade, senha incorreta com 401 genérico, sessão com hash no banco,
 ausência de tokens no armazenamento web/logs e limpeza dos registros de teste.
 
-Verificação: 309 testes aprovados (277 backend e 32 frontend), lint, typecheck
+Verificação histórica de RF-003: 309 testes aprovados (277 backend e 32 frontend), lint, typecheck
 e build. No Chrome headless, cadastro retornou 201, login e `/me` retornaram 200,
 e senha errada retornou 401 genérico. Cookie HttpOnly/SameSite=Lax confirmado;
 nenhum token em localStorage/sessionStorage e somente hash do refresh na Session.
 Recarregar exigiu novo login. Session, Membership, User e Office temporários
 foram removidos e os recursos de teste encerrados. O 404 preexistente de
-`/favicon.ico` permanece uma pendência visual sem bloquear os fluxos.
+`/favicon.ico` foi registrado como pendência visual e resolvido na melhoria técnica abaixo.
+
+## Gerenciamento de sessão — RF-004, RF-005 e RF-006
+
+Concluídos: refresh identificável, rotação condicional no PostgreSQL, detecção de
+reutilização e revogação da sessão inteira, renovação automática e logout 204
+idempotente. JWT permanece com validade máxima de 15 minutos; sessão tem prazo
+absoluto de sete dias. Não há blacklist; `/me` consulta revogação no banco.
+
+Frontend restaura após reload, mantém token só em memória, compartilha uma
+Promise de renovação e repete requisições com 401 uma única vez. Loading/guard
+protegem a área `/app`; Sair limpa identidade e retorna ao login. POST com Origin
+exato e SameSite=Lax protege os fluxos por cookie. O limitador inicialmente local
+foi substituído na melhoria técnica abaixo.
+
+A migration `20260924074000_index_session_expiration` acrescenta somente índice
+para futura busca de sessões expiradas; job de limpeza não foi implementado.
+Critérios de aceite: suíte isolada, lint/typecheck/build, cadastro e login reais
+no Chrome/PostgreSQL, recarga com rotação, JWT expirado com renovação e repetição,
+reutilização com 401/revogação, logout com remoção do cookie e limpeza dos dados
+temporários. Sessões com formato legado precisam de novo login. Recuperação de
+senha e dois fatores permanecem evoluções; coordenação entre abas e limites
+distribuídos foram entregues na melhoria técnica abaixo.
+
+Verificação histórica desta entrega: 373 testes aprovados (322 backend, 51 frontend), lint,
+typecheck e build; Prisma format/validate/generate e migration status aprovados.
+No Chrome/PostgreSQL: cadastro 201, login e `/me` 200, reload com refresh 200 e
+hash rotacionado, JWT expirado com sequência 401/refresh 200/repetição 200,
+reutilização 401 com revogação persistida e logout 204 com cookie removido.
+Reload e retorno pelo histórico após logout exibiram login. Duas atualizações
+concorrentes reais consumiram o hash uma única vez. Nenhum token no armazenamento
+web ou logs. Limpeza confirmou zero resíduos após remover três sessões, um
+Membership, um User e um Office; somente os processos do teste foram encerrados.
+O 404 de favicon preexistente foi resolvido na melhoria técnica seguinte.
+
+## Melhoria técnica dos RF-004 a RF-006 e RNF-002/RNF-003
+
+Implementada: coordenação por BroadcastChannel/Web Locks, protocolo de mensagens
+com sessão/correlação/versão, renovação única entre abas concorrentes, propagação
+de login/logout/expiração/revogação e fallback seguro sem armazenamento persistente.
+Detecção de reutilização permanece estrita, sem janela de tolerância.
+
+Rate limit compartilhado PostgreSQL protege cadastro, login e refresh, com
+HMAC nas chaves, operação atômica, configuração validada, 429/Retry-After,
+503 em indisponibilidade e limpeza concorrente encerrada no shutdown.
+Migration `20260924100000_create_distributed_rate_limits` aplicada sem reset.
+Favicon WD em SVG incluído no HTML e build; nenhum novo RF ou Redis.
+Verificação final: 411 testes aprovados (345 backend e 66 frontend), lint,
+typecheck e build; Prisma format/validate/generate e status das migrations aprovados.
+
+Critérios verificados no Chrome/PostgreSQL: cadastro 201; login, `/me` e refresh
+200; duas abas autenticadas; dois 401 simultâneos gerando um refresh e uma
+rotação de hash, sessão ativa; login, logout e revogação propagados. Logout 204,
+duas abas no login, nenhum token no armazenamento web. Duas instâncias Node
+compartilham orçamento; 40 consumos concorrentes no banco respeitam limite 7;
+próxima janela libera novamente. Favicon 200 sem 404. Dados de verificação e
+buckets próprios removidos, somente processos próprios encerrados.
+
+Limites: teste real de navegador somente em Chrome; fallback dos demais cenários
+coberto por testes isolados. Abas suspensas recebem eventos ao retomar. Sem canal,
+logout é percebido na próxima revalidação; sem locks, exige login manual. Perder
+a resposta de uma rotação pode exigir novo login. Metas de carga/alta disponibilidade,
+proteção avançada e limpeza histórica de sessões continuam fora desta melhoria.
 
 ## Etapas restantes do MVP
 
 A etapa 1 mantém as operações posteriores ao cadastro em andamento; RF-001 e
-RF-002 estão concluídos no recorte acima. A etapa 2 tem RF-003 concluído e RF-004
-parcial; renovação, logout e demais controles continuam planejados.
+RF-002 estão concluídos no recorte acima. A etapa 2 tem RF-003 a RF-006 concluídos;
+permissões dos demais módulos e controles adicionais continuam planejados.
 Segurança, isolamento e registro das operações relevantes devem acompanhar cada
 módulo desde o início; a etapa 9 consolida e verifica esses controles, sem adiar
 sua aplicação.
@@ -111,7 +172,7 @@ sua aplicação.
 | Ordem | Etapa e requisitos | Critérios para concluir |
 | --- | --- | --- |
 | 1 | Escritórios e usuários — **Cadastro RF-001 e RF-002 concluído; evolução pendente** | Concluir decisões de P-001 e implementar manutenção de escritórios, convites e gerenciamento de membros sob autorização. Preservar unicidade, histórico aplicável e consistência dos vínculos; o cadastro inicial atômico já está entregue. |
-| 2 | Autenticação e autorização — RF-003 concluído; RF-004 parcial; RF-005/RF-006 pendentes | Preservar login e `/me` entregues; definir P-002/P-003 e implementar renovação, logout, verificação de e-mail, recuperação de senha, dois fatores e permissões. Testar operações autorizadas e isolamento antes de liberar os demais módulos. Evoluir proteção contra abuso além do limite local de login. |
+| 2 | Autenticação e autorização — RF-003 a RF-006 concluídos; evolução de permissões pendente | Preservar login, `/me`, rotação, coordenação entre abas e logout; definir P-002/P-003 e implementar verificação de e-mail, recuperação de senha, dois fatores e permissões. Testar operações autorizadas e isolamento antes de liberar os demais módulos. Evoluir proteção contra abuso além dos limites compartilhados atuais. |
 | 3 | Clientes — RF-007 | Definir P-004 e a política aplicável de P-008; validar cadastro, consulta, edição e inativação sem perda de histórico ou vínculos, respeitando permissões. |
 | 4 | Casos e processos — RF-008, RF-009 | Definir P-005; validar cadastro e atualização manual, estados e vínculos aprovados com clientes; comprovar consistência e isolamento. Captura automática permanece fora desta etapa. |
 | 5 | Tarefas e prazos — RF-010, RF-011 | Resolver as definições aplicáveis de P-006 e P-008; validar responsáveis, acompanhamento e alterações de datas ou estados, mantendo autoria e histórico. Não presumir regras jurídicas de cálculo. |

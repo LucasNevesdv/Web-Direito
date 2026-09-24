@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { unavailableRateLimiter, type RateLimiter } from './application/security/rate-limiter.js';
 import type { RegisterOfficeWithOwner } from './application/onboarding/register-office-with-owner.js';
 import type { DatabaseHealthChecker } from './database-health-checker.js';
 import { registerOnboardingRoute } from './presentation/onboarding-route.js';
@@ -8,8 +9,9 @@ export function buildApp(
   databaseHealthChecker: DatabaseHealthChecker,
   registration?: Pick<RegisterOfficeWithOwner, 'execute'>,
   authentication?: AuthenticationRoutes,
+  security: { limiter: RateLimiter; trustProxy?: false | string[] } = { limiter: unavailableRateLimiter },
 ) {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, trustProxy: security.trustProxy ?? false });
 
   app.get('/health', async () => ({ status: 'ok' as const }));
 
@@ -23,9 +25,9 @@ export function buildApp(
   });
 
   if (registration) {
-    registerOnboardingRoute(app, registration);
+    registerOnboardingRoute(app, registration, security.limiter);
   }
-  if (authentication) registerAuthenticationRoutes(app, authentication);
+  if (authentication) registerAuthenticationRoutes(app, authentication, security.limiter);
 
   return app;
 }

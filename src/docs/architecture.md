@@ -125,9 +125,9 @@ em dois fatores e proteção avançada contra abuso do endpoint público. Não f
 implementados auditoria de negócio, permissões customizáveis ou isolamento de
 consultas dos demais módulos entre escritórios nesta entrega.
 
-## Autenticação e sessão — RF-003
+## Autenticação e sessão — RF-003 a RF-006
 
-`application/authentication/` contém `AuthenticateUser`, `GetAuthenticatedIdentity`
+`application/authentication/` contém `AuthenticateUser`, `GetAuthenticatedIdentity`, `RefreshSession` e `LogoutSession`
 e contratos específicos para consultas de autenticação, sessões e tokens. Não
 importa Prisma, JWT, Fastify ou cookies. A entidade `Session` valida UUIDs,
 datas e o digest do refresh, mantendo estado privado. `User` admite INACTIVE para
@@ -145,10 +145,12 @@ Session e recupera sessão por ID para `/me`. A migration
 `20260923171012_create_sessions` acrescenta `sessions`, INACTIVE ao enum de usuário
 e índice de `memberships.user_id`, usado na busca dos vínculos no login.
 Session referencia usuário, escritório e o par do Membership com RESTRICT.
-A chave primária atende a busca por sessão; não há índices especulativos de
-expiração, usuário ou escritório em Session. As datas e o formato SHA-256 possuem
+A chave primária atende a busca por sessão. A migration
+`20260924074000_index_session_expiration` acrescenta índice em `expires_at` para
+localizar lotes expirados no futuro cleanup; nenhum job foi criado nesta etapa.
+As datas e o formato SHA-256 possuem
 restrições no domínio e no banco; `revokedAt` e `lastUsedAt` começam nulos.
-Não há atualização de `lastUsedAt` ou endpoint de revogação nesta entrega.
+A renovação atualiza `lastUsedAt` e `updatedAt`; a revogação define `revokedAt`.
 
 `JoseAccessTokens` usa a biblioteca `jose` e HS256 fixo. O token contém `sub`,
 `sessionId`, `activeOfficeId`, `role`, `iat`, `exp`, `iss` e `aud`, sem dados
@@ -157,8 +159,10 @@ claims obrigatórias e prazo máximo de 900 segundos; rejeita emissão futura.
 O segredo base64url de pelo menos 32 bytes é obrigatório em todos os ambientes,
 sem valor padrão. `authentication.ts` compõe adaptadores e casos de uso no bootstrap.
 
-`CryptoRefreshTokens` usa 32 bytes aleatórios criptográficos e persiste somente
-SHA-256 do token. Esse hash rápido é adequado ao segredo aleatório de 256 bits;
+`CryptoRefreshTokens` usa o formato `UUID-da-sessão.segredo-base64url`, com 32 bytes
+aleatórios criptográficos e SHA-256 do token completo. O parser exige UUID e
+base64url canônico, com 80 caracteres ao todo; `timingSafeEqual` compara hashes.
+O token não contém identidade, escritório ou papel. Esse hash rápido é adequado ao segredo aleatório de 256 bits;
 as senhas humanas continuam usando Argon2id. Session dura, por padrão, 604800
 segundos. O token original só sai por cookie `refresh_token`, HttpOnly,
 SameSite=Lax, Path=/api/v1/auth, sem Domain, com Max-Age/Expires e Secure em
@@ -169,26 +173,136 @@ produção. O desenvolvimento HTTP local usa Secure=false. Produção exige HTTP
 `GET /api/v1/auth/me` exige Bearer, valida o JWT e reconfirma sessão não revogada
 ou expirada, usuário/escritório ACTIVE e vínculo/papel atuais no banco.
 Respostas de autenticação usam Cache-Control: no-store. Cookies não autenticam
-`/me` e não existe renovação ou logout.
+`/me`. `POST /api/v1/auth/refresh` recebe somente cookie e retorna o mesmo DTO
+público do login com um novo access token; nunca retorna refresh no JSON.
 
-`@fastify/rate-limit` limita o login antes do trabalho de Argon2: 10 tentativas
-por IP em 15 minutos na produção e 30 no desenvolvimento/teste, incluindo
-tentativas bem-sucedidas. Retorna 429 e Retry-After. O armazenamento é local ao
-processo, reinicia com o serviço e não coordena réplicas. `trustProxy` permanece
-desativado: X-Forwarded-For enviado pelo cliente não permite escapar do limite.
-Implantações com proxy precisam definir confiança e limite distribuído antes de
-escalar. Não há nova dependência de Redis ou proteção avançada do cadastro.
+`RefreshSession` reconfirma validade, estado e vínculo. O repositório faz
+`updateMany` condicionado por ID, hash atual, `revokedAt=null`, expiração futura,
+usuário/escritório ACTIVE e Membership OWNER. O hash funciona como versão de
+concorrência: somente uma atualização pode consumir o token atual. Uma divergência
+de hash ou disputa perdida revoga toda a sessão e retorna 401 genérico. Em duas
+renovações concorrentes, uma pode responder 200, mas a detecção da outra revoga
+a sessão, incluindo o refresh substituto. A expiração original nunca é alterada;
+Expires e Max-Age do cookie refletem o prazo restante.
 
-`/login` guarda access token somente em um ref em memória, chama `/me` e exibe
-nome, escritório e papel em uma área provisória. Requisições usam credenciais
-para aceitar o cookie. Ao recarregar, a memória é perdida e o usuário precisa
-entrar novamente, mesmo com cookie presente. RF-005 consumirá esse cookie;
-RF-006 implementará logout. Nenhum token é gravado em localStorage/sessionStorage
-ou exibido na interface. O logger HTTP permanece desligado.
+`LogoutSession` identifica e revoga a sessão quando possível. O endpoint limpa
+o cookie com os mesmos atributos e responde 204 também para token ausente,
+inválido, expirado ou sessão já revogada. Falhas de infraestrutura retornam erro
+genérico; não se afirma revogação quando o banco falha. JWT não tem blacklist e
+pode conservar validade criptográfica por até 15 minutos após logout/reutilização.
+O `/me` mantém a verificação no banco e rejeita sessão revogada imediatamente.
+Refresh legado sem UUID deixa de renovar; exige novo login, sem apagar histórico.
+
+POSTs de login, refresh e logout exigem Origin exatamente igual a
+`AUTH_FRONTEND_ORIGIN`, sem confiar em Host ou cabeçalhos de proxy; ausência,
+`null` e outras origens recebem 403 sem mutação. O padrão local é
+`http://localhost:5173`; produção exige origem HTTPS. Frontend e API usam mesma
+origem via Vite/proxy reverso, portanto CORS fica desabilitado. SameSite=Lax é
+defesa adicional, não substitui essa validação CSRF. Cabeçalho Cookie acima de
+4096 caracteres é recusado, além do limite estrito do token. Não há tokens em URLs
+nem logs de Authorization, Cookie ou Set-Cookie; logger HTTP segue desativado.
+
+Referências: [Prisma 6 — concorrência otimista](https://www.prisma.io/docs/orm/v6/prisma-client/queries/transactions#optimistic-concurrency-control)
+e [OWASP — verificação de origem e CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#using-standard-headers-to-verify-origin).
+
+`application/security/rate-limiter.ts` define contratos sem Prisma e o
+`SharedRateLimiter`. A composição `rate-limiting.ts` injeta o adaptador
+`PrismaRateLimitStore`, HMAC das chaves e políticas do ambiente. Hooks protegem
+cadastro, login por IP, login por IP/e-mail normalizado e refresh antes do trabalho
+caro de senha. O plugin com armazenamento local foi removido.
+
+A migration `20260924100000_create_distributed_rate_limits` cria somente
+`rate_limit_buckets`: escopo, digest HMAC de 64 caracteres, início da janela,
+contador e expiração. A chave primária composta serializa incrementos por bucket;
+o índice de expiração atende à limpeza. `INSERT ... ON CONFLICT DO UPDATE` é
+atômico e usa o relógio do PostgreSQL, sem ler e incrementar no processo. O
+contador satura em limite + 1. Janelas são fixas: pode haver consumo de dois
+orçamentos próximos à fronteira entre janelas, sem prometer uma janela móvel.
+
+Padrões: cadastro 10/900 s; login por IP 30/900 s (10 em produção) e por
+IP/e-mail 5/900 s; refresh 30/60 s. Limites, janelas e intervalo de limpeza são
+validados no ambiente e descritos no README/.env.example. Todas as réplicas
+devem usar as mesmas políticas e chave. O HMAC usa segredo próprio opcional ou
+derivação contextual do segredo JWT; normaliza e-mail e representações IP,
+inclusive IPv4 mapeado em IPv6. Não persiste dados pessoais legíveis.
+
+429 inclui segundos restantes em `Retry-After`; armazenamento indisponível ou
+composição ausente resulta em 503 com `Retry-After: 5`. `/health` e `/ready`
+continuam independentes do limitador. `request.ip` é a fonte do endereço;
+`TRUST_PROXY` padrão é falso e aceita apenas IPs/CIDRs explícitos dos proxies
+controlados. O deploy deve impedir acesso direto e substituir cabeçalhos externos.
+
+O worker de limpeza remove no máximo 500 expirados a cada 60000 ms, com
+`FOR UPDATE SKIP LOCKED` e DELETE na mesma instrução. Réplicas podem limpar
+concorrentemente sem selecionar linhas já bloqueadas. Não há execuções
+sobrepostas dentro do mesmo worker. Timer com `unref()`, parada e espera da
+execução pendente antes de fechar app/Prisma; falhas são sanitizadas. Essa limpeza
+é de buckets, não das sessões de autenticação. Redis não foi adicionado; o contrato
+permite avaliar outro armazenamento no futuro, sem decisão de migração assumida.
+
+Referências oficiais: [PostgreSQL — ON CONFLICT](https://www.postgresql.org/docs/current/sql-insert.html),
+[PostgreSQL — SKIP LOCKED](https://www.postgresql.org/docs/current/sql-select.html)
+e [Fastify — trustProxy](https://fastify.dev/docs/latest/Reference/Server/#trustproxy).
+
+`AuthClient` centraliza token em memória, identidade e estados loading,
+authenticated e unauthenticated. `AuthProvider` inicia uma única restauração,
+inclusive sob StrictMode. `/app` só mostra conteúdo após identidade validada;
+`/login` consulta `/me` ao entrar e redireciona à área autenticada. Recarregar
+renova pelo cookie, sem token em localStorage, sessionStorage ou IndexedDB.
+O cliente HTTP inclui Bearer somente na API local e, diante de 401, compartilha
+uma Promise de refresh e repete a requisição uma vez. Um 401 tardio do token
+anterior usa o token já renovado; login/onboarding/refresh/logout não renovam.
+Falha limpa identidade e redireciona ao login, sem loop. Logout limpa a memória
+imediatamente e aguarda eventual rotação em andamento antes de revogar seu cookie;
+respostas tardias não restauram identidade. O guard também protege Voltar e a
+restauração via cache de navegação limpa memória/DOM antes do snapshot e força
+revalidação ao retornar. Falha de logout no servidor
+é informada sem afirmar revogação.
+
+`AuthClient` depende de `SessionCoordinator`; não acessa BroadcastChannel ou
+Web Locks diretamente. `infrastructure/browser-session-coordinator.ts` implementa
+o protocolo, e `authentication.ts` compõe cliente, transporte e navegação. Um
+lock exclusivo por origem serializa mutações de autenticação. Antes de renovar,
+a aba consulta pares por até 250 ms e usa a versão recebida, inclusive quando
+dois JWTs emitidos no mesmo segundo têm texto idêntico. Requisições têm prazo de
+10 s; aquisição/operação coordenada, 20 s. Fechamento cancela a operação e
+comunicação pendentes; o navegador libera os locks da página terminada.
+
+Envelope v1 contém UUID da aba e mensagem, tipo, timestamp, correlação e ID público
+de sessão. Respostas só valem para consultas pendentes. Mensagens repetidas,
+malformadas, antigas ou de outra sessão são ignoradas; mudança de sessão exige
+evento explícito de login. O payload projeta somente identidade pública e access
+token. Metadados JWT auxiliam coordenação, sem substituir sua verificação na API.
+Refresh token, senha, hash e cookie nunca passam pelo canal. Nada é persistido.
+Invalidação é terminal para a sessão: prevalece sobre uma renovação em trânsito,
+mesmo se as mensagens chegarem fora de ordem. Respostas HTTP iniciadas sob uma
+identidade anterior são descartadas quando o usuário muda.
+
+Expiração agenda renovação coordenada; login/renovação atualizam pares e
+logout/falha definitiva limpam identidade. Gerações impedem respostas antigas de
+restaurar usuário após logout ou troca de identidade. Logout limpa abas antes de
+aguardar o lock e revoga o cookie mais recente. A proteção estrita de reutilização
+é mantida, sem tolerância: fechar a aba ou perder a resposta depois da rotação
+pode exigir novo login, mas não armazena refresh em texto nem aceita replay.
+
+Fluxo completo: Chrome, Edge, Firefox e Safari atuais, com BroadcastChannel,
+Web Locks e AbortSignal.any/timeout, em contexto seguro (HTTPS ou localhost).
+Chrome foi verificado de fato. Sem canal, locks ainda serializam renovações,
+mas não há propagação imediata; cada aba revalida na próxima consulta/expiração.
+Sem locks, não há refresh automático; login manual e propagação pelo canal
+disponível permanecem. Timeout/falha encerra a tentativa, sem loops ou locks em
+localStorage. Abas suspensas só processam eventos quando o navegador as retoma.
+
+Referências: [Web Locks](https://w3c.github.io/web-locks/),
+[BroadcastChannel](https://html.spec.whatwg.org/multipage/web-messaging.html#broadcasting-to-other-browsing-contexts),
+[compatibilidade Web Locks](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API)
+e [AbortSignal.any](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/any_static).
+
+`frontend/public/favicon.svg` contém as iniciais WD, sem dependência externa;
+`index.html` referencia o SVG, copiado também para o build.
 
 Referências: [jose](https://github.com/panva/jose),
 [@fastify/cookie](https://github.com/fastify/fastify-cookie),
-[@fastify/rate-limit](https://github.com/fastify/fastify-rate-limit),
 [OWASP Authentication](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
 e [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html).
 
@@ -295,6 +409,14 @@ não integra a suíte unitária padrão.
 Após o build, `pnpm --filter ./backend run verify:auth-browser` inicia os serviços
 locais e Chrome headless com perfil temporário, cria a conta por `/register`,
 entra por `/login`, inspeciona cookie/requisições e confirma Session no PostgreSQL.
-Também testa senha errada e perda do token após reload. Nenhum segredo é impresso;
+Também testa restauração após reload, expiração controlada de JWT, renovação e
+repetição, reutilização e logout. Nenhum segredo é impresso;
 o cleanup remove Session, Membership, User e Office próprios nessa ordem e fecha
 somente os recursos criados. A suíte unitária não depende desse comando ou do banco.
+Inclui duas abas reais no mesmo perfil: identidade compartilhada, dois 401 com
+uma chamada de refresh, rotação/estado no PostgreSQL, login/logout/revogação
+propagados, armazenamento web vazio e favicon 200. `verify:rate-limit` inicia
+dois backends reais e testa orçamento conjunto, concorrência por dois clientes,
+nova janela e ausência de dados legíveis. O SQL de limpeza é exercitado em tabela
+temporária da conexão para não remover buckets existentes. Verificadores usam
+segredo HMAC efêmero próprio e removem somente suas chaves ao terminar.
