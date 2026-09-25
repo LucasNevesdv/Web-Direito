@@ -3,41 +3,41 @@ import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
-function isPostgreSqlUrl(value: string): boolean {
+function possuiFormatoDeUrlPostgreSql(urlInformada: string): boolean {
   try {
-    const url = new URL(value);
-    const database = decodeURIComponent(url.pathname.slice(1));
+    const url = new URL(urlInformada);
+    const nomeDoBanco = decodeURIComponent(url.pathname.slice(1));
     return (
       ['postgres:', 'postgresql:'].includes(url.protocol) &&
       url.hostname.length > 0 &&
       url.pathname.startsWith('/') &&
       !url.pathname.slice(1).includes('/') &&
-      database.trim().length > 0
+      nomeDoBanco.trim().length > 0
     );
   } catch {
     return false;
   }
 }
 
-function isHost(value: string): boolean {
-  if (isIP(value)) {
+function possuiFormatoDeHostValido(hostInformado: string): boolean {
+  if (isIP(hostInformado)) {
     return true;
   }
 
-  const hostname = value.endsWith('.') ? value.slice(0, -1) : value;
+  const nomeHost = hostInformado.endsWith('.') ? hostInformado.slice(0, -1) : hostInformado;
   return (
-    hostname.length > 0 &&
-    hostname.length <= 253 &&
-    !/^[\d.]+$/.test(hostname) &&
-    hostname.split('.').every((label) =>
-      /^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i.test(label),
+    nomeHost.length > 0 &&
+    nomeHost.length <= 253 &&
+    !/^[\d.]+$/.test(nomeHost) &&
+    nomeHost.split('.').every((rotulo) =>
+      /^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/i.test(rotulo),
     )
   );
 }
 
-const environmentSchema = z.object({
+const ESQUEMA_AMBIENTE = z.object({
   RATE_LIMIT_HMAC_SECRET: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/)
-    .refine((value) => Buffer.from(value, 'base64url').length >= 32).optional(),
+    .refine((valor) => Buffer.from(valor, 'base64url').length >= 32).optional(),
   RATE_LIMIT_ONBOARDING_MAX: z.coerce.number().int().min(1).max(10000).default(10),
   RATE_LIMIT_ONBOARDING_WINDOW_SECONDS: z.coerce.number().int().min(1).max(86400).default(900),
   RATE_LIMIT_LOGIN_IP_MAX: z.coerce.number().int().min(1).max(10000).default(30),
@@ -46,76 +46,76 @@ const environmentSchema = z.object({
   RATE_LIMIT_REFRESH_MAX: z.coerce.number().int().min(1).max(10000).default(30),
   RATE_LIMIT_REFRESH_WINDOW_SECONDS: z.coerce.number().int().min(1).max(86400).default(60),
   RATE_LIMIT_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(1000).max(3600000).default(60000),
-  TRUST_PROXY: z.string().default('').refine((value) => value === '' || value.split(',').every((entry) => {
-    const [address, bits, extra] = entry.trim().split('/');
-    const version = isIP(address);
-    return version !== 0 && !extra && (bits === undefined || (/^\d{1,3}$/.test(bits) && Number(bits) > 0 && Number(bits) <= (version === 4 ? 32 : 128)));
-  })).transform((value) => value ? value.split(',').map((entry) => entry.trim()) : false as const),
-  AUTH_FRONTEND_ORIGIN: z.string().url().refine((value) => {
+  TRUST_PROXY: z.string().default('').refine((valor) => valor === '' || valor.split(',').every((entrada) => {
+    const [endereco, bits, extra] = entrada.trim().split('/');
+    const versao = isIP(endereco);
+    return versao !== 0 && !extra && (bits === undefined || (/^\d{1,3}$/.test(bits) && Number(bits) > 0 && Number(bits) <= (versao === 4 ? 32 : 128)));
+  })).transform((valor) => valor ? valor.split(',').map((entrada) => entrada.trim()) : false as const),
+  AUTH_FRONTEND_ORIGIN: z.string().url().refine((valor) => {
     try {
-      const url = new URL(value);
-      return ['http:', 'https:'].includes(url.protocol) && url.origin === value && !url.username && !url.password;
+      const url = new URL(valor);
+      return ['http:', 'https:'].includes(url.protocol) && url.origin === valor && !url.username && !url.password;
     } catch { return false; }
   }).default('http://localhost:5173'),
-  DATABASE_URL: z.string().trim().refine(isPostgreSqlUrl),
-  HOST: z.string().refine(isHost).default('127.0.0.1'),
+  DATABASE_URL: z.string().trim().refine(possuiFormatoDeUrlPostgreSql),
+  HOST: z.string().refine(possuiFormatoDeHostValido).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
     .default('development'),
   AUTH_JWT_SECRET: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/)
-    .refine((value) => Buffer.from(value, 'base64url').length >= 32),
+    .refine((valor) => Buffer.from(valor, 'base64url').length >= 32),
   AUTH_JWT_ISSUER: z.string().trim().min(1).max(200).default('neodireito'),
   AUTH_JWT_AUDIENCE: z.string().trim().min(1).max(200).default('neodireito-web'),
   AUTH_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(900),
   AUTH_REFRESH_TTL_SECONDS: z.coerce.number().int().min(3600).max(604800).default(604800),
-}).superRefine((value, context) => {
-  if (value.NODE_ENV === 'production' && !value.AUTH_FRONTEND_ORIGIN.startsWith('https://')) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ['AUTH_FRONTEND_ORIGIN'], message: 'HTTPS required' });
+}).superRefine((valor, contexto) => {
+  if (valor.NODE_ENV === 'production' && !valor.AUTH_FRONTEND_ORIGIN.startsWith('https://')) {
+    contexto.addIssue({ code: z.ZodIssueCode.custom, path: ['AUTH_FRONTEND_ORIGIN'], message: 'HTTPS required' });
   }
 });
 
-export type Environment = z.infer<typeof environmentSchema>;
+export type Ambiente = z.infer<typeof ESQUEMA_AMBIENTE>;
 
-export class EnvironmentError extends Error {
-  constructor(variables: string[]) {
-    super(`Invalid environment configuration: ${variables.join(', ')}`);
-    this.name = 'EnvironmentError';
+export class ErroAmbiente extends Error {
+  constructor(variaveis: string[]) {
+    super(`Invalid environment configuration: ${variaveis.join(', ')}`);
+    this.name = 'ErroAmbiente';
   }
 }
 
-export function parseEnvironment(
-  input: Record<string, unknown>,
-): Environment {
-  const result = environmentSchema.safeParse({ RATE_LIMIT_LOGIN_IP_MAX: input.NODE_ENV === 'production' ? 10 : 30, ...input });
+export function validarAmbiente(
+  variaveisInformadas: Record<string, unknown>,
+): Ambiente {
+  const validacaoDoAmbiente = ESQUEMA_AMBIENTE.safeParse({ RATE_LIMIT_LOGIN_IP_MAX: variaveisInformadas.NODE_ENV === 'production' ? 10 : 30, ...variaveisInformadas });
 
-  if (!result.success) {
-    const variables = [
+  if (!validacaoDoAmbiente.success) {
+    const variaveis = [
       ...new Set(
-        result.error.issues
-          .map((issue) => issue.path[0])
-          .filter((variable): variable is string => typeof variable === 'string'),
+        validacaoDoAmbiente.error.issues
+          .map((problema) => problema.path[0])
+          .filter((variavel): variavel is string => typeof variavel === 'string'),
       ),
     ];
-    throw new EnvironmentError(variables);
+    throw new ErroAmbiente(variaveis);
   }
 
-  return result.data;
+  return validacaoDoAmbiente.data;
 }
 
-export function loadEnvironment(
-  environment: NodeJS.ProcessEnv = process.env,
-  environmentPath = fileURLToPath(new URL('../.env', import.meta.url)),
-): Environment {
-  const processEnvironment: Record<string, string> = Object.fromEntries(
-    Object.entries(environment).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
+export function carregarAmbiente(
+  ambiente: NodeJS.ProcessEnv = process.env,
+  caminhoAmbiente = fileURLToPath(new URL('../.env', import.meta.url)),
+): Ambiente {
+  const ambienteProcesso: Record<string, string> = Object.fromEntries(
+    Object.entries(ambiente).filter(
+      (entrada): entrada is [string, string] => entrada[1] !== undefined,
     ),
   );
   config({
-    path: environmentPath,
-    processEnv: processEnvironment,
+    path: caminhoAmbiente,
+    processEnv: ambienteProcesso,
     override: false,
   });
-  return parseEnvironment(processEnvironment);
+  return validarAmbiente(ambienteProcesso);
 }

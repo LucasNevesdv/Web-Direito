@@ -1,26 +1,26 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { InvalidSessionError, Session } from '../../src/domain/sessions/session.js';
+import { ErroSessaoInvalida, Sessao } from '../../src/domain/sessions/session.js';
 
-const create = () => Session.create({ userId: randomUUID(), activeOfficeId: randomUUID(), refreshTokenHash: 'a'.repeat(64), now: new Date(1000), expiresAt: new Date(10000) });
+const criarSessaoDeTeste = () => Sessao.criar({ idUsuario: randomUUID(), idEscritorioAtivo: randomUUID(), hashTokenRenovacao: 'a'.repeat(64), agora: new Date(1000), expiraEm: new Date(10000) });
 
-describe('Session', () => {
-  it('defines UUID and dates, protects its state and does not serialize the digest implicitly', () => {
-    const session = create();
-    expect(session.id).toMatch(/^[a-f\d-]{36}$/);
-    const state = session.toPersistence();
-    state.expiresAt.setTime(0);
-    expect(session.expiresAt.getTime()).toBe(10000);
-    expect(JSON.stringify(session)).toBe('{}');
-    expect(session.isActive(new Date(9999))).toBe(true);
-    expect(session.isActive(new Date(10000))).toBe(false);
+describe("Sessao", () => {
+  it("define UUID e datas, protege o estado e não serializa o hash implicitamente", () => {
+    const sessao = criarSessaoDeTeste();
+    expect(sessao.id).toMatch(/^[a-f\d-]{36}$/);
+    const estado = sessao.obterCopiaDoEstado();
+    estado.expiraEm.setTime(0);
+    expect(sessao.expiraEm.getTime()).toBe(10000);
+    expect(JSON.stringify(sessao)).toBe('{}');
+    expect(sessao.estaAtiva(new Date(9999))).toBe(true);
+    expect(sessao.estaAtiva(new Date(10000))).toBe(false);
   });
   it.each([
-    ['id', 'invalid'], ['userId', 'invalid'], ['activeOfficeId', 'invalid'],
-    ['refreshTokenHash', 'raw-refresh-token'], ['createdAt', new Date('invalid')],
-    ['expiresAt', new Date(1000)], ['updatedAt', new Date(0)],
-    ['revokedAt', new Date(0)], ['lastUsedAt', new Date(0)],
-  ])('rejects invalid %s', (field, value) => {
-    expect(() => Session.restore({ ...create().toPersistence(), [field]: value })).toThrow(InvalidSessionError);
+    ['id', 'invalid'], ['idUsuario', 'invalid'], ['idEscritorioAtivo', 'invalid'],
+    ['hashTokenRenovacao', 'raw-refresh-token'], ['criadoEm', new Date('invalid')],
+    ['expiraEm', new Date(1000)], ['atualizadoEm', new Date(0)],
+    ['revogadaEm', new Date(0)], ['ultimoUsoEm', new Date(0)],
+  ])("rejeita %s inválido", (campo, valor) => {
+    expect(() => Sessao.restaurar({ ...criarSessaoDeTeste().obterCopiaDoEstado(), [campo]: valor })).toThrow(ErroSessaoInvalida);
   });
 });

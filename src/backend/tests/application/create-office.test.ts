@@ -1,43 +1,43 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CreateOffice } from '../../src/application/offices/create-office.js';
-import { InvalidOfficeError } from '../../src/domain/offices/invalid-office-error.js';
-import { InMemoryOfficesRepository } from '../support/in-memory-offices-repository.js';
+import { CadastroDeEscritorio } from '../../src/application/offices/create-office.js';
+import { ErroEscritorioInvalido } from '../../src/domain/offices/invalid-office-error.js';
+import { RepositorioEscritoriosEmMemoria } from '../support/in-memory-offices-repository.js';
 
-describe('CreateOffice', () => {
-  it('persists and returns the valid office through the repository contract', async () => {
-    const repository = new InMemoryOfficesRepository();
-    const createOffice = new CreateOffice(repository);
+describe("CadastroDeEscritorio", () => {
+  it("persiste e retorna escritório válido pelo contrato do repositório", async () => {
+    const repositorio = new RepositorioEscritoriosEmMemoria();
+    const criarEscritorio = new CadastroDeEscritorio(repositorio);
 
-    const office = await createOffice.execute({ name: ' Escritório Exemplo ' });
-    const storedOffice = await repository.findById(office.id);
+    const escritorio = await criarEscritorio.cadastrarEscritorio({ nome: ' Escritório Exemplo ' });
+    const escritorioArmazenado = await repositorio.buscarEscritorioPorId(escritorio.id);
 
-    expect(office.name).toBe('Escritório Exemplo');
-    expect(office.status).toBe('ACTIVE');
-    expect(storedOffice).toBe(office);
+    expect(escritorio.nome).toBe('Escritório Exemplo');
+    expect(escritorio.situacao).toBe('ATIVO');
+    expect(escritorioArmazenado).toBe(escritorio);
   });
 
-  it('does not call persistence when the input is invalid', async () => {
-    const repository = new InMemoryOfficesRepository();
-    const create = vi.spyOn(repository, 'create');
+  it("não chama a persistência quando a entrada é inválida", async () => {
+    const repositorio = new RepositorioEscritoriosEmMemoria();
+    const criar = vi.spyOn(repositorio, "salvarEscritorio");
 
-    await expect(new CreateOffice(repository).execute({ name: ' ' }))
-      .rejects.toThrowError(new InvalidOfficeError('name'));
-    expect(create).not.toHaveBeenCalled();
+    await expect(new CadastroDeEscritorio(repositorio).cadastrarEscritorio({ nome: ' ' }))
+      .rejects.toThrowError(new ErroEscritorioInvalido('nome'));
+    expect(criar).not.toHaveBeenCalled();
   });
 
-  it('propagates persistence failures without returning an unpersisted office', async () => {
-    const repository = new InMemoryOfficesRepository();
-    const failure = new Error('Persistence unavailable');
-    vi.spyOn(repository, 'create').mockRejectedValueOnce(failure);
+  it("propaga falha de persistência sem retornar escritório não salvo", async () => {
+    const repositorio = new RepositorioEscritoriosEmMemoria();
+    const falha = new Error('Persistence unavailable');
+    vi.spyOn(repositorio, "salvarEscritorio").mockRejectedValueOnce(falha);
 
-    await expect(new CreateOffice(repository).execute({ name: 'Exemplo' }))
-      .rejects.toBe(failure);
+    await expect(new CadastroDeEscritorio(repositorio).cadastrarEscritorio({ nome: 'Exemplo' }))
+      .rejects.toBe(falha);
   });
 
-  it('returns null when an office is not found', async () => {
-    const repository = new InMemoryOfficesRepository();
+  it("retorna null quando o escritório não existe", async () => {
+    const repositorio = new RepositorioEscritoriosEmMemoria();
 
-    expect(await repository.findById('02ac42eb-e434-4ffd-90eb-91ca9e2a4b16'))
+    expect(await repositorio.buscarEscritorioPorId('02ac42eb-e434-4ffd-90eb-91ca9e2a4b16'))
       .toBeNull();
   });
 });

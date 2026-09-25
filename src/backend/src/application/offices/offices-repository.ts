@@ -1,6 +1,6 @@
-import type { Office } from '../../domain/offices/office.js';
+import type { Escritorio } from '../../domain/offices/office.js';
 
-export interface OfficesRepository {
-  create(office: Office): Promise<Office>;
-  findById(id: string): Promise<Office | null>;
+export interface RepositorioEscritorios {
+  salvarEscritorio(escritorio: Escritorio): Promise<Escritorio>;
+  buscarEscritorioPorId(id: string): Promise<Escritorio | null>;
 }

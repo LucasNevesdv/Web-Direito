@@ -1,87 +1,88 @@
 // Explicit local verification; *.check.ts is excluded from Vitest's default suite.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { createPrismaClient } from '../../src/database.js';
-import { Office } from '../../src/domain/offices/office.js';
-import { loadEnvironment } from '../../src/environment.js';
-import { PrismaOfficesRepository } from '../../src/infrastructure/prisma/prisma-offices-repository.js';
+import { criarClientePrisma } from '../../src/database.js';
+import { Escritorio } from '../../src/domain/offices/office.js';
+import { carregarAmbiente } from '../../src/environment.js';
+import { RepositorioEscritoriosPrisma } from '../../src/infrastructure/prisma/prisma-offices-repository.js';
+import { MAPEADOR_ESCRITORIO } from '../../src/infrastructure/prisma/office-mapper.js';
 
-function snapshot(office: Office) {
+function capturarEstado(escritorio: Escritorio) {
   return {
-    id: office.id,
-    name: office.name,
-    status: office.status,
-    createdAt: office.createdAt,
-    updatedAt: office.updatedAt,
+    id: escritorio.id,
+    nome: escritorio.nome,
+    situacao: escritorio.situacao,
+    criadoEm: escritorio.criadoEm,
+    atualizadoEm: escritorio.atualizadoEm,
   };
 }
 
-function reportFailure(phase: string, error: unknown): void {
-  const code = typeof error === 'object' && error !== null && 'code' in error
-    ? String(error.code)
+function relatarFalha(etapa: string, erro: unknown): void {
+  const codigo = typeof erro === 'object' && erro !== null && 'code' in erro
+    ? String(erro.code)
     : 'UNKNOWN';
   console.error(JSON.stringify({
-    phase,
+    etapa,
     ok: false,
-    code: /^(P\d{4}|ERR_ASSERTION|INVALID_OFFICE)$/.test(code) ? code : 'UNKNOWN',
+    code: /^(P\d{4}|ERR_ASSERTION|INVALID_OFFICE)$/.test(codigo) ? codigo : 'UNKNOWN',
   }));
   process.exitCode = 1;
 }
 
-const testId = randomUUID();
-const testName = `TASK-003 repository verification ${testId}`;
-let prisma: ReturnType<typeof createPrismaClient> | undefined;
-let cleanupRequired = false;
+const ID_TESTE = randomUUID();
+const NOME_TESTE = `TASK-003 repository verification ${ID_TESTE}`;
+let prisma: ReturnType<typeof criarClientePrisma> | undefined;
+let precisaLimpeza = false;
 
 try {
-  const environment = loadEnvironment();
-  prisma = createPrismaClient(environment.DATABASE_URL);
-  const repository = new PrismaOfficesRepository(prisma);
-  assert.equal(await repository.findById(testId), null);
+  const ambiente = carregarAmbiente();
+  prisma = criarClientePrisma(ambiente.DATABASE_URL);
+  const repositorio = new RepositorioEscritoriosPrisma(prisma);
+  assert.equal(await repositorio.buscarEscritorioPorId(ID_TESTE), null);
 
-  const office = Office.create({ id: testId, name: `  ${testName}  ` });
+  const escritorio = Escritorio.criar({ id: ID_TESTE, nome: `  ${NOME_TESTE}  ` });
   // Claim cleanup only after confirming the ID was not present before this run.
-  cleanupRequired = true;
-  const saved = await repository.create(office);
-  assert.ok(saved instanceof Office);
-  assert.deepEqual(snapshot(saved), snapshot(office));
+  precisaLimpeza = true;
+  const salvo = await repositorio.salvarEscritorio(escritorio);
+  assert.ok(salvo instanceof Escritorio);
+  assert.deepEqual(capturarEstado(salvo), capturarEstado(escritorio));
 
-  const found = await repository.findById(testId);
-  assert.ok(found instanceof Office);
-  assert.deepEqual(snapshot(found), snapshot(office));
-  const stored = await prisma.office.findUnique({ where: { id: testId } });
-  assert.deepEqual(stored, snapshot(office));
-  console.log(JSON.stringify({ phase: 'office_repository_round_trip', ok: true }));
-} catch (error) {
-  reportFailure('office_repository_round_trip', error);
+  const encontrado = await repositorio.buscarEscritorioPorId(ID_TESTE);
+  assert.ok(encontrado instanceof Escritorio);
+  assert.deepEqual(capturarEstado(encontrado), capturarEstado(escritorio));
+  const armazenado = await prisma.office.findUnique({ where: { id: ID_TESTE } });
+  assert.deepEqual(armazenado, MAPEADOR_ESCRITORIO.converterEscritorioEmRegistroPrisma(escritorio));
+  console.log(JSON.stringify({ etapa: 'office_repository_round_trip', ok: true }));
+} catch (erro) {
+  relatarFalha('office_repository_round_trip', erro);
 } finally {
   if (prisma) {
     try {
-      if (cleanupRequired) {
+      if (precisaLimpeza) {
         // This deliberately bypasses the application contract: deletion exists
         // only to remove this verification's own record, never as a product API.
-        const deleted = await prisma.office.deleteMany({
-          where: { id: testId, name: testName },
+        const removidos = await prisma.office.deleteMany({
+          where: { id: ID_TESTE, name: NOME_TESTE },
         });
-        const remaining = await prisma.office.count({
-          where: { OR: [{ id: testId }, { name: testName }] },
+        const restantes = await prisma.office.count({
+          where: { OR: [{ id: ID_TESTE }, { name: NOME_TESTE }] },
         });
-        assert.equal(remaining, 0);
+        assert.equal(restantes, 0);
         console.log(JSON.stringify({
-          phase: 'verification_record_cleanup',
+          etapa: 'verification_record_cleanup',
           ok: true,
-          removed: deleted.count,
-          remaining,
+          removidos: removidos.count,
+          restantes,
         }));
       }
-    } catch (error) {
-      reportFailure('verification_record_cleanup', error);
+    } catch (erro) {
+      relatarFalha('verification_record_cleanup', erro);
     } finally {
       try {
         await prisma.$disconnect();
-        console.log(JSON.stringify({ phase: 'prisma_disconnect', ok: true }));
-      } catch (error) {
-        reportFailure('prisma_disconnect', error);
+        console.log(JSON.stringify({ etapa: 'prisma_disconnect', ok: true }));
+      } catch (erro) {
+        relatarFalha('prisma_disconnect', erro);
       }
     }
   }

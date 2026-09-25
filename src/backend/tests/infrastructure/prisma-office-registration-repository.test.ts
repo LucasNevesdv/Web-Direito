@@ -1,123 +1,123 @@
 import { Prisma } from '@prisma/client';
 import { describe, expect, it, vi } from 'vitest';
-import { EmailAlreadyRegisteredError } from '../../src/application/onboarding/email-already-registered-error.js';
-import { Membership } from '../../src/domain/memberships/membership.js';
-import { Office } from '../../src/domain/offices/office.js';
-import { User } from '../../src/domain/users/user.js';
-import { PrismaOfficeRegistrationRepository } from '../../src/infrastructure/prisma/prisma-office-registration-repository.js';
+import { ErroEmailJaCadastrado } from '../../src/application/onboarding/email-already-registered-error.js';
+import { VinculoEscritorio } from '../../src/domain/memberships/membership.js';
+import { Escritorio } from '../../src/domain/offices/office.js';
+import { Usuario } from '../../src/domain/users/user.js';
+import { RepositorioCadastroEscritorioPrisma } from '../../src/infrastructure/prisma/prisma-office-registration-repository.js';
 
-function setup() {
-  const writes: string[] = [];
-  const officeCreate = vi.fn(async () => { writes.push('office'); return {}; });
-  const userCreate = vi.fn(async () => { writes.push('user'); return {}; });
-  const membershipCreate = vi.fn(async () => { writes.push('membership'); return {}; });
-  const transaction = {
-    office: { create: officeCreate },
-    user: { create: userCreate },
-    membership: { create: membershipCreate },
+function prepararCenario() {
+  const gravacoes: string[] = [];
+  const criarEscritorio = vi.fn(async () => { gravacoes.push('escritorio'); return {}; });
+  const criarUsuario = vi.fn(async () => { gravacoes.push('usuario'); return {}; });
+  const criarVinculo = vi.fn(async () => { gravacoes.push('vinculo'); return {}; });
+  const transacao = {
+    office: { create: criarEscritorio },
+    user: { create: criarUsuario },
+    membership: { create: criarVinculo },
   } as unknown as Prisma.TransactionClient;
-  const runTransaction = vi.fn(async (callback: (client: Prisma.TransactionClient) => Promise<unknown>) => callback(transaction));
-  const findUnique = vi.fn<() => Promise<{ id: string } | null>>().mockResolvedValue(null);
-  const client = {
-    user: { findUnique },
-    $transaction: runTransaction,
-  } as unknown as ConstructorParameters<typeof PrismaOfficeRegistrationRepository>[0];
-  const office = Office.create({ name: 'Escritório Exemplo' });
-  const user = User.create({ name: 'Ana Silva', email: 'ana@example.test', passwordHash: 'opaque-test-hash' });
-  const membership = Membership.create({ officeId: office.id, userId: user.id });
+  const executarTransacao = vi.fn(async (retorno: (cliente: Prisma.TransactionClient) => Promise<unknown>) => retorno(transacao));
+  const buscarUnico = vi.fn<() => Promise<{ id: string } | null>>().mockResolvedValue(null);
+  const cliente = {
+    user: { findUnique: buscarUnico },
+    $transaction: executarTransacao,
+  } as unknown as ConstructorParameters<typeof RepositorioCadastroEscritorioPrisma>[0];
+  const escritorio = Escritorio.criar({ nome: 'Escritório Exemplo' });
+  const usuario = Usuario.criar({ nome: 'Ana Silva', email: 'ana@example.test', hashSenha: 'opaque-test-hash' });
+  const vinculo = VinculoEscritorio.criar({ idEscritorio: escritorio.id, idUsuario: usuario.id });
   return {
-    repository: new PrismaOfficeRegistrationRepository(client),
-    registration: { office, user, membership },
-    findUnique, runTransaction, officeCreate, userCreate, membershipCreate, writes,
+    repositorio: new RepositorioCadastroEscritorioPrisma(cliente),
+    cadastro: { escritorio, usuario, vinculo },
+    findUnique: buscarUnico, executarTransacao, criarEscritorio, criarUsuario, criarVinculo, gravacoes,
   };
 }
 
-function knownError(code: string, target?: unknown): Prisma.PrismaClientKnownRequestError {
+function criarErroPrismaConhecido(codigo: string, alvo?: unknown): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError('Database operation failed', {
-    code,
+    code: codigo,
     clientVersion: Prisma.prismaVersion.client,
-    meta: target === undefined ? undefined : { target },
+    meta: alvo === undefined ? undefined : { target: alvo },
   });
 }
 
-describe('PrismaOfficeRegistrationRepository', () => {
-  it.each([false, true])('checks global email existence selecting only the public identifier', async (exists) => {
-    const { repository, findUnique } = setup();
-    findUnique.mockResolvedValue(exists ? { id: 'user-id' } : null);
-    await expect(repository.emailExists('ana@example.test')).resolves.toBe(exists);
-    expect(findUnique).toHaveBeenCalledTimes(1);
-    expect(findUnique).toHaveBeenCalledWith({ where: { email: 'ana@example.test' }, select: { id: true } });
+describe("RepositorioCadastroEscritorioPrisma", () => {
+  it.each([false, true])("verifica existência global do e-mail selecionando somente o identificador público", async (existe) => {
+    const { repositorio, findUnique: buscarUnico } = prepararCenario();
+    buscarUnico.mockResolvedValue(existe ? { id: 'user-id' } : null);
+    await expect(repositorio.possuiUsuarioComEmail('ana@example.test')).resolves.toBe(existe);
+    expect(buscarUnico).toHaveBeenCalledTimes(1);
+    expect(buscarUnico).toHaveBeenCalledWith({ where: { email: 'ana@example.test' }, select: { id: true } });
   });
 
-  it('writes office, user hash and OWNER membership in one bounded transaction', async () => {
-    const { repository, registration, runTransaction, officeCreate, userCreate, membershipCreate, writes } = setup();
-    const { office, user, membership } = registration;
-    await expect(repository.register(registration)).resolves.toBeUndefined();
-    expect(runTransaction).toHaveBeenCalledTimes(1);
-    expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), { maxWait: 5000, timeout: 10000 });
-    expect(writes).toEqual(['office', 'user', 'membership']);
-    expect(officeCreate).toHaveBeenCalledTimes(1);
-    expect(officeCreate).toHaveBeenCalledWith({ data: {
-      id: office.id, name: office.name, status: office.status,
-      createdAt: office.createdAt, updatedAt: office.updatedAt,
+  it("grava escritório, hash de usuário e vínculo físico OWNER em uma transação limitada", async () => {
+    const { repositorio, cadastro, executarTransacao, criarEscritorio, criarUsuario, criarVinculo, gravacoes } = prepararCenario();
+    const { escritorio, usuario, vinculo } = cadastro;
+    await expect(repositorio.salvarCadastroCompleto(cadastro)).resolves.toBeUndefined();
+    expect(executarTransacao).toHaveBeenCalledTimes(1);
+    expect(executarTransacao).toHaveBeenCalledWith(expect.any(Function), { maxWait: 5000, timeout: 10000 });
+    expect(gravacoes).toEqual(['escritorio', 'usuario', 'vinculo']);
+    expect(criarEscritorio).toHaveBeenCalledTimes(1);
+    expect(criarEscritorio).toHaveBeenCalledWith({ data: {
+      id: escritorio.id, name: escritorio.nome, status: 'ACTIVE',
+      createdAt: escritorio.criadoEm, updatedAt: escritorio.atualizadoEm,
     } });
-    expect(userCreate).toHaveBeenCalledTimes(1);
-    expect(userCreate).toHaveBeenCalledWith({
+    expect(criarUsuario).toHaveBeenCalledTimes(1);
+    expect(criarUsuario).toHaveBeenCalledWith({
       data: {
-        id: user.id, name: user.name, email: user.email,
-        passwordHash: user.passwordHash, status: user.status,
-        createdAt: user.createdAt, updatedAt: user.updatedAt,
+        id: usuario.id, name: usuario.nome, email: usuario.email,
+        passwordHash: usuario.hashSenha, status: 'ACTIVE',
+        createdAt: usuario.criadoEm, updatedAt: usuario.atualizadoEm,
       },
       select: { id: true },
     });
-    expect(membershipCreate).toHaveBeenCalledTimes(1);
-    expect(membershipCreate).toHaveBeenCalledWith({ data: {
-      id: membership.id, officeId: office.id, userId: user.id,
-      role: 'OWNER', createdAt: membership.createdAt,
+    expect(criarVinculo).toHaveBeenCalledTimes(1);
+    expect(criarVinculo).toHaveBeenCalledWith({ data: {
+      id: vinculo.id, officeId: escritorio.id, userId: usuario.id,
+      role: 'OWNER', createdAt: vinculo.criadoEm,
     } });
   });
 
-  it('translates a database email uniqueness conflict to the predictable application error', async () => {
-    const { repository, registration, userCreate, membershipCreate } = setup();
-    userCreate.mockRejectedValueOnce(knownError('P2002', ['email']));
-    await expect(repository.register(registration)).rejects.toThrowError(new EmailAlreadyRegisteredError());
-    expect(membershipCreate).not.toHaveBeenCalled();
+  it("converte conflito de unicidade de e-mail no banco em erro previsível da aplicação", async () => {
+    const { repositorio, cadastro, criarUsuario, criarVinculo } = prepararCenario();
+    criarUsuario.mockRejectedValueOnce(criarErroPrismaConhecido('P2002', ['email']));
+    await expect(repositorio.salvarCadastroCompleto(cadastro)).rejects.toThrowError(new ErroEmailJaCadastrado());
+    expect(criarVinculo).not.toHaveBeenCalled();
   });
 
   it.each([
-    knownError('P2002', ['id']),
-    knownError('P2002', ['office_id', 'user_id']),
-    knownError('P2002', 'users_email_key'),
-    knownError('P2002'),
-    knownError('P2003', ['email']),
+    criarErroPrismaConhecido('P2002', ['id']),
+    criarErroPrismaConhecido('P2002', ['office_id', 'user_id']),
+    criarErroPrismaConhecido('P2002', 'users_email_key'),
+    criarErroPrismaConhecido('P2002'),
+    criarErroPrismaConhecido('P2003', ['email']),
     { code: 'P2002', meta: { target: ['email'] } },
     new Error('Unclassified infrastructure failure'),
-  ])('preserves unrelated or unrecognized persistence failures', async (error) => {
-    const { repository, registration, runTransaction } = setup();
-    runTransaction.mockRejectedValueOnce(error);
-    await expect(repository.register(registration)).rejects.toBe(error);
+  ])("preserva falhas de persistência não relacionadas ou desconhecidas", async (erro) => {
+    const { repositorio, cadastro, executarTransacao } = prepararCenario();
+    executarTransacao.mockRejectedValueOnce(erro);
+    await expect(repositorio.salvarCadastroCompleto(cadastro)).rejects.toBe(erro);
   });
 
-  it.each(['office', 'user', 'membership'] as const)('propagates a failure during the %s write without continuing', async (stage) => {
-    const { repository, registration, officeCreate, userCreate, membershipCreate, writes } = setup();
-    const error = new Error('Write failed');
-    const failingWrite = { office: officeCreate, user: userCreate, membership: membershipCreate }[stage];
-    failingWrite.mockRejectedValueOnce(error);
-    await expect(repository.register(registration)).rejects.toBe(error);
-    expect(writes).toEqual({ office: [], user: ['office'], membership: ['office', 'user'] }[stage]);
-    if (stage === 'office') {
-      expect(userCreate).not.toHaveBeenCalled();
+  it.each(['escritorio', 'usuario', 'vinculo'] as const)("propaga falha durante a gravação de %s sem continuar", async (etapa) => {
+    const { repositorio, cadastro, criarEscritorio, criarUsuario, criarVinculo, gravacoes } = prepararCenario();
+    const erro = new Error('Write failed');
+    const gravacaoComFalha = { escritorio: criarEscritorio, usuario: criarUsuario, vinculo: criarVinculo }[etapa];
+    gravacaoComFalha.mockRejectedValueOnce(erro);
+    await expect(repositorio.salvarCadastroCompleto(cadastro)).rejects.toBe(erro);
+    expect(gravacoes).toEqual({ escritorio: [], usuario: ['escritorio'], vinculo: ['escritorio', 'usuario'] }[etapa]);
+    if (etapa === 'escritorio') {
+      expect(criarUsuario).not.toHaveBeenCalled();
     }
-    if (stage !== 'membership') {
-      expect(membershipCreate).not.toHaveBeenCalled();
+    if (etapa !== 'vinculo') {
+      expect(criarVinculo).not.toHaveBeenCalled();
     }
   });
 
-  it('propagates errors during the email lookup', async () => {
-    const { repository, findUnique, runTransaction } = setup();
-    const error = new Error('Database unavailable');
-    findUnique.mockRejectedValueOnce(error);
-    await expect(repository.emailExists('ana@example.test')).rejects.toBe(error);
-    expect(runTransaction).not.toHaveBeenCalled();
+  it("propaga erros de consulta do e-mail", async () => {
+    const { repositorio, findUnique: buscarUnico, executarTransacao } = prepararCenario();
+    const erro = new Error('Database unavailable');
+    buscarUnico.mockRejectedValueOnce(erro);
+    await expect(repositorio.possuiUsuarioComEmail('ana@example.test')).rejects.toBe(erro);
+    expect(executarTransacao).not.toHaveBeenCalled();
   });
 });

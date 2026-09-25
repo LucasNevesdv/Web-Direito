@@ -1,144 +1,144 @@
 import { useRef, useState, type FormEvent } from 'react';
 
-interface FormValues {
-  officeName: string;
-  adminName: string;
+interface CamposDoCadastro {
+  nomeEscritorio: string;
+  nomeAdministrador: string;
   email: string;
-  password: string;
-  passwordConfirmation: string;
+  senha: string;
+  confirmacaoSenha: string;
 }
 
-type FieldName = keyof FormValues;
-type FieldErrors = Partial<Record<FieldName, string>>;
+type NomeCampoDoCadastro = keyof CamposDoCadastro;
+type ErrosDeValidacaoDoCadastro = Partial<Record<NomeCampoDoCadastro, string>>;
 
-const emptyForm: FormValues = {
-  officeName: '',
-  adminName: '',
+const FORMULARIO_VAZIO: CamposDoCadastro = {
+  nomeEscritorio: '',
+  nomeAdministrador: '',
   email: '',
-  password: '',
-  passwordConfirmation: '',
+  senha: '',
+  confirmacaoSenha: '',
 };
 
-const fieldMessages: Record<FieldName, string> = {
-  officeName: 'Informe um nome de escritório entre 2 e 120 caracteres.',
-  adminName: 'Informe um nome de administrador entre 2 e 120 caracteres.',
+const MENSAGENS_CAMPOS: Record<NomeCampoDoCadastro, string> = {
+  nomeEscritorio: 'Informe um nome de escritório entre 2 e 120 caracteres.',
+  nomeAdministrador: 'Informe um nome de administrador entre 2 e 120 caracteres.',
   email: 'Informe um e-mail válido com até 254 caracteres.',
-  password: 'A senha deve ter entre 12 e 128 caracteres.',
-  passwordConfirmation: 'As senhas devem ser iguais.',
+  senha: 'A senha deve ter entre 12 e 128 caracteres.',
+  confirmacaoSenha: 'As senhas devem ser iguais.',
 };
 
-const fields: {
-  name: FieldName;
-  label: string;
-  type: 'text' | 'email' | 'password';
+const CAMPOS: {
+  nome: NomeCampoDoCadastro;
+  rotulo: string;
+  tipo: 'text' | 'email' | 'password';
   autoComplete: string;
 }[] = [
-  { name: 'officeName', label: 'Nome do escritório', type: 'text', autoComplete: 'organization' },
-  { name: 'adminName', label: 'Nome do administrador', type: 'text', autoComplete: 'name' },
-  { name: 'email', label: 'E-mail', type: 'email', autoComplete: 'email' },
-  { name: 'password', label: 'Senha', type: 'password', autoComplete: 'new-password' },
+  { nome: 'nomeEscritorio', rotulo: 'Nome do escritório', tipo: 'text', autoComplete: 'organization' },
+  { nome: 'nomeAdministrador', rotulo: 'Nome do administrador', tipo: 'text', autoComplete: 'name' },
+  { nome: 'email', rotulo: 'E-mail', tipo: 'email', autoComplete: 'email' },
+  { nome: 'senha', rotulo: 'Senha', tipo: 'password', autoComplete: 'new-password' },
   {
-    name: 'passwordConfirmation',
-    label: 'Confirme a senha',
-    type: 'password',
+    nome: 'confirmacaoSenha',
+    rotulo: 'Confirme a senha',
+    tipo: 'password',
     autoComplete: 'new-password',
   },
 ];
 
-function validate(values: FormValues): FieldErrors {
-  const errors: FieldErrors = {};
+function validarCamposDoCadastro(camposDoCadastro: CamposDoCadastro): ErrosDeValidacaoDoCadastro {
+  const errosDeValidacao: ErrosDeValidacaoDoCadastro = {};
 
-  for (const name of ['officeName', 'adminName'] as const) {
-    const length = Array.from(values[name].trim()).length;
-    if (length < 2 || length > 120) errors[name] = fieldMessages[name];
+  for (const nome of ['nomeEscritorio', 'nomeAdministrador'] as const) {
+    const tamanho = Array.from(camposDoCadastro[nome].trim()).length;
+    if (tamanho < 2 || tamanho > 120) errosDeValidacao[nome] = MENSAGENS_CAMPOS[nome];
   }
 
-  const email = values.email.trim();
+  const email = camposDoCadastro.email.trim();
   if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errors.email = fieldMessages.email;
+    errosDeValidacao.email = MENSAGENS_CAMPOS.email;
   }
 
-  const passwordLength = Array.from(values.password).length;
-  if (passwordLength < 12 || passwordLength > 128) errors.password = fieldMessages.password;
+  const tamanhoSenha = Array.from(camposDoCadastro.senha).length;
+  if (tamanhoSenha < 12 || tamanhoSenha > 128) errosDeValidacao.senha = MENSAGENS_CAMPOS.senha;
 
-  if (!values.passwordConfirmation || values.passwordConfirmation !== values.password) {
-    errors.passwordConfirmation = fieldMessages.passwordConfirmation;
+  if (!camposDoCadastro.confirmacaoSenha || camposDoCadastro.confirmacaoSenha !== camposDoCadastro.senha) {
+    errosDeValidacao.confirmacaoSenha = MENSAGENS_CAMPOS.confirmacaoSenha;
   }
 
-  return errors;
+  return errosDeValidacao;
 }
 
-function focusField(name: string) {
-  document.getElementById(`register-${name}`)?.focus();
+function focarCampo(nome: string) {
+  document.getElementById(`register-${nome}`)?.focus();
 }
 
-function serverFieldErrors(body: unknown): FieldErrors {
-  if (!body || typeof body !== 'object' || !('fields' in body)) return {};
-  if (!body.fields || typeof body.fields !== 'object') return {};
+function extrairErrosDeValidacaoDaResposta(corpo: unknown): ErrosDeValidacaoDoCadastro {
+  if (!corpo || typeof corpo !== 'object' || !('campos' in corpo)) return {};
+  if (!corpo.campos || typeof corpo.campos !== 'object') return {};
 
-  const errors: FieldErrors = {};
-  for (const name of ['officeName', 'adminName', 'email', 'password'] as const) {
-    if (name in body.fields) errors[name] = fieldMessages[name];
+  const errosDeValidacao: ErrosDeValidacaoDoCadastro = {};
+  for (const nome of ['nomeEscritorio', 'nomeAdministrador', 'email', 'senha'] as const) {
+    if (nome in corpo.campos) errosDeValidacao[nome] = MENSAGENS_CAMPOS[nome];
   }
-  return errors;
+  return errosDeValidacao;
 }
 
-export function RegisterPage() {
-  const [values, setValues] = useState<FormValues>(emptyForm);
-  const [errors, setErrors] = useState<FieldErrors>({});
-  const [generalError, setGeneralError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRegistered, setIsRegistered] = useState(false);
-  const submissionInProgress = useRef(false);
+export function PaginaCadastro() {
+  const [camposDoCadastro, definirCamposDoCadastro] = useState<CamposDoCadastro>(FORMULARIO_VAZIO);
+  const [errosDeValidacao, definirErrosDeValidacao] = useState<ErrosDeValidacaoDoCadastro>({});
+  const [erroGeral, definirErroGeral] = useState<string | null>(null);
+  const [estaEnviandoCadastro, definirEnvioDoCadastro] = useState(false);
+  const [foiCadastrado, definirCadastroConcluido] = useState(false);
+  const possuiEnvioPendente = useRef(false);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (submissionInProgress.current) return;
+  async function tratarEnvioDoCadastro(evento: FormEvent<HTMLFormElement>) {
+    evento.preventDefault();
+    if (possuiEnvioPendente.current) return;
 
-    const validationErrors = validate(values);
-    setErrors(validationErrors);
-    setGeneralError(null);
+    const errosValidacao = validarCamposDoCadastro(camposDoCadastro);
+    definirErrosDeValidacao(errosValidacao);
+    definirErroGeral(null);
 
-    const firstInvalidField = Object.keys(validationErrors)[0];
-    if (firstInvalidField) {
-      focusField(firstInvalidField);
+    const primeiroCampoInvalido = Object.keys(errosValidacao)[0];
+    if (primeiroCampoInvalido) {
+      focarCampo(primeiroCampoInvalido);
       return;
     }
 
-    submissionInProgress.current = true;
-    setIsSubmitting(true);
+    possuiEnvioPendente.current = true;
+    definirEnvioDoCadastro(true);
 
     try {
-      const response = await fetch('/api/v1/onboarding', {
+      const resposta = await fetch('/api/v1/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          officeName: values.officeName.trim(),
-          adminName: values.adminName.trim(),
-          email: values.email.trim().toLowerCase(),
-          password: values.password,
+          nomeEscritorio: camposDoCadastro.nomeEscritorio.trim(),
+          nomeAdministrador: camposDoCadastro.nomeAdministrador.trim(),
+          email: camposDoCadastro.email.trim().toLowerCase(),
+          senha: camposDoCadastro.senha,
         }),
       });
 
-      if (response.status === 201) {
-        setValues((previous) => ({ ...previous, password: '', passwordConfirmation: '' }));
-        setIsRegistered(true);
-      } else if (response.status === 409) {
-        setErrors({ email: 'Este e-mail já está cadastrado. Use outro e-mail.' });
-        focusField('email');
-      } else if (response.status === 400) {
-        const body: unknown = await response.json().catch(() => null);
-        const fieldErrors = serverFieldErrors(body);
-        setErrors(fieldErrors);
-        setGeneralError('Não foi possível validar o cadastro. Revise os dados informados.');
+      if (resposta.status === 201) {
+        definirCamposDoCadastro((anterior) => ({ ...anterior, senha: '', confirmacaoSenha: '' }));
+        definirCadastroConcluido(true);
+      } else if (resposta.status === 409) {
+        definirErrosDeValidacao({ email: 'Este e-mail já está cadastrado. Use outro e-mail.' });
+        focarCampo('email');
+      } else if (resposta.status === 400) {
+        const corpo: unknown = await resposta.json().catch(() => null);
+        const errosCampos = extrairErrosDeValidacaoDaResposta(corpo);
+        definirErrosDeValidacao(errosCampos);
+        definirErroGeral('Não foi possível validar o cadastro. Revise os dados informados.');
       } else {
-        setGeneralError('Não foi possível criar o escritório. Tente novamente em instantes.');
+        definirErroGeral('Não foi possível criar o escritório. Tente novamente em instantes.');
       }
     } catch {
-      setGeneralError('Não foi possível criar o escritório. Tente novamente em instantes.');
+      definirErroGeral('Não foi possível criar o escritório. Tente novamente em instantes.');
     } finally {
-      submissionInProgress.current = false;
-      setIsSubmitting(false);
+      possuiEnvioPendente.current = false;
+      definirEnvioDoCadastro(false);
     }
   }
 
@@ -158,7 +158,7 @@ export function RegisterPage() {
           Cadastre o escritório e seu primeiro administrador em uma única etapa.
         </p>
 
-        {isRegistered ? (
+        {foiCadastrado ? (
           <div role="status" className="mt-8 rounded-xl border border-cyan-300/30 bg-slate-900 p-6">
             <h2 className="text-2xl font-semibold text-cyan-300">Escritório criado com sucesso</h2>
             <p className="mt-3 leading-7 text-slate-300">
@@ -169,51 +169,51 @@ export function RegisterPage() {
             </a>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} noValidate aria-busy={isSubmitting} className="mt-8">
-            <fieldset disabled={isSubmitting} className="min-w-0 space-y-5 rounded-xl border border-slate-800 bg-slate-900/70 p-5 sm:p-8">
+          <form onSubmit={tratarEnvioDoCadastro} noValidate aria-busy={estaEnviandoCadastro} className="mt-8">
+            <fieldset disabled={estaEnviandoCadastro} className="min-w-0 space-y-5 rounded-xl border border-slate-800 bg-slate-900/70 p-5 sm:p-8">
               <legend className="sr-only">Dados do escritório e do administrador</legend>
-              {fields.map(({ name, label, type, autoComplete }) => (
-                <div key={name}>
-                  <label htmlFor={`register-${name}`} className="mb-2 block text-sm font-semibold text-slate-100">
-                    {label}
+              {CAMPOS.map(({ nome, rotulo, tipo, autoComplete }) => (
+                <div key={nome}>
+                  <label htmlFor={`register-${nome}`} className="mb-2 block text-sm font-semibold text-slate-100">
+                    {rotulo}
                   </label>
                   <input
-                    id={`register-${name}`}
-                    name={name}
-                    type={type}
+                    id={`register-${nome}`}
+                    name={nome}
+                    type={tipo}
                     autoComplete={autoComplete}
                     required
-                    value={values[name]}
-                    aria-invalid={errors[name] ? true : undefined}
+                    value={camposDoCadastro[nome]}
+                    aria-invalid={errosDeValidacao[nome] ? true : undefined}
                     aria-describedby={[
-                      name === 'password' ? 'password-hint' : '',
-                      errors[name] ? `${name}-error` : '',
+                      nome === 'senha' ? 'password-hint' : '',
+                      errosDeValidacao[nome] ? `${nome}-error` : '',
                     ].filter(Boolean).join(' ') || undefined}
-                    onChange={(event) => {
-                      setValues((previous) => ({ ...previous, [name]: event.target.value }));
-                      setErrors((previous) => ({ ...previous, [name]: undefined }));
+                    onChange={(evento) => {
+                      definirCamposDoCadastro((anterior) => ({ ...anterior, [nome]: evento.target.value }));
+                      definirErrosDeValidacao((anterior) => ({ ...anterior, [nome]: undefined }));
                     }}
                     className="block w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-3 text-base text-slate-100 shadow-sm outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/30 disabled:opacity-60 aria-[invalid=true]:border-rose-400"
                   />
-                  {name === 'password' && (
+                  {nome === 'senha' && (
                     <p id="password-hint" className="mt-2 text-sm text-slate-400">
                       Use entre 12 e 128 caracteres.
                     </p>
                   )}
-                  {errors[name] && (
-                    <p id={`${name}-error`} role="alert" className="mt-2 text-sm text-rose-300">
-                      {errors[name]}
+                  {errosDeValidacao[nome] && (
+                    <p id={`${nome}-error`} role="alert" className="mt-2 text-sm text-rose-300">
+                      {errosDeValidacao[nome]}
                     </p>
                   )}
                 </div>
               ))}
-              {generalError && <p role="alert" className="text-sm leading-6 text-rose-300">{generalError}</p>}
+              {erroGeral && <p role="alert" className="text-sm leading-6 text-rose-300">{erroGeral}</p>}
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={estaEnviandoCadastro}
                 className="w-full rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300 disabled:cursor-wait disabled:opacity-60"
               >
-                {isSubmitting ? 'Criando escritório…' : 'Criar escritório'}
+                {estaEnviandoCadastro ? 'Criando escritório…' : 'Criar escritório'}
               </button>
               <p className="text-center text-sm leading-6 text-slate-400">
                 O administrador terá acesso completo ao escritório.

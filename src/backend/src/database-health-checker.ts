@@ -1,3 +1,3 @@
-export interface DatabaseHealthChecker {
-  check(): Promise<void>;
+export interface VerificadorSaudeBanco {
+  verificarConexaoComBanco(): Promise<void>;
 }

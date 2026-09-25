@@ -1,43 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { InvalidUserError } from '../../src/domain/users/invalid-user-error.js';
-import { User } from '../../src/domain/users/user.js';
+import { ErroUsuarioInvalido } from '../../src/domain/users/invalid-user-error.js';
+import { Usuario } from '../../src/domain/users/user.js';
 
-const validInput = { name: 'Ana Silva', email: 'ana@example.test', passwordHash: 'test-only-opaque-hash' };
-const persistedUser = {
-  ...validInput,
+const ENTRADA_VALIDA = { nome: 'Ana Silva', email: 'ana@example.test', hashSenha: 'test-only-opaque-hash' };
+const USUARIO_PERSISTIDO = {
+  ...ENTRADA_VALIDA,
   id: '68f762ad-c1cb-4a39-b8da-b0504f358cdd',
-  status: 'ACTIVE' as const,
-  createdAt: new Date('2026-01-01T12:00:00Z'),
-  updatedAt: new Date('2026-01-02T12:00:00Z'),
+  situacao: 'ATIVO' as const,
+  criadoEm: new Date('2026-01-01T12:00:00Z'),
+  atualizadoEm: new Date('2026-01-02T12:00:00Z'),
 };
 
-describe('User', () => {
-  it('creates an active user with a UUID and dates', () => {
-    const before = Date.now();
-    const user = User.create(validInput);
-    expect(user.id).toMatch(/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
-    expect(user.status).toBe('ACTIVE');
-    expect(user.name).toBe(validInput.name);
-    expect(user.email).toBe(validInput.email);
-    expect(user.passwordHash).toBe(validInput.passwordHash);
-    expect(user.createdAt.getTime()).toBeGreaterThanOrEqual(before);
-    expect(user.createdAt.getTime()).toBeLessThanOrEqual(Date.now());
-    expect(user.updatedAt).toEqual(user.createdAt);
+describe("Usuario", () => {
+  it("cria usuário ativo com UUID e datas", () => {
+    const antes = Date.now();
+    const usuario = Usuario.criar(ENTRADA_VALIDA);
+    expect(usuario.id).toMatch(/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
+    expect(usuario.situacao).toBe('ATIVO');
+    expect(usuario.nome).toBe(ENTRADA_VALIDA.nome);
+    expect(usuario.email).toBe(ENTRADA_VALIDA.email);
+    expect(usuario.hashSenha).toBe(ENTRADA_VALIDA.hashSenha);
+    expect(usuario.criadoEm.getTime()).toBeGreaterThanOrEqual(antes);
+    expect(usuario.criadoEm.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(usuario.atualizadoEm).toEqual(usuario.criadoEm);
   });
 
-  it('trims names and canonicalizes the email', () => {
-    const user = User.create({ ...validInput, name: '  Ana  Silva\n', email: '  ANA+LEGAL@EXAMPLE.TEST  ' });
-    expect(user.name).toBe('Ana  Silva');
-    expect(user.email).toBe('ana+legal@example.test');
+  it("remove espaços externos dos nomes e normaliza o e-mail", () => {
+    const usuario = Usuario.criar({ ...ENTRADA_VALIDA, nome: '  Ana  Silva\n', email: '  ANA+LEGAL@EXAMPLE.TEST  ' });
+    expect(usuario.nome).toBe('Ana  Silva');
+    expect(usuario.email).toBe('ana+legal@example.test');
   });
 
-  it.each(['AB', 'a'.repeat(120), '😀'.repeat(120)])('accepts name limits in characters', (name) => {
-    expect(User.create({ ...validInput, name }).name).toBe(name);
+  it.each(['AB', 'a'.repeat(120), '😀'.repeat(120)])("aceita limites do nome medidos em caracteres", (nome) => {
+    expect(Usuario.criar({ ...ENTRADA_VALIDA, nome }).nome).toBe(nome);
   });
 
-  it.each(['', '   ', 'A', 'a'.repeat(121), undefined, null, 123])('rejects invalid names', (name) => {
-    expect(() => User.create({ ...validInput, name: name as string }))
-      .toThrowError(new InvalidUserError('name'));
+  it.each(['', '   ', 'A', 'a'.repeat(121), undefined, null, 123])("rejeita nomes inválidos", (nome) => {
+    expect(() => Usuario.criar({ ...ENTRADA_VALIDA, nome: nome as string }))
+      .toThrowError(new ErroUsuarioInvalido('nome'));
   });
 
   it.each([
@@ -47,55 +47,55 @@ describe('User', () => {
     `${'a'.repeat(65)}@example.test`, `ana@${'a'.repeat(64)}.test`,
     `ana@${['a'.repeat(63), 'b'.repeat(63), 'c'.repeat(63), 'd'.repeat(63)].join('.')}.test`,
     undefined, null, 123,
-  ])('rejects malformed email addresses', (email) => {
-    expect(() => User.create({ ...validInput, email: email as string }))
-      .toThrowError(new InvalidUserError('email'));
+  ])("rejeita endereços de e-mail malformados", (email) => {
+    expect(() => Usuario.criar({ ...ENTRADA_VALIDA, email: email as string }))
+      .toThrowError(new ErroUsuarioInvalido('email'));
   });
 
-  it.each(['', '  ', undefined, null, 123])('rejects missing or invalid hash values', (passwordHash) => {
-    expect(() => User.create({ ...validInput, passwordHash: passwordHash as string }))
-      .toThrowError(new InvalidUserError('passwordHash'));
+  it.each(['', '  ', undefined, null, 123])("rejeita hash ausente ou inválido", (hashSenha) => {
+    expect(() => Usuario.criar({ ...ENTRADA_VALIDA, hashSenha: hashSenha as string }))
+      .toThrowError(new ErroUsuarioInvalido('hashSenha'));
   });
 
-  it('restores identity and dates without exposing the hash in automatic serialization', () => {
-    const user = User.restore(persistedUser);
-    expect(user.id).toBe(persistedUser.id);
-    expect(user.createdAt).toEqual(persistedUser.createdAt);
-    expect(user.updatedAt).toEqual(persistedUser.updatedAt);
-    expect(Object.keys(user)).not.toContain('passwordHash');
-    expect(JSON.stringify(user)).not.toContain(persistedUser.passwordHash);
+  it("restaura identidade e datas sem expor hash na serialização automática", () => {
+    const usuario = Usuario.restaurar(USUARIO_PERSISTIDO);
+    expect(usuario.id).toBe(USUARIO_PERSISTIDO.id);
+    expect(usuario.criadoEm).toEqual(USUARIO_PERSISTIDO.criadoEm);
+    expect(usuario.atualizadoEm).toEqual(USUARIO_PERSISTIDO.atualizadoEm);
+    expect(Object.keys(usuario)).not.toContain('hashSenha');
+    expect(JSON.stringify(usuario)).not.toContain(USUARIO_PERSISTIDO.hashSenha);
   });
 
   it.each([
-    { field: 'id', value: 'bad-id' },
-    { field: 'status', value: 'UNKNOWN' },
-    { field: 'createdAt', value: new Date('invalid') },
-    { field: 'createdAt', value: '2026-01-01' },
-    { field: 'updatedAt', value: new Date('invalid') },
-    { field: 'updatedAt', value: new Date('2025-01-01') },
-  ] as const)('rejects invalid restored $field', ({ field, value }) => {
-    expect(() => User.restore({ ...persistedUser, [field]: value }))
-      .toThrowError(new InvalidUserError(field));
+    { campo: 'id', valor: 'bad-id' },
+    { campo: 'situacao', valor: 'UNKNOWN' },
+    { campo: 'criadoEm', valor: new Date('invalid') },
+    { campo: 'criadoEm', valor: '2026-01-01' },
+    { campo: 'atualizadoEm', valor: new Date('invalid') },
+    { campo: 'atualizadoEm', valor: new Date('2025-01-01') },
+  ] as const)("rejeita $campo inválido na restauração", ({ campo, valor }) => {
+    expect(() => Usuario.restaurar({ ...USUARIO_PERSISTIDO, [campo]: valor }))
+      .toThrowError(new ErroUsuarioInvalido(campo));
   });
 
-  it('defends dates against mutation', () => {
-    const createdAt = new Date(persistedUser.createdAt);
-    const updatedAt = new Date(persistedUser.updatedAt);
-    const user = User.restore({ ...persistedUser, createdAt, updatedAt });
-    createdAt.setTime(0);
-    updatedAt.setTime(0);
-    user.createdAt.setTime(0);
-    user.updatedAt.setTime(0);
-    expect(user.createdAt).toEqual(persistedUser.createdAt);
-    expect(user.updatedAt).toEqual(persistedUser.updatedAt);
+  it("protege datas contra mutação", () => {
+    const criadoEm = new Date(USUARIO_PERSISTIDO.criadoEm);
+    const atualizadoEm = new Date(USUARIO_PERSISTIDO.atualizadoEm);
+    const usuario = Usuario.restaurar({ ...USUARIO_PERSISTIDO, criadoEm, atualizadoEm });
+    criadoEm.setTime(0);
+    atualizadoEm.setTime(0);
+    usuario.criadoEm.setTime(0);
+    usuario.atualizadoEm.setTime(0);
+    expect(usuario.criadoEm).toEqual(USUARIO_PERSISTIDO.criadoEm);
+    expect(usuario.atualizadoEm).toEqual(USUARIO_PERSISTIDO.atualizadoEm);
   });
 
-  it('returns only the field identifier in invalid-input errors', () => {
-    const invalidEmail = 'private-invalid-value';
-    expect(() => User.create({ ...validInput, email: invalidEmail }))
-      .toThrowError(new InvalidUserError('email'));
-    expect(new InvalidUserError('email')).toMatchObject({
-      code: 'INVALID_USER', field: 'email', message: 'Invalid user field: email',
+  it("retorna somente identificador do campo nos erros de entrada inválida", () => {
+    const emailInvalido = 'private-invalid-value';
+    expect(() => Usuario.criar({ ...ENTRADA_VALIDA, email: emailInvalido }))
+      .toThrowError(new ErroUsuarioInvalido('email'));
+    expect(new ErroUsuarioInvalido('email')).toMatchObject({
+      codigo: 'USUARIO_INVALIDO', campo: 'email', message: 'Invalid user field: email',
     });
   });
 });

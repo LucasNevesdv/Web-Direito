@@ -1,25 +1,25 @@
-import { SharedRateLimiter, type RateLimitPolicy, type RateLimitScope, type RateLimitStore } from '../../src/application/security/rate-limiter.js';
-import { HmacRateLimitKeys } from '../../src/infrastructure/security/hmac-rate-limit-keys.js';
+import { LimitadorRequisicoesCompartilhado, type PoliticaLimiteRequisicoes, type EscopoLimiteRequisicoes, type ArmazenamentoLimiteRequisicoes } from '../../src/application/security/rate-limiter.js';
+import { ChavesLimiteRequisicoesHmac } from '../../src/infrastructure/security/hmac-rate-limit-keys.js';
 
-export function rateLimiterFixture(overrides: Partial<Record<RateLimitScope, Partial<RateLimitPolicy>>> = {}, now = () => Date.now()) {
-  const buckets = new Map<string, { count: number; expiresAt: number }>();
-  const store: RateLimitStore = {
-    async consume(scope, keyHash, policy) {
-      const start = Math.floor(now() / (policy.windowSeconds * 1000)) * policy.windowSeconds * 1000;
-      const key = `${scope}:${keyHash}:${start}`;
-      const bucket = buckets.get(key) ?? { count: 0, expiresAt: start + policy.windowSeconds * 1000 };
-      ++bucket.count;
-      buckets.set(key, bucket);
-      return { allowed: bucket.count <= policy.limit, retryAfterSeconds: Math.max(1, Math.ceil((bucket.expiresAt - now()) / 1000)) };
+export function criarCenarioLimitador(substituicoes: Partial<Record<EscopoLimiteRequisicoes, Partial<PoliticaLimiteRequisicoes>>> = {}, agora = () => Date.now()) {
+  const contadores = new Map<string, { quantidade: number; expiraEm: number }>();
+  const armazenamento: ArmazenamentoLimiteRequisicoes = {
+    async incrementarContadorDaJanela(escopo, hashChave, politica) {
+      const iniciar = Math.floor(agora() / (politica.janelaSegundos * 1000)) * politica.janelaSegundos * 1000;
+      const chave = `${escopo}:${hashChave}:${iniciar}`;
+      const contador = contadores.get(chave) ?? { quantidade: 0, expiraEm: iniciar + politica.janelaSegundos * 1000 };
+      ++contador.quantidade;
+      contadores.set(chave, contador);
+      return { podeProsseguir: contador.quantidade <= politica.limite, tentarAposSegundos: Math.max(1, Math.ceil((contador.expiraEm - agora()) / 1000)) };
     },
-    async deleteExpired() {
-      let deleted = 0;
-      for (const [key, value] of buckets) if (value.expiresAt <= now()) { buckets.delete(key); ++deleted; }
-      return deleted;
+    async removerLimitesExpirados() {
+      let removidos = 0;
+      for (const [chave, valor] of contadores) if (valor.expiraEm <= agora()) { contadores.delete(chave); ++removidos; }
+      return removidos;
     },
   };
-  const scopes: RateLimitScope[] = ['onboarding-ip', 'login-ip', 'login-identity', 'refresh-ip'];
-  const policies = Object.fromEntries(scopes.map((scope) => [scope, { limit: 1000, windowSeconds: 900, ...overrides[scope] }])) as Record<RateLimitScope, RateLimitPolicy>;
-  const keys = new HmacRateLimitKeys(Buffer.alloc(48, 8).toString('base64url'));
-  return { limiter: new SharedRateLimiter(store, keys, policies), store, keys, buckets, policies };
+  const escopos: EscopoLimiteRequisicoes[] = ['onboarding-ip', 'login-ip', 'login-identity', 'refresh-ip'];
+  const politicas = Object.fromEntries(escopos.map((escopo) => [escopo, { limite: 1000, janelaSegundos: 900, ...substituicoes[escopo] }])) as Record<EscopoLimiteRequisicoes, PoliticaLimiteRequisicoes>;
+  const chaves = new ChavesLimiteRequisicoesHmac(Buffer.alloc(48, 8).toString('base64url'));
+  return { limitador: new LimitadorRequisicoesCompartilhado(armazenamento, chaves, politicas), armazenamento, chaves, contadores, politicas };
 }

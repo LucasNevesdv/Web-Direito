@@ -1,207 +1,207 @@
-import type { SessionCoordinator } from './session-coordinator';
+import type { CoordenadorSessao } from './session-coordinator';
 
-export interface Identity {
-  user: { id: string; name: string; email: string };
-  office: { id: string; name: string; role: 'OWNER' };
+export interface IdentidadeAutenticada {
+  usuario: { id: string; nome: string; email: string };
+  escritorio: { id: string; nome: string; papel: 'PROPRIETARIO' };
 }
-export type AuthState = { status: 'loading' | 'authenticated' | 'unauthenticated'; identity: Identity | null };
+export type EstadoAutenticacao = { situacao: 'carregando' | 'autenticado' | 'naoAutenticado'; identidade: IdentidadeAutenticada | null };
 
-export class LoginError extends Error {
-  constructor(readonly status: number) { super('Não foi possível entrar.'); }
-}
-
-function identity(value: unknown): Identity {
-  const data = value as Identity | undefined;
-  if (!data || !data.user || !data.office ||
-    ![data.user.id, data.user.name, data.user.email, data.office.id, data.office.name].every((field) => typeof field === 'string' && field.length > 0) ||
-    data.office.role !== 'OWNER') throw new Error('Identidade indisponível.');
-  return { user: { id: data.user.id, name: data.user.name, email: data.user.email },
-    office: { id: data.office.id, name: data.office.name, role: data.office.role } };
+export class ErroLogin extends Error {
+  constructor(readonly situacao: number) { super('Não foi possível entrar.'); }
 }
 
-export class AuthClient {
-  private token: string | null = null;
-  private state: AuthState = { status: 'loading', identity: null };
-  private listeners = new Set<() => void>();
-  private refreshPromise: Promise<boolean> | undefined;
-  private restorePromise: Promise<boolean> | undefined;
-  private logoutPromise: Promise<void> | undefined;
-  private generation = 0;
-  private tokenVersion = 0;
-  private sessionId: string | null = null;
+function validarEExtrairIdentidade(respostaDaApi: unknown): IdentidadeAutenticada {
+  const identidadeRecebida = respostaDaApi as IdentidadeAutenticada | undefined;
+  if (!identidadeRecebida || !identidadeRecebida.usuario || !identidadeRecebida.escritorio ||
+    ![identidadeRecebida.usuario.id, identidadeRecebida.usuario.nome, identidadeRecebida.usuario.email, identidadeRecebida.escritorio.id, identidadeRecebida.escritorio.nome].every((campo) => typeof campo === 'string' && campo.length > 0) ||
+    identidadeRecebida.escritorio.papel !== 'PROPRIETARIO') throw new Error('Identidade indisponível.');
+  return { usuario: { id: identidadeRecebida.usuario.id, nome: identidadeRecebida.usuario.nome, email: identidadeRecebida.usuario.email },
+    escritorio: { id: identidadeRecebida.escritorio.id, nome: identidadeRecebida.escritorio.nome, papel: identidadeRecebida.escritorio.papel } };
+}
 
-  constructor(private readonly transport: typeof fetch = (...args) => fetch(...args),
-    private readonly redirect: () => void = () => {}, private readonly coordinator?: SessionCoordinator) {
-    coordinator?.subscribe((state) => {
-      if (!state.credentials) {
-        ++this.generation;
-        this.clear();
-        this.redirect();
+export class ClienteAutenticacao {
+  private tokenAcessoEmMemoria: string | null = null;
+  private estadoAutenticacao: EstadoAutenticacao = { situacao: 'carregando', identidade: null };
+  private observadoresDaAutenticacao = new Set<() => void>();
+  private promessaRenovacao: Promise<boolean> | undefined;
+  private promessaRestauracao: Promise<boolean> | undefined;
+  private promessaDeEncerramento: Promise<void> | undefined;
+  private versaoDaIdentidade = 0;
+  private versaoDoTokenDeAcesso = 0;
+  private idSessao: string | null = null;
+
+  constructor(private readonly enviarRequisicaoHttp: typeof fetch = (...argumentos) => fetch(...argumentos),
+    private readonly aoExigirNovoLogin: () => void = () => {}, private readonly coordenador?: CoordenadorSessao) {
+    coordenador?.observarMudancasDaSessao((sessaoRecebida) => {
+      if (!sessaoRecebida.credenciais) {
+        ++this.versaoDaIdentidade;
+        this.limparCredenciaisLocais();
+        this.aoExigirNovoLogin();
       } else {
-        if (this.logoutPromise) return;
-        if (this.sessionId && state.sessionId !== this.sessionId) ++this.generation;
-        this.sessionId = state.sessionId;
-        this.token = state.credentials.accessToken;
-        ++this.tokenVersion;
-        this.setState('authenticated', state.credentials.identity);
+        if (this.promessaDeEncerramento) return;
+        if (this.idSessao && sessaoRecebida.idSessao !== this.idSessao) ++this.versaoDaIdentidade;
+        this.idSessao = sessaoRecebida.idSessao;
+        this.tokenAcessoEmMemoria = sessaoRecebida.credenciais.tokenAcesso;
+        ++this.versaoDoTokenDeAcesso;
+        this.definirEstadoDaAutenticacao('autenticado', sessaoRecebida.credenciais.identidade);
       }
     });
-    coordinator?.onExpiration(() => { void this.refresh().then((success) => { if (!success) this.redirect(); }); });
+    coordenador?.registrarAoExpirarSessao(() => { void this.renovarSessao().then((foiSessaoRenovada) => { if (!foiSessaoRenovada) this.aoExigirNovoLogin(); }); });
   }
 
-  private exclusive<T>(task: (signal?: AbortSignal) => Promise<T>) {
-    return this.coordinator ? this.coordinator.exclusive(task) : task();
+  private executarOperacaoExclusiva<T>(aoObterExclusividade: (sinal?: AbortSignal) => Promise<T>) {
+    return this.coordenador ? this.coordenador.executarOperacaoExclusiva(aoObterExclusividade) : aoObterExclusividade();
   }
 
-  readonly getSnapshot = (): AuthState => this.state;
-  readonly subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+  readonly obterEstadoDaAutenticacao = (): EstadoAutenticacao => this.estadoAutenticacao;
+  readonly observarMudancasDaAutenticacao = (aoAlterarAutenticacao: () => void) => {
+    this.observadoresDaAutenticacao.add(aoAlterarAutenticacao);
+    return () => { this.observadoresDaAutenticacao.delete(aoAlterarAutenticacao); };
   };
 
-  private setState(status: AuthState['status'], current: Identity | null = null) {
-    this.state = { status, identity: current };
-    this.listeners.forEach((listener) => listener());
+  private definirEstadoDaAutenticacao(situacao: EstadoAutenticacao['situacao'], identidadeAutenticada: IdentidadeAutenticada | null = null) {
+    this.estadoAutenticacao = { situacao, identidade: identidadeAutenticada };
+    this.observadoresDaAutenticacao.forEach((aoAlterarAutenticacao) => aoAlterarAutenticacao());
   }
 
-  private clear() { this.token = null; this.setState('unauthenticated'); }
+  private limparCredenciaisLocais() { this.tokenAcessoEmMemoria = null; this.definirEstadoDaAutenticacao('naoAutenticado'); }
 
-  prepareForNavigation(): void {
-    ++this.generation;
-    this.token = null;
-    this.restorePromise = undefined;
-    this.coordinator?.close();
-    this.setState('loading');
+  prepararSaidaDaPagina(): void {
+    ++this.versaoDaIdentidade;
+    this.tokenAcessoEmMemoria = null;
+    this.promessaRestauracao = undefined;
+    this.coordenador?.encerrarCoordenacao();
+    this.definirEstadoDaAutenticacao('carregando');
   }
 
-  restore(): Promise<boolean> {
-    this.restorePromise ??= this.refresh(true);
-    return this.restorePromise;
+  restaurarSessao(): Promise<boolean> {
+    this.promessaRestauracao ??= this.renovarSessao(true);
+    return this.promessaRestauracao;
   }
 
-  refresh(restoring = false): Promise<boolean> {
-    if (this.logoutPromise) return Promise.resolve(false);
-    if (this.refreshPromise) return this.refreshPromise;
-    const generation = this.generation;
-    const version = this.tokenVersion;
-    this.refreshPromise = this.exclusive(async (signal) => {
-        if (this.coordinator) await this.coordinator.synchronize();
-        const shared = this.coordinator?.getState();
-        if (shared?.credentials && shared.credentials.expiresAt > Date.now() && (restoring || version !== this.tokenVersion)) return true;
-        if (generation !== this.generation || (shared && !shared.credentials)) { if (!this.token) this.clear(); return false; }
-        if (this.coordinator && !this.coordinator.canRefresh) { this.clear(); return false; }
-        const response = await this.transport('/api/v1/auth/refresh', { method: 'POST', credentials: 'include', ...(signal ? { signal } : {}) });
-        if (response.status !== 200) {
-          if (response.status === 401 && generation === this.generation) this.coordinator?.invalidate('invalid');
+  renovarSessao(estaRestaurandoSessao = false): Promise<boolean> {
+    if (this.promessaDeEncerramento) return Promise.resolve(false);
+    if (this.promessaRenovacao) return this.promessaRenovacao;
+    const versaoDaIdentidadeAoIniciar = this.versaoDaIdentidade;
+    const versaoDoTokenAoIniciar = this.versaoDoTokenDeAcesso;
+    this.promessaRenovacao = this.executarOperacaoExclusiva(async (sinal) => {
+        if (this.coordenador) await this.coordenador.sincronizarSessaoEntreAbas();
+        const sessaoCompartilhada = this.coordenador?.obterSessaoCompartilhada();
+        if (sessaoCompartilhada?.credenciais && sessaoCompartilhada.credenciais.expiraEm > Date.now() && (estaRestaurandoSessao || versaoDoTokenAoIniciar !== this.versaoDoTokenDeAcesso)) return true;
+        if (versaoDaIdentidadeAoIniciar !== this.versaoDaIdentidade || (sessaoCompartilhada && !sessaoCompartilhada.credenciais)) { if (!this.tokenAcessoEmMemoria) this.limparCredenciaisLocais(); return false; }
+        if (this.coordenador && !this.coordenador.podeRenovar) { this.limparCredenciaisLocais(); return false; }
+        const resposta = await this.enviarRequisicaoHttp('/api/v1/auth/refresh', { method: 'POST', credentials: 'include', ...(sinal ? { signal: sinal } : {}) });
+        if (resposta.status !== 200) {
+          if (resposta.status === 401 && versaoDaIdentidadeAoIniciar === this.versaoDaIdentidade) this.coordenador?.propagarInvalidacaoDaSessao("invalido");
           throw new Error('Sessão indisponível.');
         }
-        const result = await response.json();
-        const current = identity(result);
-        if (typeof result.accessToken !== 'string' || !result.accessToken || result.expiresIn <= 0 || typeof result.expiresIn !== 'number') throw new Error('Sessão indisponível.');
-        if (generation !== this.generation) return false;
-        this.coordinator?.publish(result.accessToken, current, 'refresh');
-        this.sessionId = this.coordinator?.getState()?.sessionId ?? null;
-        this.token = result.accessToken;
-        ++this.tokenVersion;
-        this.setState('authenticated', current);
+        const respostaAutenticacao = await resposta.json();
+        const identidadeAutenticada = validarEExtrairIdentidade(respostaAutenticacao);
+        if (typeof respostaAutenticacao.tokenAcesso !== 'string' || !respostaAutenticacao.tokenAcesso || respostaAutenticacao.expiraEmSegundos <= 0 || typeof respostaAutenticacao.expiraEmSegundos !== 'number') throw new Error('Sessão indisponível.');
+        if (versaoDaIdentidadeAoIniciar !== this.versaoDaIdentidade) return false;
+        this.coordenador?.compartilharCredenciaisDaSessao(respostaAutenticacao.tokenAcesso, identidadeAutenticada, "renovar");
+        this.idSessao = this.coordenador?.obterSessaoCompartilhada()?.idSessao ?? null;
+        this.tokenAcessoEmMemoria = respostaAutenticacao.tokenAcesso;
+        ++this.versaoDoTokenDeAcesso;
+        this.definirEstadoDaAutenticacao('autenticado', identidadeAutenticada);
         return true;
       }).catch(() => {
-        if (generation === this.generation) this.clear();
+        if (versaoDaIdentidadeAoIniciar === this.versaoDaIdentidade) this.limparCredenciaisLocais();
         return false;
-      }).finally(() => { this.refreshPromise = undefined; });
-    return this.refreshPromise;
+      }).finally(() => { this.promessaRenovacao = undefined; });
+    return this.promessaRenovacao;
   }
 
-  async login(email: string, password: string): Promise<void> {
-    await this.logoutPromise;
-    await this.refreshPromise;
-    return this.exclusive(async (signal) => {
-    await this.coordinator?.synchronize();
-    if (this.coordinator?.getState()?.credentials) {
-      this.coordinator.invalidate('logout');
-      this.clear();
-      const revoked = await this.transport('/api/v1/auth/logout', { method: 'POST', credentials: 'include', signal });
-      if (revoked.status !== 204) throw new LoginError(500);
+  async autenticarUsuario(email: string, senha: string): Promise<void> {
+    await this.promessaDeEncerramento;
+    await this.promessaRenovacao;
+    return this.executarOperacaoExclusiva(async (sinal) => {
+    await this.coordenador?.sincronizarSessaoEntreAbas();
+    if (this.coordenador?.obterSessaoCompartilhada()?.credenciais) {
+      this.coordenador.propagarInvalidacaoDaSessao("sair");
+      this.limparCredenciaisLocais();
+      const respostaRevogacao = await this.enviarRequisicaoHttp('/api/v1/auth/logout', { method: 'POST', credentials: 'include', signal: sinal });
+      if (respostaRevogacao.status !== 204) throw new ErroLogin(500);
     }
-    const generation = ++this.generation;
-    this.clear();
+    const versaoDaIdentidadeAoIniciar = ++this.versaoDaIdentidade;
+    this.limparCredenciaisLocais();
     try {
-      const response = await this.transport('/api/v1/auth/login', {
+      const resposta = await this.enviarRequisicaoHttp('/api/v1/auth/login', {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }), signal,
+        body: JSON.stringify({ email, senha }), signal: sinal,
       });
-      if (response.status !== 200) throw new LoginError(response.status);
-      const result = await response.json();
-      if (typeof result.accessToken !== 'string' || !result.accessToken) throw new LoginError(500);
-      const me = await this.transport('/api/v1/auth/me', {
-        credentials: 'include', headers: { Authorization: `Bearer ${result.accessToken}` }, signal,
+      if (resposta.status !== 200) throw new ErroLogin(resposta.status);
+      const respostaAutenticacao = await resposta.json();
+      if (typeof respostaAutenticacao.tokenAcesso !== 'string' || !respostaAutenticacao.tokenAcesso) throw new ErroLogin(500);
+      const respostaIdentidade = await this.enviarRequisicaoHttp('/api/v1/auth/me', {
+        credentials: 'include', headers: { Authorization: `Bearer ${respostaAutenticacao.tokenAcesso}` }, signal: sinal,
       });
-      if (me.status !== 200) throw new LoginError(500);
-      const current = identity(await me.json());
-      if (generation !== this.generation) throw new LoginError(500);
-      this.coordinator?.publish(result.accessToken, current, 'login');
-      this.sessionId = this.coordinator?.getState()?.sessionId ?? null;
-      this.token = result.accessToken;
-      ++this.tokenVersion;
-      this.setState('authenticated', current);
-    } catch (error) {
-      if (generation === this.generation) this.clear();
-      throw error instanceof LoginError ? error : new LoginError(500);
+      if (respostaIdentidade.status !== 200) throw new ErroLogin(500);
+      const identidadeAutenticada = validarEExtrairIdentidade(await respostaIdentidade.json());
+      if (versaoDaIdentidadeAoIniciar !== this.versaoDaIdentidade) throw new ErroLogin(500);
+      this.coordenador?.compartilharCredenciaisDaSessao(respostaAutenticacao.tokenAcesso, identidadeAutenticada, "entrar");
+      this.idSessao = this.coordenador?.obterSessaoCompartilhada()?.idSessao ?? null;
+      this.tokenAcessoEmMemoria = respostaAutenticacao.tokenAcesso;
+      ++this.versaoDoTokenDeAcesso;
+      this.definirEstadoDaAutenticacao('autenticado', identidadeAutenticada);
+    } catch (erro) {
+      if (versaoDaIdentidadeAoIniciar === this.versaoDaIdentidade) this.limparCredenciaisLocais();
+      throw erro instanceof ErroLogin ? erro : new ErroLogin(500);
     }
     });
   }
 
-  async request(path: string, init: RequestInit = {}): Promise<Response> {
+  async enviarRequisicaoAutenticada(caminho: string, opcoes: RequestInit = {}): Promise<Response> {
     // Constrain credential-bearing requests to this application's API.
-    if (!path.startsWith('/api/') || path.includes('\\') || path.includes('#')) throw new Error('Caminho não permitido.');
-    const pathname = new URL(path, 'https://local.invalid').pathname;
-    if (!pathname.startsWith('/api/')) throw new Error('Caminho não permitido.');
-    const excluded = ['/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/auth/logout', '/api/v1/onboarding'];
-    if (excluded.includes(pathname)) return this.transport(path, { ...init, credentials: 'include' });
-    const send = () => {
-      const headers = new Headers(init.headers);
-      if (this.token) headers.set('Authorization', `Bearer ${this.token}`);
-      else headers.delete('Authorization');
-      return this.transport(path, { ...init, headers, credentials: 'include' });
+    if (!caminho.startsWith('/api/') || caminho.includes('\\') || caminho.includes('#')) throw new Error('Caminho não permitido.');
+    const caminhoUrl = new URL(caminho, 'https://local.invalid').pathname;
+    if (!caminhoUrl.startsWith('/api/')) throw new Error('Caminho não permitido.');
+    const rotasSemRenovacao = ['/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/auth/logout', '/api/v1/onboarding'];
+    if (rotasSemRenovacao.includes(caminhoUrl)) return this.enviarRequisicaoHttp(caminho, { ...opcoes, credentials: 'include' });
+    const enviarRequisicaoComTokenAtual = () => {
+      const cabecalhos = new Headers(opcoes.headers);
+      if (this.tokenAcessoEmMemoria) cabecalhos.set('Authorization', `Bearer ${this.tokenAcessoEmMemoria}`);
+      else cabecalhos.delete('Authorization');
+      return this.enviarRequisicaoHttp(caminho, { ...opcoes, headers: cabecalhos, credentials: 'include' });
     };
-    const sentToken = this.token;
-    const sentVersion = this.tokenVersion;
-    const generation = this.generation;
-    const response = await send();
-    if (generation !== this.generation) throw new Error('Sessão alterada durante a requisição.');
-    if (response.status !== 401 || !sentToken || generation !== this.generation) return response;
+    const tokenEnviado = this.tokenAcessoEmMemoria;
+    const versaoDoTokenEnviado = this.versaoDoTokenDeAcesso;
+    const versaoDaIdentidadeAoIniciar = this.versaoDaIdentidade;
+    const resposta = await enviarRequisicaoComTokenAtual();
+    if (versaoDaIdentidadeAoIniciar !== this.versaoDaIdentidade) throw new Error('Sessão alterada durante a requisição.');
+    if (resposta.status !== 401 || !tokenEnviado || versaoDaIdentidadeAoIniciar !== this.versaoDaIdentidade) return resposta;
     // A late 401 may refer to a token another request has already renewed.
-    if (this.tokenVersion === sentVersion && !(await this.refresh())) {
-      this.redirect();
-      return response;
+    if (this.versaoDoTokenDeAcesso === versaoDoTokenEnviado && !(await this.renovarSessao())) {
+      this.aoExigirNovoLogin();
+      return resposta;
     }
-    if (!this.token || generation !== this.generation) return response;
-    const retried = await send();
-    if (generation !== this.generation) throw new Error('Sessão alterada durante a requisição.');
-    if (retried.status === 401 && generation === this.generation) { this.coordinator?.invalidate('invalid'); this.clear(); this.redirect(); }
-    return retried;
+    if (!this.tokenAcessoEmMemoria || versaoDaIdentidadeAoIniciar !== this.versaoDaIdentidade) return resposta;
+    const respostaDaRepeticao = await enviarRequisicaoComTokenAtual();
+    if (versaoDaIdentidadeAoIniciar !== this.versaoDaIdentidade) throw new Error('Sessão alterada durante a requisição.');
+    if (respostaDaRepeticao.status === 401 && versaoDaIdentidadeAoIniciar === this.versaoDaIdentidade) { this.coordenador?.propagarInvalidacaoDaSessao("invalido"); this.limparCredenciaisLocais(); this.aoExigirNovoLogin(); }
+    return respostaDaRepeticao;
   }
 
-  logout(): Promise<void> {
-    if (this.logoutPromise) return this.logoutPromise;
-    ++this.generation;
-    this.coordinator?.invalidate('logout');
-    this.clear();
-    this.redirect();
+  encerrarSessao(): Promise<void> {
+    if (this.promessaDeEncerramento) return this.promessaDeEncerramento;
+    ++this.versaoDaIdentidade;
+    this.coordenador?.propagarInvalidacaoDaSessao("sair");
+    this.limparCredenciaisLocais();
+    this.aoExigirNovoLogin();
     // Let an already-sent refresh finish setting its cookie before revoking it.
-    this.logoutPromise = (async () => {
-      await this.refreshPromise;
+    this.promessaDeEncerramento = (async () => {
+      await this.promessaRenovacao;
       try {
-        const response = await this.exclusive(async (signal) => {
-          if (this.coordinator) await this.coordinator.synchronize();
-          const result = await this.transport('/api/v1/auth/logout', { method: 'POST', credentials: 'include', signal });
-          if (result.status === 204) { this.coordinator?.invalidate('logout'); this.clear(); }
-          return result;
+        const resposta = await this.executarOperacaoExclusiva(async (sinal) => {
+          if (this.coordenador) await this.coordenador.sincronizarSessaoEntreAbas();
+          const respostaEncerramento = await this.enviarRequisicaoHttp('/api/v1/auth/logout', { method: 'POST', credentials: 'include', signal: sinal });
+          if (respostaEncerramento.status === 204) { this.coordenador?.propagarInvalidacaoDaSessao("sair"); this.limparCredenciaisLocais(); }
+          return respostaEncerramento;
         });
-        if (response.status !== 204) throw new Error('Não foi possível encerrar a sessão no servidor. Tente novamente.');
-      } finally { this.logoutPromise = undefined; }
+        if (resposta.status !== 204) throw new Error('Não foi possível encerrar a sessão no servidor. Tente novamente.');
+      } finally { this.promessaDeEncerramento = undefined; }
     })();
-    return this.logoutPromise;
+    return this.promessaDeEncerramento;
   }
 }
 

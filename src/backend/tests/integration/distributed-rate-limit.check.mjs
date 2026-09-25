@@ -5,138 +5,138 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { loadEnvironment } from '../../dist/environment.js';
-import { createPrismaClient } from '../../dist/database.js';
-import { HmacRateLimitKeys } from '../../dist/infrastructure/security/hmac-rate-limit-keys.js';
-import { PrismaRateLimitStore } from '../../dist/infrastructure/prisma/prisma-rate-limit-store.js';
+import { carregarAmbiente } from '../../dist/environment.js';
+import { criarClientePrisma } from '../../dist/database.js';
+import { ChavesLimiteRequisicoesHmac } from '../../dist/infrastructure/security/hmac-rate-limit-keys.js';
+import { ArmazenamentoLimiteRequisicoesPrisma } from '../../dist/infrastructure/prisma/prisma-rate-limit-store.js';
 
-const children = [], logs = [], hashes = new Set();
-const secret = randomBytes(48).toString('base64url'), keys = new HmacRateLimitKeys(secret);
-const email = `rate-verification-${randomUUID()}@example.invalid`;
-let prisma, secondPrisma, phase = 'startup';
-function report(values = {}) { console.log(JSON.stringify({ phase, ok: true, ...values })); }
-function fail() { console.error(JSON.stringify({ phase, ok: false })); process.exitCode = 1; }
-function digest(scope, address = '127.0.0.1', value = email) { const hash = keys.digest(scope, address, value); hashes.add(hash); return hash; }
-async function freePort() {
-  const server = createServer();
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  const port = server.address().port; await new Promise((resolve) => server.close(resolve)); return port;
+const FILHOS = [], LOGS = [], HASHES = new Set();
+const SEGREDO = randomBytes(48).toString('base64url'), CHAVES = new ChavesLimiteRequisicoesHmac(SEGREDO);
+const EMAIL = `rate-verification-${randomUUID()}@example.invalid`;
+let prisma, segundoPrisma, etapa = 'startup';
+function relatarEtapaDaVerificacao(valores = {}) { console.log(JSON.stringify({ etapa, ok: true, ...valores })); }
+function relatarFalha() { console.error(JSON.stringify({ etapa, ok: false })); process.exitCode = 1; }
+function gerarHashERegistrarParaLimpeza(escopo, endereco = '127.0.0.1', valor = EMAIL) { const hash = CHAVES.gerarHashDaChave(escopo, endereco, valor); HASHES.add(hash); return hash; }
+async function obterPortaDisponivel() {
+  const servidor = createServer();
+  await new Promise((resolver, rejeitar) => { servidor.once('error', rejeitar); servidor.listen(0, '127.0.0.1', resolver); });
+  const porta = servidor.address().port; await new Promise((resolver) => servidor.close(resolver)); return porta;
 }
-async function start(port) {
-  const bootstrap = "process.on('message',message=>{if(message==='stop'){process.emit('SIGTERM');process.disconnect();}});await import('./dist/server.js');process.send(process.exitCode===1?'failed':'ready');";
-  const child = spawn(process.execPath, ['--input-type=module', '-e', bootstrap], {
+async function iniciarBackendDeVerificacao(porta) {
+  const inicializacao = "process.on('message',message=>{if(message==='stop'){process.emit('SIGTERM');process.disconnect();}});await import('./dist/server.js');process.send(process.exitCode===1?'failed':'ready');";
+  const filho = spawn(process.execPath, ['--input-type=module', '-e', inicializacao], {
     cwd: fileURLToPath(new URL('../../', import.meta.url)), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-    env: { ...process.env, HOST: '127.0.0.1', PORT: String(port), TRUST_PROXY: '', RATE_LIMIT_HMAC_SECRET: secret,
+    env: { ...process.env, HOST: '127.0.0.1', PORT: String(porta), TRUST_PROXY: '', RATE_LIMIT_HMAC_SECRET: SEGREDO,
       AUTH_FRONTEND_ORIGIN: 'http://localhost:5173', RATE_LIMIT_ONBOARDING_MAX: '3', RATE_LIMIT_ONBOARDING_WINDOW_SECONDS: '86400',
       RATE_LIMIT_LOGIN_IP_MAX: '4', RATE_LIMIT_LOGIN_IDENTITY_MAX: '2', RATE_LIMIT_LOGIN_WINDOW_SECONDS: '86400',
       RATE_LIMIT_REFRESH_MAX: '3', RATE_LIMIT_REFRESH_WINDOW_SECONDS: '86400', RATE_LIMIT_CLEANUP_INTERVAL_MS: '3600000' },
   });
-  children.push(child);
-  child.stdout.on('data', (chunk) => logs.push(String(chunk))); child.stderr.on('data', (chunk) => logs.push(String(chunk)));
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Startup deadline')), 15000);
-    child.once('message', (message) => { clearTimeout(timer); message === 'ready' ? resolve() : reject(new Error('Startup failed')); });
-    child.once('exit', () => { clearTimeout(timer); reject(new Error('Backend exited')); });
+  FILHOS.push(filho);
+  filho.stdout.on('data', (trecho) => LOGS.push(String(trecho))); filho.stderr.on('data', (trecho) => LOGS.push(String(trecho)));
+  await new Promise((resolver, rejeitar) => {
+    const temporizador = setTimeout(() => rejeitar(new Error('Startup deadline')), 15000);
+    filho.once('message', (mensagem) => { clearTimeout(temporizador); mensagem === 'ready' ? resolver() : rejeitar(new Error('Startup failed')); });
+    filho.once('exit', () => { clearTimeout(temporizador); rejeitar(new Error('Backend exited')); });
   });
-  const base = `http://127.0.0.1:${port}`;
-  assert.equal((await fetch(`${base}/health`)).status, 200); assert.equal((await fetch(`${base}/ready`)).status, 200);
-  return base;
+  const enderecoBase = `http://127.0.0.1:${porta}`;
+  assert.equal((await fetch(`${enderecoBase}/health`)).status, 200); assert.equal((await fetch(`${enderecoBase}/ready`)).status, 200);
+  return enderecoBase;
 }
-async function request(base, path, payload) {
-  const response = await fetch(`${base}/api/v1/${path}`, { method: 'POST', signal: AbortSignal.timeout(15000),
+async function enviarRequisicaoDeTeste(enderecoBase, caminho, conteudo) {
+  const resposta = await fetch(`${enderecoBase}/api/v1/${caminho}`, { method: 'POST', signal: AbortSignal.timeout(15000),
     headers: { origin: 'http://localhost:5173', 'content-type': 'application/json', 'x-forwarded-for': `192.0.2.${Math.floor(Math.random() * 200 + 1)}` },
-    body: JSON.stringify(payload ?? {}) });
-  if (response.status === 429) { assert.ok(Number(response.headers.get('retry-after')) >= 1); assert.ok(Number(response.headers.get('retry-after')) <= 86400); }
-  const body = await response.text(); assert.equal(body.includes(email), false);
-  return response.status;
+    body: JSON.stringify(conteudo ?? {}) });
+  if (resposta.status === 429) { assert.ok(Number(resposta.headers.get('retry-after')) >= 1); assert.ok(Number(resposta.headers.get('retry-after')) <= 86400); }
+  const corpo = await resposta.text(); assert.equal(corpo.includes(EMAIL), false);
+  return resposta.status;
 }
 
 try {
-  const environment = loadEnvironment();
-  prisma = createPrismaClient(environment.DATABASE_URL); secondPrisma = createPrismaClient(environment.DATABASE_URL);
+  const ambiente = carregarAmbiente();
+  prisma = criarClientePrisma(ambiente.DATABASE_URL); segundoPrisma = criarClientePrisma(ambiente.DATABASE_URL);
   await prisma.$queryRaw`SELECT 1`;
-  for (const scope of ['onboarding-ip', 'login-ip', 'login-identity', 'refresh-ip']) digest(scope);
-  digest('login-identity', '127.0.0.1', `other-${email}`);
-  digest('login-identity', '127.0.0.1', `third-${email}`);
-  assert.equal(await prisma.rateLimitBucket.count({ where: { keyHash: { in: [...hashes] } } }), 0);
-  const bases = [await start(await freePort()), await start(await freePort())];
-  assert.notEqual(children[0].pid, children[1].pid);
-  phase = 'two_process_onboarding_refresh';
-  for (const [path, allowedStatus] of [['onboarding', 400], ['auth/refresh', 401]]) {
-    const statuses = [];
-    for (let index = 0; index < 5; ++index) statuses.push(await request(bases[index % 2], path));
-    assert.deepEqual(statuses, [allowedStatus, allowedStatus, allowedStatus, 429, 429]);
+  for (const escopo of ['onboarding-ip', 'login-ip', 'login-identity', 'refresh-ip']) gerarHashERegistrarParaLimpeza(escopo);
+  gerarHashERegistrarParaLimpeza('login-identity', '127.0.0.1', `other-${EMAIL}`);
+  gerarHashERegistrarParaLimpeza('login-identity', '127.0.0.1', `third-${EMAIL}`);
+  assert.equal(await prisma.rateLimitBucket.count({ where: { keyHash: { in: [...HASHES] } } }), 0);
+  const enderecosBase = [await iniciarBackendDeVerificacao(await obterPortaDisponivel()), await iniciarBackendDeVerificacao(await obterPortaDisponivel())];
+  assert.notEqual(FILHOS[0].pid, FILHOS[1].pid);
+  etapa = 'two_process_onboarding_refresh';
+  for (const [caminho, situacaoPermitida] of [['onboarding', 400], ['auth/refresh', 401]]) {
+    const situacoes = [];
+    for (let indice = 0; indice < 5; ++indice) situacoes.push(await enviarRequisicaoDeTeste(enderecosBase[indice % 2], caminho));
+    assert.deepEqual(situacoes, [situacaoPermitida, situacaoPermitida, situacaoPermitida, 429, 429]);
   }
-  report({ processes: 2, sharedLimit: 3, onboarding: [400, 400, 400, 429, 429], refresh: [401, 401, 401, 429, 429], retryAfter: true, spoofedForwardingIgnored: true });
+  relatarEtapaDaVerificacao({ processos: 2, limiteCompartilhado: 3, cadastroInicial: [400, 400, 400, 429, 429], renovar: [401, 401, 401, 429, 429], tentarApos: true, encaminhamentoFalsoIgnorado: true });
 
-  phase = 'two_process_login';
-  const attempts = [email, ` ${email.toUpperCase()} `, email, `other-${email}`, `third-${email}`];
-  const statuses = [];
-  for (const [index, value] of attempts.entries()) statuses.push(await request(bases[index % 2], 'auth/login', { email: value, password: 'temporary-wrong-password' }));
-  assert.deepEqual(statuses, [401, 401, 429, 401, 429]);
-  report({ statuses, normalizedIdentityLimit: 2, ipLimit: 4, retryAfter: true });
+  etapa = 'two_process_login';
+  const tentativas = [EMAIL, ` ${EMAIL.toUpperCase()} `, EMAIL, `other-${EMAIL}`, `third-${EMAIL}`];
+  const situacoes = [];
+  for (const [indice, valor] of tentativas.entries()) situacoes.push(await enviarRequisicaoDeTeste(enderecosBase[indice % 2], 'auth/login', { email: valor, senha: 'temporary-wrong-password' }));
+  assert.deepEqual(situacoes, [401, 401, 429, 401, 429]);
+  relatarEtapaDaVerificacao({ situacoes, limiteIdentidadeNormalizada: 2, limiteIp: 4, tentarApos: true });
 
-  phase = 'real_atomic_concurrency';
-  const stores = [new PrismaRateLimitStore(prisma), new PrismaRateLimitStore(secondPrisma)];
-  const key = digest('refresh-ip', '192.0.2.200');
-  const results = await Promise.all(Array.from({ length: 40 }, (_, index) => stores[index % 2].consume('refresh-ip', key, { limit: 7, windowSeconds: 86400 })));
-  assert.equal(results.filter((result) => result.allowed).length, 7);
-  assert.equal((await prisma.rateLimitBucket.findFirstOrThrow({ where: { keyHash: key } })).count, 8);
-  report({ independentClients: 2, concurrentAttempts: 40, accepted: 7, blocked: 33, counterCapped: true });
+  etapa = 'real_atomic_concurrency';
+  const armazenamentos = [new ArmazenamentoLimiteRequisicoesPrisma(prisma), new ArmazenamentoLimiteRequisicoesPrisma(segundoPrisma)];
+  const chave = gerarHashERegistrarParaLimpeza('refresh-ip', '192.0.2.200');
+  const resultados = await Promise.all(Array.from({ length: 40 }, (_, indice) => armazenamentos[indice % 2].incrementarContadorDaJanela('refresh-ip', chave, { limite: 7, janelaSegundos: 86400 })));
+  assert.equal(resultados.filter((resultado) => resultado.podeProsseguir).length, 7);
+  assert.equal((await prisma.rateLimitBucket.findFirstOrThrow({ where: { keyHash: chave } })).count, 8);
+  relatarEtapaDaVerificacao({ clientesIndependentes: 2, tentativasConcorrentes: 40, aceitos: 7, bloqueados: 33, contadorLimitado: true });
 
-  phase = 'real_next_window';
-  const windowKey = digest('refresh-ip', '192.0.2.201');
+  etapa = 'real_next_window';
+  const chaveJanela = gerarHashERegistrarParaLimpeza('refresh-ip', '192.0.2.201');
   // Start near the beginning of a database-clock second to avoid crossing the boundary between the first two calls.
-  let fraction;
-  do { [{ fraction }] = await prisma.$queryRaw`SELECT (extract(epoch FROM clock_timestamp()) % 1)::float AS fraction`; if (fraction > 0.25) await delay(20); } while (fraction > 0.25);
-  assert.equal((await stores[0].consume('refresh-ip', windowKey, { limit: 1, windowSeconds: 1 })).allowed, true);
-  assert.equal((await stores[1].consume('refresh-ip', windowKey, { limit: 1, windowSeconds: 1 })).allowed, false);
+  let fracao;
+  do { [{ fracao }] = await prisma.$queryRaw`SELECT (extract(epoch FROM clock_timestamp()) % 1)::float AS fracao`; if (fracao > 0.25) await delay(20); } while (fracao > 0.25);
+  assert.equal((await armazenamentos[0].incrementarContadorDaJanela('refresh-ip', chaveJanela, { limite: 1, janelaSegundos: 1 })).podeProsseguir, true);
+  assert.equal((await armazenamentos[1].incrementarContadorDaJanela('refresh-ip', chaveJanela, { limite: 1, janelaSegundos: 1 })).podeProsseguir, false);
   await delay(1100);
-  assert.equal((await stores[1].consume('refresh-ip', windowKey, { limit: 1, windowSeconds: 1 })).allowed, true);
-  report({ nextWindowAllowed: true });
+  assert.equal((await armazenamentos[1].incrementarContadorDaJanela('refresh-ip', chaveJanela, { limite: 1, janelaSegundos: 1 })).podeProsseguir, true);
+  relatarEtapaDaVerificacao({ proximaJanelaPermitida: true });
 
-  phase = 'real_cleanup_sql';
+  etapa = 'real_cleanup_sql';
   // A session-local table exercises the exact cleanup SQL without deleting any existing application's buckets.
-  await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`CREATE TEMP TABLE rate_limit_buckets (LIKE public.rate_limit_buckets INCLUDING ALL) ON COMMIT DROP`;
-    await tx.$executeRaw`INSERT INTO rate_limit_buckets(scope,key_hash,window_start,count,expires_at) VALUES
-      ('refresh-ip', ${windowKey}, now() - interval '2 minutes', 1, now() - interval '1 minute'),
-      ('refresh-ip', ${windowKey}, now(), 1, now() + interval '1 minute')`;
-    assert.equal(await new PrismaRateLimitStore(tx).deleteExpired(), 1);
-    const [{ remaining }] = await tx.$queryRaw`SELECT count(*)::int AS remaining FROM rate_limit_buckets`;
-    assert.equal(remaining, 1);
+  await prisma.$transaction(async (transacao) => {
+    await transacao.$executeRaw`CREATE TEMP TABLE rate_limit_buckets (LIKE public.rate_limit_buckets INCLUDING ALL) ON COMMIT DROP`;
+    await transacao.$executeRaw`INSERT INTO rate_limit_buckets(scope,key_hash,window_start,count,expires_at) VALUES
+      ('refresh-ip', ${chaveJanela}, now() - interval '2 minutes', 1, now() - interval '1 minute'),
+      ('refresh-ip', ${chaveJanela}, now(), 1, now() + interval '1 minute')`;
+    assert.equal(await new ArmazenamentoLimiteRequisicoesPrisma(transacao).removerLimitesExpirados(), 1);
+    const [{ restantes }] = await transacao.$queryRaw`SELECT count(*)::int AS restantes FROM rate_limit_buckets`;
+    assert.equal(restantes, 1);
   });
-  report({ expiredDeleted: 1, livePreserved: 1, existingApplicationBucketsUntouched: true });
+  relatarEtapaDaVerificacao({ expiradosRemovidos: 1, vigentePreservado: 1, contadoresExistentesPreservados: true });
 
-  phase = 'database_key_privacy';
-  const rows = await prisma.rateLimitBucket.findMany({ where: { keyHash: { in: [...hashes] } } });
-  assert.ok(rows.length >= 5);
-  assert.ok(rows.every((row) => /^[a-f0-9]{64}$/.test(row.keyHash)));
-  assert.equal(JSON.stringify(rows).includes(email), false); assert.equal(JSON.stringify(rows).includes('127.0.0.1'), false);
-  assert.equal(logs.join('').includes(email), false); assert.equal(logs.join('').includes(secret), false);
-  const columns = await prisma.$queryRaw`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='rate_limit_buckets' ORDER BY column_name`;
-  assert.deepEqual(columns.map((row) => row.column_name), ['count', 'expires_at', 'key_hash', 'scope', 'window_start']);
-  report({ persistedFields: 5, onlyHmacKeys: true, readablePersonalData: false });
-} catch { fail(); }
+  etapa = 'database_key_privacy';
+  const linhas = await prisma.rateLimitBucket.findMany({ where: { keyHash: { in: [...HASHES] } } });
+  assert.ok(linhas.length >= 5);
+  assert.ok(linhas.every((linha) => /^[a-f0-9]{64}$/.test(linha.keyHash)));
+  assert.equal(JSON.stringify(linhas).includes(EMAIL), false); assert.equal(JSON.stringify(linhas).includes('127.0.0.1'), false);
+  assert.equal(LOGS.join('').includes(EMAIL), false); assert.equal(LOGS.join('').includes(SEGREDO), false);
+  const colunas = await prisma.$queryRaw`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='rate_limit_buckets' ORDER BY column_name`;
+  assert.deepEqual(colunas.map((linha) => linha.column_name), ['count', 'expires_at', 'key_hash', 'scope', 'window_start']);
+  relatarEtapaDaVerificacao({ camposPersistidos: 5, somenteChavesHmac: true, dadosPessoaisLegiveis: false });
+} catch { relatarFalha(); }
 finally {
   // Stop only children started by this verification, before deleting their isolated buckets.
-  phase = 'process_cleanup';
-  for (const child of children) if (child.exitCode === null) {
+  etapa = 'process_cleanup';
+  for (const filho of FILHOS) if (filho.exitCode === null) {
     try {
-      child.send('stop');
-      const deadline = Date.now() + 10000;
-      while (child.exitCode === null && Date.now() < deadline) await delay(50);
-      assert.equal(child.exitCode, 0);
-    } catch { child.kill(); fail(); }
+      filho.send('stop');
+      const prazo = Date.now() + 10000;
+      while (filho.exitCode === null && Date.now() < prazo) await delay(50);
+      assert.equal(filho.exitCode, 0);
+    } catch { filho.kill(); relatarFalha(); }
   }
-  report({ startedProcesses: children.length, stopped: children.every((child) => child.exitCode !== null) });
-  phase = 'temporary_bucket_cleanup';
+  relatarEtapaDaVerificacao({ processosIniciados: FILHOS.length, encerrado: FILHOS.every((filho) => filho.exitCode !== null) });
+  etapa = 'temporary_bucket_cleanup';
   if (prisma) {
     try {
-      const deleted = await prisma.rateLimitBucket.deleteMany({ where: { keyHash: { in: [...hashes] } } });
-      const remaining = await prisma.rateLimitBucket.count({ where: { keyHash: { in: [...hashes] } } });
-      assert.equal(remaining, 0); report({ deleted: deleted.count, remaining });
-    } catch { fail(); }
+      const removidos = await prisma.rateLimitBucket.deleteMany({ where: { keyHash: { in: [...HASHES] } } });
+      const restantes = await prisma.rateLimitBucket.count({ where: { keyHash: { in: [...HASHES] } } });
+      assert.equal(restantes, 0); relatarEtapaDaVerificacao({ removidos: removidos.count, restantes });
+    } catch { relatarFalha(); }
   }
-  await Promise.all([prisma, secondPrisma].filter(Boolean).map(async (client) => { try { await client.$disconnect(); } catch { fail(); } }));
+  await Promise.all([prisma, segundoPrisma].filter(Boolean).map(async (cliente) => { try { await cliente.$disconnect(); } catch { relatarFalha(); } }));
 }

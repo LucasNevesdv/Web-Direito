@@ -1,61 +1,61 @@
 import { randomUUID } from 'node:crypto';
-import { InvalidMembershipError } from './invalid-membership-error.js';
+import { ErroVinculoInvalido } from './invalid-membership-error.js';
 
-export type MembershipRole = 'OWNER';
+export type PapelVinculoEscritorio = 'PROPRIETARIO';
 
-interface MembershipState {
+interface EstadoVinculoEscritorio {
   id: string;
-  officeId: string;
-  userId: string;
-  role: MembershipRole;
-  createdAt: Date;
+  idEscritorio: string;
+  idUsuario: string;
+  papel: PapelVinculoEscritorio;
+  criadoEm: Date;
 }
 
-const UUID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+const PADRAO_UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
 
-export class Membership {
+export class VinculoEscritorio {
   readonly #id: string;
-  readonly #officeId: string;
-  readonly #userId: string;
-  readonly #role: MembershipRole;
-  readonly #createdAt: number;
+  readonly #idEscritorio: string;
+  readonly #idUsuario: string;
+  readonly #papel: PapelVinculoEscritorio;
+  readonly #criadoEm: number;
 
-  private constructor(state: MembershipState) {
-    for (const field of ['id', 'officeId', 'userId'] as const) {
-      if (typeof state[field] !== 'string' || !UUID_PATTERN.test(state[field])) {
-        throw new InvalidMembershipError(field);
+  private constructor(estado: EstadoVinculoEscritorio) {
+    for (const campo of ['id', 'idEscritorio', 'idUsuario'] as const) {
+      if (typeof estado[campo] !== 'string' || !PADRAO_UUID.test(estado[campo])) {
+        throw new ErroVinculoInvalido(campo);
       }
     }
-    if (state.role !== 'OWNER') {
-      throw new InvalidMembershipError('role');
+    if (estado.papel !== 'PROPRIETARIO') {
+      throw new ErroVinculoInvalido('papel');
     }
-    if (!(state.createdAt instanceof Date) || !Number.isFinite(state.createdAt.getTime())) {
-      throw new InvalidMembershipError('createdAt');
+    if (!(estado.criadoEm instanceof Date) || !Number.isFinite(estado.criadoEm.getTime())) {
+      throw new ErroVinculoInvalido('criadoEm');
     }
-    this.#id = state.id.toLowerCase();
-    this.#officeId = state.officeId.toLowerCase();
-    this.#userId = state.userId.toLowerCase();
-    this.#role = state.role;
-    this.#createdAt = state.createdAt.getTime();
+    this.#id = estado.id.toLowerCase();
+    this.#idEscritorio = estado.idEscritorio.toLowerCase();
+    this.#idUsuario = estado.idUsuario.toLowerCase();
+    this.#papel = estado.papel;
+    this.#criadoEm = estado.criadoEm.getTime();
   }
 
-  static create(input: { officeId: string; userId: string; id?: string }): Membership {
-    return new Membership({
-      id: input.id === undefined ? randomUUID() : input.id,
-      officeId: input.officeId,
-      userId: input.userId,
-      role: 'OWNER',
-      createdAt: new Date(),
+  static criar(entrada: { idEscritorio: string; idUsuario: string; id?: string }): VinculoEscritorio {
+    return new VinculoEscritorio({
+      id: entrada.id === undefined ? randomUUID() : entrada.id,
+      idEscritorio: entrada.idEscritorio,
+      idUsuario: entrada.idUsuario,
+      papel: 'PROPRIETARIO',
+      criadoEm: new Date(),
     });
   }
 
-  static restore(state: MembershipState): Membership {
-    return new Membership(state);
+  static restaurar(estado: EstadoVinculoEscritorio): VinculoEscritorio {
+    return new VinculoEscritorio(estado);
   }
 
   get id(): string { return this.#id; }
-  get officeId(): string { return this.#officeId; }
-  get userId(): string { return this.#userId; }
-  get role(): MembershipRole { return this.#role; }
-  get createdAt(): Date { return new Date(this.#createdAt); }
+  get idEscritorio(): string { return this.#idEscritorio; }
+  get idUsuario(): string { return this.#idUsuario; }
+  get papel(): PapelVinculoEscritorio { return this.#papel; }
+  get criadoEm(): Date { return new Date(this.#criadoEm); }
 }

@@ -1,17 +1,17 @@
-export type InvalidUserField =
+export type CampoUsuarioInvalido =
   | 'id'
-  | 'name'
+  | 'nome'
   | 'email'
-  | 'passwordHash'
-  | 'status'
-  | 'createdAt'
-  | 'updatedAt';
+  | 'hashSenha'
+  | 'situacao'
+  | 'criadoEm'
+  | 'atualizadoEm';
 
-export class InvalidUserError extends Error {
-  readonly code = 'INVALID_USER';
+export class ErroUsuarioInvalido extends Error {
+  readonly codigo = 'USUARIO_INVALIDO';
 
-  constructor(readonly field: InvalidUserField) {
-    super(`Invalid user field: ${field}`);
-    this.name = 'InvalidUserError';
+  constructor(readonly campo: CampoUsuarioInvalido) {
+    super(`Invalid user field: ${campo}`);
+    this.name = 'ErroUsuarioInvalido';
   }
 }

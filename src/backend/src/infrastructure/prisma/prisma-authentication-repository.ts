@@ -1,53 +1,53 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
-import type { AuthenticationAccount, AuthenticationRepository } from '../../application/authentication/authentication-contracts.js';
-import { Session } from '../../domain/sessions/session.js';
-import { User } from '../../domain/users/user.js';
+import type { UsuarioComVinculos, RepositorioAutenticacao } from '../../application/authentication/authentication-contracts.js';
+import { Sessao } from '../../domain/sessions/session.js';
+import { converterRegistroPrismaEmUsuario, converterRegistroPrismaEmSessao, converterSessaoEmRegistroPrisma } from './authentication-mapper.js';
 
-const accountInclude = { memberships: { include: { office: true } } } satisfies Prisma.UserInclude;
-type AccountRecord = Prisma.UserGetPayload<{ include: typeof accountInclude }>;
+const INCLUSAO_VINCULOS_E_ESCRITORIOS = { memberships: { include: { office: true } } } satisfies Prisma.UserInclude;
+type RegistroPrismaDeUsuarioComVinculos = Prisma.UserGetPayload<{ include: typeof INCLUSAO_VINCULOS_E_ESCRITORIOS }>;
 
-function toAccount(record: AccountRecord): AuthenticationAccount {
+function converterRegistroPrismaEmUsuarioComVinculos(registroUsuario: RegistroPrismaDeUsuarioComVinculos): UsuarioComVinculos {
   return {
-    user: User.restore(record),
-    memberships: record.memberships.map(({ office, role }) => ({
-      office: { id: office.id, name: office.name, status: office.status }, role,
+    usuario: converterRegistroPrismaEmUsuario(registroUsuario),
+    vinculos: registroUsuario.memberships.map(({ office: escritorio, role: papel }) => ({
+      escritorio: { id: escritorio.id, nome: escritorio.name, situacao: escritorio.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO' }, papel: papel === 'OWNER' ? 'PROPRIETARIO' : papel,
     })),
   };
 }
 
-export class PrismaAuthenticationRepository implements AuthenticationRepository {
+export class RepositorioAutenticacaoPrisma implements RepositorioAutenticacao {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async findByEmail(email: string): Promise<AuthenticationAccount | null> {
-    const record = await this.prisma.user.findUnique({ where: { email }, include: accountInclude });
-    return record ? toAccount(record) : null;
+  async buscarUsuarioComVinculosPorEmail(email: string): Promise<UsuarioComVinculos | null> {
+    const registroUsuario = await this.prisma.user.findUnique({ where: { email }, include: INCLUSAO_VINCULOS_E_ESCRITORIOS });
+    return registroUsuario ? converterRegistroPrismaEmUsuarioComVinculos(registroUsuario) : null;
   }
 
-  async createSession(session: Session): Promise<void> {
-    await this.prisma.session.create({ data: session.toPersistence(), select: { id: true } });
+  async salvarSessao(sessao: Sessao): Promise<void> {
+    await this.prisma.session.create({ data: converterSessaoEmRegistroPrisma(sessao), select: { id: true } });
   }
 
-  async findSession(id: string) {
-    const record = await this.prisma.session.findUnique({
-      where: { id }, include: { user: { include: accountInclude } },
+  async buscarSessaoComUsuarioPorId(id: string) {
+    const registroSessao = await this.prisma.session.findUnique({
+      where: { id }, include: { user: { include: INCLUSAO_VINCULOS_E_ESCRITORIOS } },
     });
-    return record ? { session: Session.restore(record), account: toAccount(record.user) } : null;
+    return registroSessao ? { sessao: converterRegistroPrismaEmSessao(registroSessao), usuarioComVinculos: converterRegistroPrismaEmUsuarioComVinculos(registroSessao.user) } : null;
   }
 
-  async rotateSession(input: { id: string; currentHash: string; nextHash: string; now: Date }): Promise<boolean> {
-    const result = await this.prisma.session.updateMany({
+  async substituirHashDeRenovacao(substituicaoDoHash: { id: string; hashAtual: string; proximoHash: string; agora: Date }): Promise<boolean> {
+    const resumoDaAtualizacao = await this.prisma.session.updateMany({
       where: {
-        id: input.id, refreshTokenHash: input.currentHash, revokedAt: null, expiresAt: { gt: input.now },
+        id: substituicaoDoHash.id, refreshTokenHash: substituicaoDoHash.hashAtual, revokedAt: null, expiresAt: { gt: substituicaoDoHash.agora },
         user: { status: 'ACTIVE' }, office: { status: 'ACTIVE' }, membership: { role: 'OWNER' },
       },
-      data: { refreshTokenHash: input.nextHash, lastUsedAt: input.now, updatedAt: input.now },
+      data: { refreshTokenHash: substituicaoDoHash.proximoHash, lastUsedAt: substituicaoDoHash.agora, updatedAt: substituicaoDoHash.agora },
     });
-    return result.count === 1;
+    return resumoDaAtualizacao.count === 1;
   }
 
-  async revokeSession(id: string, now: Date): Promise<void> {
+  async revogarSessao(id: string, agora: Date): Promise<void> {
     await this.prisma.session.updateMany({
-      where: { id, revokedAt: null }, data: { revokedAt: now, updatedAt: now },
+      where: { id, revokedAt: null }, data: { revokedAt: agora, updatedAt: agora },
     });
   }
 }

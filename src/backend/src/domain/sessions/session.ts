@@ -1,66 +1,66 @@
 import { randomUUID } from 'node:crypto';
 
-export interface SessionState {
+export interface EstadoSessao {
   id: string;
-  userId: string;
-  activeOfficeId: string;
-  refreshTokenHash: string;
-  expiresAt: Date;
-  revokedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  lastUsedAt: Date | null;
+  idUsuario: string;
+  idEscritorioAtivo: string;
+  hashTokenRenovacao: string;
+  expiraEm: Date;
+  revogadaEm: Date | null;
+  criadoEm: Date;
+  atualizadoEm: Date;
+  ultimoUsoEm: Date | null;
 }
 
-export class InvalidSessionError extends Error {
-  readonly code = 'INVALID_SESSION';
-  constructor(readonly field: keyof SessionState) {
-    super(`Invalid session field: ${field}`);
-    this.name = 'InvalidSessionError';
+export class ErroSessaoInvalida extends Error {
+  readonly codigo = 'SESSAO_INVALIDA';
+  constructor(readonly campo: keyof EstadoSessao) {
+    super(`Invalid session field: ${campo}`);
+    this.name = 'ErroSessaoInvalida';
   }
 }
 
-export class Session {
-  readonly #state: SessionState;
+export class Sessao {
+  readonly #estado: EstadoSessao;
 
-  private constructor(state: SessionState) {
-    for (const field of ['id', 'userId', 'activeOfficeId'] as const) {
-      if (typeof state[field] !== 'string' || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(state[field])) {
-        throw new InvalidSessionError(field);
+  private constructor(estado: EstadoSessao) {
+    for (const campo of ['id', 'idUsuario', 'idEscritorioAtivo'] as const) {
+      if (typeof estado[campo] !== 'string' || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(estado[campo])) {
+        throw new ErroSessaoInvalida(campo);
       }
     }
-    if (typeof state.refreshTokenHash !== 'string' || !/^[a-f\d]{64}$/.test(state.refreshTokenHash)) {
-      throw new InvalidSessionError('refreshTokenHash');
+    if (typeof estado.hashTokenRenovacao !== 'string' || !/^[a-f\d]{64}$/.test(estado.hashTokenRenovacao)) {
+      throw new ErroSessaoInvalida('hashTokenRenovacao');
     }
-    for (const field of ['createdAt', 'updatedAt', 'expiresAt', 'revokedAt', 'lastUsedAt'] as const) {
-      const value = state[field];
-      if ((field === 'revokedAt' || field === 'lastUsedAt') && value === null) continue;
-      if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new InvalidSessionError(field);
-      if (field !== 'createdAt' && value < state.createdAt) throw new InvalidSessionError(field);
+    for (const campo of ['criadoEm', 'atualizadoEm', 'expiraEm', 'revogadaEm', 'ultimoUsoEm'] as const) {
+      const dataDoEstado = estado[campo];
+      if ((campo === 'revogadaEm' || campo === 'ultimoUsoEm') && dataDoEstado === null) continue;
+      if (!(dataDoEstado instanceof Date) || !Number.isFinite(dataDoEstado.getTime())) throw new ErroSessaoInvalida(campo);
+      if (campo !== 'criadoEm' && dataDoEstado < estado.criadoEm) throw new ErroSessaoInvalida(campo);
     }
-    if (state.expiresAt <= state.createdAt) throw new InvalidSessionError('expiresAt');
-    this.#state = structuredClone({
-      id: state.id, userId: state.userId, activeOfficeId: state.activeOfficeId,
-      refreshTokenHash: state.refreshTokenHash, expiresAt: state.expiresAt,
-      createdAt: state.createdAt, updatedAt: state.updatedAt,
-      revokedAt: state.revokedAt, lastUsedAt: state.lastUsedAt,
+    if (estado.expiraEm <= estado.criadoEm) throw new ErroSessaoInvalida('expiraEm');
+    this.#estado = structuredClone({
+      id: estado.id, idUsuario: estado.idUsuario, idEscritorioAtivo: estado.idEscritorioAtivo,
+      hashTokenRenovacao: estado.hashTokenRenovacao, expiraEm: estado.expiraEm,
+      criadoEm: estado.criadoEm, atualizadoEm: estado.atualizadoEm,
+      revogadaEm: estado.revogadaEm, ultimoUsoEm: estado.ultimoUsoEm,
     });
   }
 
-  static create(input: { id?: string; userId: string; activeOfficeId: string; refreshTokenHash: string; expiresAt: Date; now?: Date }): Session {
-    const now = input.now ?? new Date();
-    return new Session({
-      id: input.id ?? randomUUID(), userId: input.userId, activeOfficeId: input.activeOfficeId,
-      refreshTokenHash: input.refreshTokenHash, expiresAt: input.expiresAt,
-      createdAt: now, updatedAt: now, revokedAt: null, lastUsedAt: null,
+  static criar(entrada: { id?: string; idUsuario: string; idEscritorioAtivo: string; hashTokenRenovacao: string; expiraEm: Date; agora?: Date }): Sessao {
+    const agora = entrada.agora ?? new Date();
+    return new Sessao({
+      id: entrada.id ?? randomUUID(), idUsuario: entrada.idUsuario, idEscritorioAtivo: entrada.idEscritorioAtivo,
+      hashTokenRenovacao: entrada.hashTokenRenovacao, expiraEm: entrada.expiraEm,
+      criadoEm: agora, atualizadoEm: agora, revogadaEm: null, ultimoUsoEm: null,
     });
   }
 
-  static restore(state: SessionState): Session { return new Session(state); }
-  get id(): string { return this.#state.id; }
-  get userId(): string { return this.#state.userId; }
-  get activeOfficeId(): string { return this.#state.activeOfficeId; }
-  get expiresAt(): Date { return new Date(this.#state.expiresAt); }
-  isActive(now: Date): boolean { return this.#state.revokedAt === null && this.#state.expiresAt > now; }
-  toPersistence(): SessionState { return structuredClone(this.#state); }
+  static restaurar(estado: EstadoSessao): Sessao { return new Sessao(estado); }
+  get id(): string { return this.#estado.id; }
+  get idUsuario(): string { return this.#estado.idUsuario; }
+  get idEscritorioAtivo(): string { return this.#estado.idEscritorioAtivo; }
+  get expiraEm(): Date { return new Date(this.#estado.expiraEm); }
+  estaAtiva(agora: Date): boolean { return this.#estado.revogadaEm === null && this.#estado.expiraEm > agora; }
+  obterCopiaDoEstado(): EstadoSessao { return structuredClone(this.#estado); }
 }

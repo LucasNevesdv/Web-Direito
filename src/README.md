@@ -73,7 +73,10 @@ porta, defina `BACKEND_PROXY_TARGET` no ambiente do processo do frontend. O padr
 é `http://127.0.0.1:3000`; essa variável configura o servidor Vite e não uma URL
 fixa de produção no bundle.
 
-O cadastro cria escritório, usuário e vínculo OWNER atomicamente. A confirmação
+O contrato JSON usa português brasileiro; as alterações e exceções estão em
+[Nomenclatura](docs/nomenclature.md). Frontend e backend devem ser atualizados juntos.
+
+O cadastro cria escritório, usuário e vínculo PROPRIETARIO atomicamente. A confirmação
 oferece link para `/login`; não há sessão ou token automático no cadastro.
 A API responde 201 no sucesso, 400 para dados inválidos, 409
 para e-mail já cadastrado e 500 com erro genérico.

@@ -1,33 +1,33 @@
 import Fastify from 'fastify';
-import { unavailableRateLimiter, type RateLimiter } from './application/security/rate-limiter.js';
-import type { RegisterOfficeWithOwner } from './application/onboarding/register-office-with-owner.js';
-import type { DatabaseHealthChecker } from './database-health-checker.js';
-import { registerOnboardingRoute } from './presentation/onboarding-route.js';
-import { registerAuthenticationRoutes, type AuthenticationRoutes } from './presentation/authentication-routes.js';
+import { LIMITADOR_REQUISICOES_INDISPONIVEL, type LimitadorRequisicoes } from './application/security/rate-limiter.js';
+import type { CadastroDeEscritorioComProprietario } from './application/onboarding/register-office-with-owner.js';
+import type { VerificadorSaudeBanco } from './database-health-checker.js';
+import { registrarRotaCadastro } from './presentation/onboarding-route.js';
+import { registrarRotasAutenticacao, type ServicosRotasAutenticacao } from './presentation/authentication-routes.js';
 
-export function buildApp(
-  databaseHealthChecker: DatabaseHealthChecker,
-  registration?: Pick<RegisterOfficeWithOwner, 'execute'>,
-  authentication?: AuthenticationRoutes,
-  security: { limiter: RateLimiter; trustProxy?: false | string[] } = { limiter: unavailableRateLimiter },
+export function criarAplicacao(
+  verificadorSaudeBanco: VerificadorSaudeBanco,
+  cadastro?: Pick<CadastroDeEscritorioComProprietario, 'cadastrarEscritorioComProprietario'>,
+  autenticacao?: ServicosRotasAutenticacao,
+  seguranca: { limitador: LimitadorRequisicoes; proxiesConfiaveis?: false | string[] } = { limitador: LIMITADOR_REQUISICOES_INDISPONIVEL },
 ) {
-  const app = Fastify({ logger: false, trustProxy: security.trustProxy ?? false });
+  const aplicacao = Fastify({ logger: false, trustProxy: seguranca.proxiesConfiaveis ?? false });
 
-  app.get('/health', async () => ({ status: 'ok' as const }));
+  aplicacao.get('/health', async () => ({ situacao: 'ok' as const }));
 
-  app.get('/ready', async (_request, reply) => {
+  aplicacao.get('/ready', async (_requisicao, respostaHttp) => {
     try {
-      await databaseHealthChecker.check();
-      return { status: 'ready' as const };
+      await verificadorSaudeBanco.verificarConexaoComBanco();
+      return { situacao: 'ready' as const };
     } catch {
-      return reply.status(503).send({ status: 'not_ready' as const });
+      return respostaHttp.status(503).send({ situacao: 'not_ready' as const });
     }
   });
 
-  if (registration) {
-    registerOnboardingRoute(app, registration, security.limiter);
+  if (cadastro) {
+    registrarRotaCadastro(aplicacao, cadastro, seguranca.limitador);
   }
-  if (authentication) registerAuthenticationRoutes(app, authentication, security.limiter);
+  if (autenticacao) registrarRotasAutenticacao(aplicacao, autenticacao, seguranca.limitador);
 
-  return app;
+  return aplicacao;
 }

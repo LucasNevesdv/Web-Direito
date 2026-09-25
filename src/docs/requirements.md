@@ -13,9 +13,9 @@ aprovados permanecem explicitamente pendentes.
 
 | ID | Requisito e resultado esperado |
 | --- | --- |
-| RF-001 | **Concluído — criar escritório e primeiro usuário administrador no mesmo cadastro.** A página `/register` e `POST /api/v1/onboarding` recebem nome do escritório, nome do responsável, e-mail e senha, validam e normalizam os dados e criam escritório, usuário e vínculo OWNER atomicamente. Escritório e usuário começam ACTIVE. A resposta contém somente dados públicos; falhas não deixam registros parciais. Manutenção e inativação do escritório permanecem pendentes, fora deste escopo concluído. |
-| RF-002 | **Concluído como condição técnica de RF-001 — persistir usuário e vínculo inicial com o escritório.** O e-mail é único globalmente, inclusive sob concorrência, a senha é protegida com Argon2id e o vínculo inicial tem papel OWNER. RF-002 cobre esse cadastro inicial atômico; convites, gerenciamento de membros, uso de múltiplos escritórios e verificação de autorização continuam pendentes. |
-| RF-003 | **Concluído — login com e-mail e senha.** `/login` verifica Argon2id, usuário ACTIVE e único escritório ACTIVE com vínculo válido, cria Session, emite access token e envia refresh token em cookie HttpOnly. `/me` confirma identidade e contexto da sessão. |
+| RF-001 | **Concluído — criar escritório e primeiro usuário administrador no mesmo cadastro.** A página `/register` e `POST /api/v1/onboarding` recebem nome do escritório, nome do responsável, e-mail e senha, validam e normalizam os dados e criam escritório, usuário e vínculo PROPRIETARIO atomicamente. Escritório e usuário começam ATIVO. A resposta contém somente dados públicos; falhas não deixam registros parciais. Manutenção e inativação do escritório permanecem pendentes, fora deste escopo concluído. |
+| RF-002 | **Concluído como condição técnica de RF-001 — persistir usuário e vínculo inicial com o escritório.** O e-mail é único globalmente, inclusive sob concorrência, a senha é protegida com Argon2id e o vínculo inicial tem papel PROPRIETARIO. RF-002 cobre esse cadastro inicial atômico; convites, gerenciamento de membros, uso de múltiplos escritórios e verificação de autorização continuam pendentes. |
+| RF-003 | **Concluído — login com e-mail e senha.** `/login` verifica Argon2id, usuário ATIVO e único escritório ATIVO com vínculo válido, cria Sessao, emite access token e envia refresh token em cookie HttpOnly. `/me` confirma identidade e contexto da sessão. |
 | RF-004 | **Concluído — emissão e gerenciamento de tokens.** JWT de até 15 minutos, refresh identificável com segredo de 256 bits, somente SHA-256 no banco, rotação atômica e revogação por reutilização. A autorização das operações dos demais módulos e a matriz de permissões permanecem pendentes como evolução de segurança. |
 | RF-005 | **Concluído — renovação de sessão.** POST `/api/v1/auth/refresh` usa apenas cookie HttpOnly, reconfirma sessão/identidade/vínculo, rotaciona o refresh e preserva a expiração absoluta de sete dias. Frontend restaura após recarga, coordena renovação entre abas por Web Locks/BroadcastChannel e repete cada requisição com 401 uma única vez. Expiração e falha definitiva se propagam; fallback seguro está documentado na arquitetura. |
 | RF-006 | **Concluído — logout.** POST `/api/v1/auth/logout` revoga a sessão, limpa o cookie e retorna 204 de forma idempotente. Botão Sair limpa memória e identidade nas abas conectadas e volta ao login; guard impede exibir conteúdo protegido pelo botão Voltar. |
@@ -55,7 +55,7 @@ escolhas de solução não informadas estão marcadas como pendentes.
 
 ## Alcance das entregas de escritórios e cadastro
 
-A TASK-003 concluiu domínio e persistência de `Office`: `CreateOffice`, contrato,
+A TASK-003 concluiu domínio e persistência de `Escritorio`: `CadastroDeEscritorio`, contrato,
 mapper e repositórios específicos. Essa criação interna continua disponível,
 sem endpoint próprio de atualização ou exclusão.
 
@@ -68,7 +68,7 @@ Critérios do fluxo implementado:
 
 - Nomes de 2 a 120 caracteres após trim; e-mail validado, normalizado e único;
   senha de 12 a 128 caracteres e confirmação igual somente no frontend.
-- IDs, papel, estado e datas definidos no servidor; somente OWNER no primeiro
+- IDs, papel, estado e datas definidos no servidor; somente PROPRIETARIO no primeiro
   vínculo; rejeição de campos extras na API.
 - HTTP 201 com escritório, ID/nome/e-mail do usuário e papel; HTTP 400 para
   entrada inválida, 409 para e-mail existente e 500 genérico. Sem hash, senha,

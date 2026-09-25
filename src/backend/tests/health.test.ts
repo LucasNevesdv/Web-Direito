@@ -1,60 +1,60 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildApp } from '../src/app.js';
-import type { DatabaseHealthChecker } from '../src/database-health-checker.js';
+import { criarAplicacao } from '../src/app.js';
+import type { VerificadorSaudeBanco } from '../src/database-health-checker.js';
 
-const apps: ReturnType<typeof buildApp>[] = [];
+const APLICACOES: ReturnType<typeof criarAplicacao>[] = [];
 
-function createApp(checker: DatabaseHealthChecker) {
-  const app = buildApp(checker);
-  apps.push(app);
-  return app;
+function criarAplicacaoTeste(verificador: VerificadorSaudeBanco) {
+  const aplicacao = criarAplicacao(verificador);
+  APLICACOES.push(aplicacao);
+  return aplicacao;
 }
 
 afterEach(async () => {
-  await Promise.all(apps.splice(0).map((app) => app.close()));
+  await Promise.all(APLICACOES.splice(0).map((aplicacao) => aplicacao.close()));
 });
 
 describe('GET /health', () => {
-  it('returns ok without invoking an unavailable database checker', async () => {
-    const check = vi.fn().mockRejectedValue(new Error('database unavailable'));
-    const app = createApp({ check });
-    const response = await app.inject({ method: 'GET', url: '/health' });
+  it("retorna ok sem chamar verificador de banco indisponível", async () => {
+    const verificarConexaoSimulada = vi.fn().mockRejectedValue(new Error('database unavailable'));
+    const aplicacao = criarAplicacaoTeste({ verificarConexaoComBanco: verificarConexaoSimulada });
+    const resposta = await aplicacao.inject({ method: 'GET', url: '/health' });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: 'ok' });
-    expect(check).not.toHaveBeenCalled();
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json()).toEqual({ situacao: 'ok' });
+    expect(verificarConexaoSimulada).not.toHaveBeenCalled();
   });
 });
 
 describe('GET /ready', () => {
-  it('returns ready after the checker succeeds', async () => {
-    const check = vi.fn().mockResolvedValue(undefined);
-    const readyApp = createApp({ check });
+  it("retorna prontidão após sucesso do verificador", async () => {
+    const verificarConexaoSimulada = vi.fn().mockResolvedValue(undefined);
+    const aplicacaoProntidao = criarAplicacaoTeste({ verificarConexaoComBanco: verificarConexaoSimulada });
 
-    const response = await readyApp.inject({ method: 'GET', url: '/ready' });
+    const resposta = await aplicacaoProntidao.inject({ method: 'GET', url: '/ready' });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: 'ready' });
-    expect(check).toHaveBeenCalledOnce();
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json()).toEqual({ situacao: 'ready' });
+    expect(verificarConexaoSimulada).toHaveBeenCalledOnce();
   });
 
-  it('returns a sanitized failure while health remains available', async () => {
-    const check = vi.fn().mockRejectedValue(
+  it("retorna falha sanitizada e mantém a saúde disponível", async () => {
+    const verificarConexaoSimulada = vi.fn().mockRejectedValue(
       new Error('database unavailable: postgresql://user:secret@internal/db'),
     );
-    const readyApp = createApp({ check });
+    const aplicacaoProntidao = criarAplicacaoTeste({ verificarConexaoComBanco: verificarConexaoSimulada });
 
-    const response = await readyApp.inject({ method: 'GET', url: '/ready' });
+    const resposta = await aplicacaoProntidao.inject({ method: 'GET', url: '/ready' });
 
-    expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'not_ready' });
-    expect(response.body).not.toContain('database unavailable');
-    expect(response.body).not.toContain('secret');
-    expect(check).toHaveBeenCalledOnce();
+    expect(resposta.statusCode).toBe(503);
+    expect(resposta.json()).toEqual({ situacao: 'not_ready' });
+    expect(resposta.body).not.toContain('database unavailable');
+    expect(resposta.body).not.toContain('secret');
+    expect(verificarConexaoSimulada).toHaveBeenCalledOnce();
 
-    const health = await readyApp.inject({ method: 'GET', url: '/health' });
-    expect(health.statusCode).toBe(200);
-    expect(health.json()).toEqual({ status: 'ok' });
-    expect(check).toHaveBeenCalledOnce();
+    const saude = await aplicacaoProntidao.inject({ method: 'GET', url: '/health' });
+    expect(saude.statusCode).toBe(200);
+    expect(saude.json()).toEqual({ situacao: 'ok' });
+    expect(verificarConexaoSimulada).toHaveBeenCalledOnce();
   });
 });

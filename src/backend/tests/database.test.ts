@@ -1,36 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createPrismaClient, createPrismaHealthChecker } from '../src/database.js';
+import { criarClientePrisma, criarVerificadorSaudePrisma } from '../src/database.js';
 
-const mocks = vi.hoisted(() => ({
-  client: vi.fn(),
-  transaction: vi.fn(),
-  executeRaw: vi.fn(),
-  queryRaw: vi.fn(),
+const SIMULACOES = vi.hoisted(() => ({
+  cliente: vi.fn(),
+  transacao: vi.fn(),
+  executarSql: vi.fn(),
+  consultaSql: vi.fn(),
 }));
 
-vi.mock('@prisma/client', () => ({ PrismaClient: mocks.client }));
+vi.mock('@prisma/client', () => ({ PrismaClient: SIMULACOES.cliente }));
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.client.mockReturnValue({ $transaction: mocks.transaction });
-  mocks.executeRaw.mockResolvedValue(0);
-  mocks.queryRaw.mockResolvedValue([{ '?column?': 1 }]);
-  mocks.transaction.mockImplementation(
-    async (callback: (transaction: object) => Promise<void>) => callback({
-      $executeRaw: mocks.executeRaw,
-      $queryRaw: mocks.queryRaw,
+  SIMULACOES.cliente.mockReturnValue({ $transaction: SIMULACOES.transacao });
+  SIMULACOES.executarSql.mockResolvedValue(0);
+  SIMULACOES.consultaSql.mockResolvedValue([{ '?column?': 1 }]);
+  SIMULACOES.transacao.mockImplementation(
+    async (retorno: (transacao: object) => Promise<void>) => retorno({
+      $executeRaw: SIMULACOES.executarSql,
+      $queryRaw: SIMULACOES.consultaSql,
     }),
   );
 });
 
-describe('Prisma infrastructure', () => {
-  it('enforces finite connection waits without changing unrelated URL options', () => {
-    createPrismaClient(
+describe("infraestrutura Prisma", () => {
+  it("impõe espera finita de conexão sem alterar outras opções da URL", () => {
+    criarClientePrisma(
       'postgresql://user:example@localhost/db?connect_timeout=0&pool_timeout=0&socket_timeout=0&schema=custom&connection_limit=2&options=-c%20search_path%3Dpublic',
     );
 
-    const options = mocks.client.mock.calls[0][0];
-    const url = new URL(options.datasources.db.url);
+    const opcoes = SIMULACOES.cliente.mock.calls[0][0];
+    const url = new URL(opcoes.datasources.db.url);
     expect(url.searchParams.get('connect_timeout')).toBe('5');
     expect(url.searchParams.get('pool_timeout')).toBe('5');
     expect(url.searchParams.get('socket_timeout')).toBe('10');
@@ -39,43 +39,43 @@ describe('Prisma infrastructure', () => {
     expect(url.searchParams.get('options')).toBe('-c search_path=public');
   });
 
-  it('sets a PostgreSQL statement timeout before querying in the same transaction', async () => {
-    const checker = createPrismaHealthChecker(
-      createPrismaClient('postgresql://localhost/db'),
+  it("define limite de consulta PostgreSQL antes da consulta na mesma transação", async () => {
+    const verificador = criarVerificadorSaudePrisma(
+      criarClientePrisma('postgresql://localhost/db'),
     );
 
-    await checker.check();
+    await verificador.verificarConexaoComBanco();
 
-    expect(mocks.transaction).toHaveBeenCalledWith(
+    expect(SIMULACOES.transacao).toHaveBeenCalledWith(
       expect.any(Function), { maxWait: 5000, timeout: 10000 },
     );
-    expect(mocks.executeRaw.mock.calls[0][0].join('')).toBe(
+    expect(SIMULACOES.executarSql.mock.calls[0][0].join('')).toBe(
       "SET LOCAL statement_timeout = '5s'",
     );
-    expect(mocks.queryRaw.mock.calls[0][0].join('')).toBe('SELECT 1');
-    expect(mocks.executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.queryRaw.mock.invocationCallOrder[0],
+    expect(SIMULACOES.consultaSql.mock.calls[0][0].join('')).toBe('SELECT 1');
+    expect(SIMULACOES.executarSql.mock.invocationCallOrder[0]).toBeLessThan(
+      SIMULACOES.consultaSql.mock.invocationCallOrder[0],
     );
   });
 
-  it('does not run the query if installing its timeout fails', async () => {
-    const failure = new Error('timeout setup failed');
-    mocks.executeRaw.mockRejectedValue(failure);
-    const checker = createPrismaHealthChecker(
-      createPrismaClient('postgresql://localhost/db'),
+  it("não executa consulta quando a definição do limite falha", async () => {
+    const falha = new Error('timeout setup failed');
+    SIMULACOES.executarSql.mockRejectedValue(falha);
+    const verificador = criarVerificadorSaudePrisma(
+      criarClientePrisma('postgresql://localhost/db'),
     );
 
-    await expect(checker.check()).rejects.toBe(failure);
-    expect(mocks.queryRaw).not.toHaveBeenCalled();
+    await expect(verificador.verificarConexaoComBanco()).rejects.toBe(falha);
+    expect(SIMULACOES.consultaSql).not.toHaveBeenCalled();
   });
 
-  it('propagates a rejected query to the application boundary', async () => {
-    const failure = new Error('query cancelled');
-    mocks.queryRaw.mockRejectedValue(failure);
-    const checker = createPrismaHealthChecker(
-      createPrismaClient('postgresql://localhost/db'),
+  it("propaga consulta rejeitada até a fronteira da aplicação", async () => {
+    const falha = new Error('query cancelled');
+    SIMULACOES.consultaSql.mockRejectedValue(falha);
+    const verificador = criarVerificadorSaudePrisma(
+      criarClientePrisma('postgresql://localhost/db'),
     );
 
-    await expect(checker.check()).rejects.toBe(failure);
+    await expect(verificador.verificarConexaoComBanco()).rejects.toBe(falha);
   });
 });

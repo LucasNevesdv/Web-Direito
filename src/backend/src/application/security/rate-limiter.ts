@@ -1,27 +1,27 @@
-export type RateLimitScope = 'onboarding-ip' | 'login-ip' | 'login-identity' | 'refresh-ip';
-export interface RateLimitDecision { allowed: boolean; retryAfterSeconds: number }
-export interface RateLimitPolicy { limit: number; windowSeconds: number }
-export interface RateLimitStore {
-  consume(scope: RateLimitScope, keyHash: string, policy: RateLimitPolicy): Promise<RateLimitDecision>;
-  deleteExpired(): Promise<number>;
+export type EscopoLimiteRequisicoes = 'onboarding-ip' | 'login-ip' | 'login-identity' | 'refresh-ip';
+export interface DecisaoLimiteRequisicoes { podeProsseguir: boolean; tentarAposSegundos: number }
+export interface PoliticaLimiteRequisicoes { limite: number; janelaSegundos: number }
+export interface ArmazenamentoLimiteRequisicoes {
+  incrementarContadorDaJanela(escopo: EscopoLimiteRequisicoes, hashChave: string, politica: PoliticaLimiteRequisicoes): Promise<DecisaoLimiteRequisicoes>;
+  removerLimitesExpirados(): Promise<number>;
 }
-export interface RateLimitKeys {
-  digest(scope: RateLimitScope, ip: string, email?: string): string;
+export interface ChavesLimiteRequisicoes {
+  gerarHashDaChave(escopo: EscopoLimiteRequisicoes, ip: string, email?: string): string;
 }
-export interface RateLimiter {
-  check(scope: RateLimitScope, ip: string, email?: string): Promise<RateLimitDecision>;
+export interface LimitadorRequisicoes {
+  registrarTentativaDeRequisicao(escopo: EscopoLimiteRequisicoes, ip: string, email?: string): Promise<DecisaoLimiteRequisicoes>;
 }
 
-export class SharedRateLimiter implements RateLimiter {
-  constructor(private readonly store: RateLimitStore, private readonly keys: RateLimitKeys,
-    private readonly policies: Record<RateLimitScope, RateLimitPolicy>) {}
+export class LimitadorRequisicoesCompartilhado implements LimitadorRequisicoes {
+  constructor(private readonly armazenamento: ArmazenamentoLimiteRequisicoes, private readonly chaves: ChavesLimiteRequisicoes,
+    private readonly politicasPorEscopo: Record<EscopoLimiteRequisicoes, PoliticaLimiteRequisicoes>) {}
 
-  check(scope: RateLimitScope, ip: string, email?: string): Promise<RateLimitDecision> {
-    return this.store.consume(scope, this.keys.digest(scope, ip, email), this.policies[scope]);
+  registrarTentativaDeRequisicao(escopo: EscopoLimiteRequisicoes, ip: string, email?: string): Promise<DecisaoLimiteRequisicoes> {
+    return this.armazenamento.incrementarContadorDaJanela(escopo, this.chaves.gerarHashDaChave(escopo, ip, email), this.politicasPorEscopo[escopo]);
   }
 }
 
 // Missing composition must never silently disable protection.
-export const unavailableRateLimiter: RateLimiter = {
-  async check() { throw new Error('Rate limiter unavailable'); },
+export const LIMITADOR_REQUISICOES_INDISPONIVEL: LimitadorRequisicoes = {
+  async registrarTentativaDeRequisicao() { throw new Error('Rate limiter unavailable'); },
 };

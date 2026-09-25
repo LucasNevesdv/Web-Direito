@@ -1,25 +1,25 @@
 import type { PrismaClient } from '@prisma/client';
-import type { RateLimitDecision, RateLimitPolicy, RateLimitScope, RateLimitStore } from '../../application/security/rate-limiter.js';
+import type { DecisaoLimiteRequisicoes, PoliticaLimiteRequisicoes, EscopoLimiteRequisicoes, ArmazenamentoLimiteRequisicoes } from '../../application/security/rate-limiter.js';
 
-export class PrismaRateLimitStore implements RateLimitStore {
+export class ArmazenamentoLimiteRequisicoesPrisma implements ArmazenamentoLimiteRequisicoes {
   constructor(private readonly prisma: Pick<PrismaClient, '$queryRaw' | '$executeRaw'>) {}
 
-  async consume(scope: RateLimitScope, keyHash: string, policy: RateLimitPolicy): Promise<RateLimitDecision> {
+  async incrementarContadorDaJanela(escopo: EscopoLimiteRequisicoes, hashChave: string, politica: PoliticaLimiteRequisicoes): Promise<DecisaoLimiteRequisicoes> {
     // The database clock and ON CONFLICT serialize increments across all processes.
-    const [result] = await this.prisma.$queryRaw<RateLimitDecision[]>`
+    const [decisaoDoLimite] = await this.prisma.$queryRaw<DecisaoLimiteRequisicoes[]>`
       INSERT INTO rate_limit_buckets (scope, key_hash, window_start, count, expires_at)
-      SELECT ${scope}, ${keyHash}, start_at, 1, start_at + make_interval(secs => ${policy.windowSeconds}::int)
-      FROM (SELECT to_timestamp(floor(extract(epoch FROM clock_timestamp()) / ${policy.windowSeconds}::int) * ${policy.windowSeconds}::int) AS start_at) AS bucket_window
+      SELECT ${escopo}, ${hashChave}, start_at, 1, start_at + make_interval(secs => ${politica.janelaSegundos}::int)
+      FROM (SELECT to_timestamp(floor(extract(epoch FROM clock_timestamp()) / ${politica.janelaSegundos}::int) * ${politica.janelaSegundos}::int) AS start_at) AS bucket_window
       ON CONFLICT (scope, key_hash, window_start) DO UPDATE
-      SET count = LEAST(rate_limit_buckets.count + 1, ${policy.limit + 1}::int)
-      RETURNING count <= ${policy.limit}::int AS allowed,
-        GREATEST(1, ceil(extract(epoch FROM expires_at - clock_timestamp())))::int AS "retryAfterSeconds"
+      SET count = LEAST(rate_limit_buckets.count + 1, ${politica.limite + 1}::int)
+      RETURNING count <= ${politica.limite}::int AS "podeProsseguir",
+        GREATEST(1, ceil(extract(epoch FROM expires_at - clock_timestamp())))::int AS "tentarAposSegundos"
     `;
-    if (!result) throw new Error('Rate limiter unavailable');
-    return result;
+    if (!decisaoDoLimite) throw new Error('Rate limiter unavailable');
+    return decisaoDoLimite;
   }
 
-  async deleteExpired(): Promise<number> {
+  async removerLimitesExpirados(): Promise<number> {
     return this.prisma.$executeRaw`
       WITH expired AS (
         SELECT scope, key_hash, window_start FROM rate_limit_buckets

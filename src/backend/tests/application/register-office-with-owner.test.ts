@@ -1,143 +1,143 @@
 import { describe, expect, it, vi } from 'vitest';
-import { EmailAlreadyRegisteredError } from '../../src/application/onboarding/email-already-registered-error.js';
-import { InvalidRegistrationError } from '../../src/application/onboarding/invalid-registration-error.js';
-import { RegisterOfficeWithOwner } from '../../src/application/onboarding/register-office-with-owner.js';
-import type { PasswordHasher } from '../../src/application/security/password-hasher.js';
-import { InMemoryOfficeRegistrationRepository } from '../support/in-memory-office-registration-repository.js';
+import { ErroEmailJaCadastrado } from '../../src/application/onboarding/email-already-registered-error.js';
+import { ErroCadastroInvalido } from '../../src/application/onboarding/invalid-registration-error.js';
+import { CadastroDeEscritorioComProprietario } from '../../src/application/onboarding/register-office-with-owner.js';
+import type { ProtecaoDeSenhas } from '../../src/application/security/password-hasher.js';
+import { RepositorioCadastroEscritorioEmMemoria } from '../support/in-memory-office-registration-repository.js';
 
-const input = {
-  officeName: 'Escritório Exemplo',
-  adminName: 'Ana Silva',
+const ENTRADA = {
+  nomeEscritorio: 'Escritório Exemplo',
+  nomeAdministrador: 'Ana Silva',
   email: 'ana@example.test',
-  password: 'temporary-unit-password',
+  senha: 'temporary-unit-password',
 };
 
-function setup() {
-  const repository = new InMemoryOfficeRegistrationRepository();
-  const opaqueHash = 'opaque-hasher-output';
-  const hasher: PasswordHasher = {
-    hash: vi.fn(async () => opaqueHash),
-    verify: vi.fn(async (hash, password) => hash === opaqueHash && password === input.password),
+function prepararCenario() {
+  const repositorio = new RepositorioCadastroEscritorioEmMemoria();
+  const hashOpaco = 'opaque-hasher-output';
+  const geradorHash: ProtecaoDeSenhas = {
+    gerarHashDaSenha: vi.fn(async () => hashOpaco),
+    compararSenhaComHash: vi.fn(async (hash, senha) => hash === hashOpaco && senha === ENTRADA.senha),
   };
-  return { repository, hasher, opaqueHash, useCase: new RegisterOfficeWithOwner(repository, hasher) };
+  return { repositorio, geradorHash, hashOpaco, useCase: new CadastroDeEscritorioComProprietario(repositorio, geradorHash) };
 }
 
-describe('RegisterOfficeWithOwner', () => {
-  it('persists the office, active user and OWNER membership as one registration', async () => {
-    const { repository, hasher, opaqueHash, useCase } = setup();
-    const result = await useCase.execute(input);
-    expect(repository.registrations).toHaveLength(1);
-    const { office, user, membership } = repository.registrations[0];
-    expect(office.name).toBe(input.officeName);
-    expect(office.status).toBe('ACTIVE');
-    expect(user.name).toBe(input.adminName);
-    expect(user.email).toBe(input.email);
-    expect(user.status).toBe('ACTIVE');
-    expect(membership.officeId).toBe(office.id);
-    expect(membership.userId).toBe(user.id);
-    expect(membership.role).toBe('OWNER');
-    expect(hasher.hash).toHaveBeenCalledTimes(1);
-    expect(hasher.hash).toHaveBeenCalledWith(input.password);
-    expect(user.passwordHash).toBe(opaqueHash);
-    expect(user.passwordHash).not.toBe(input.password);
-    expect(result).toEqual({
-      office: { id: office.id, name: office.name, status: office.status, createdAt: office.createdAt, updatedAt: office.updatedAt },
-      user: { id: user.id, name: user.name, email: user.email },
-      role: 'OWNER',
+describe("CadastroDeEscritorioComProprietario", () => {
+  it("persiste escritório, usuário ativo e vínculo PROPRIETARIO em um cadastro", async () => {
+    const { repositorio, geradorHash, hashOpaco, useCase: casoDeUso } = prepararCenario();
+    const resultado = await casoDeUso.cadastrarEscritorioComProprietario(ENTRADA);
+    expect(repositorio.cadastros).toHaveLength(1);
+    const { escritorio, usuario, vinculo } = repositorio.cadastros[0];
+    expect(escritorio.nome).toBe(ENTRADA.nomeEscritorio);
+    expect(escritorio.situacao).toBe('ATIVO');
+    expect(usuario.nome).toBe(ENTRADA.nomeAdministrador);
+    expect(usuario.email).toBe(ENTRADA.email);
+    expect(usuario.situacao).toBe('ATIVO');
+    expect(vinculo.idEscritorio).toBe(escritorio.id);
+    expect(vinculo.idUsuario).toBe(usuario.id);
+    expect(vinculo.papel).toBe('PROPRIETARIO');
+    expect(geradorHash.gerarHashDaSenha).toHaveBeenCalledTimes(1);
+    expect(geradorHash.gerarHashDaSenha).toHaveBeenCalledWith(ENTRADA.senha);
+    expect(usuario.hashSenha).toBe(hashOpaco);
+    expect(usuario.hashSenha).not.toBe(ENTRADA.senha);
+    expect(resultado).toEqual({
+      escritorio: { id: escritorio.id, nome: escritorio.nome, situacao: escritorio.situacao, criadoEm: escritorio.criadoEm, atualizadoEm: escritorio.atualizadoEm },
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
+      papel: 'PROPRIETARIO',
     });
-    expect(JSON.stringify(result)).not.toContain('password');
-    expect(JSON.stringify(result)).not.toContain(opaqueHash);
-    expect(JSON.stringify(repository.registrations)).not.toContain(input.password);
+    expect(JSON.stringify(resultado)).not.toContain('senha');
+    expect(JSON.stringify(resultado)).not.toContain(hashOpaco);
+    expect(JSON.stringify(repositorio.cadastros)).not.toContain(ENTRADA.senha);
   });
 
-  it('normalizes names and email before checking uniqueness and persistence', async () => {
-    const { repository, useCase } = setup();
-    const emailExists = vi.spyOn(repository, 'emailExists');
-    const result = await useCase.execute({
-      ...input, officeName: '  Escritório  Exemplo\n', adminName: '\tAna Silva ', email: '  ANA@EXAMPLE.TEST ',
+  it("normaliza nomes e e-mail antes de verificar unicidade e persistir", async () => {
+    const { repositorio, useCase: casoDeUso } = prepararCenario();
+    const emailExiste = vi.spyOn(repositorio, "possuiUsuarioComEmail");
+    const resultado = await casoDeUso.cadastrarEscritorioComProprietario({
+      ...ENTRADA, nomeEscritorio: '  Escritório  Exemplo\n', nomeAdministrador: '\tAna Silva ', email: '  ANA@EXAMPLE.TEST ',
     });
-    expect(result.office.name).toBe('Escritório  Exemplo');
-    expect(result.user).toMatchObject({ name: 'Ana Silva', email: 'ana@example.test' });
-    expect(emailExists).toHaveBeenCalledTimes(1);
-    expect(emailExists).toHaveBeenCalledWith('ana@example.test');
+    expect(resultado.escritorio.nome).toBe('Escritório  Exemplo');
+    expect(resultado.usuario).toMatchObject({ nome: 'Ana Silva', email: 'ana@example.test' });
+    expect(emailExiste).toHaveBeenCalledTimes(1);
+    expect(emailExiste).toHaveBeenCalledWith('ana@example.test');
   });
 
   it.each([
-    { field: 'officeName', value: '' },
-    { field: 'officeName', value: 'A' },
-    { field: 'officeName', value: 'a'.repeat(121) },
-    { field: 'adminName', value: ' ' },
-    { field: 'adminName', value: 'A' },
-    { field: 'adminName', value: 'a'.repeat(121) },
-    { field: 'email', value: 'not-an-email' },
-    { field: 'email', value: '' },
-    { field: 'password', value: '' },
-    { field: 'password', value: 'a'.repeat(11) },
-    { field: 'password', value: 'a'.repeat(129) },
-    { field: 'password', value: undefined },
-  ] as const)('rejects invalid $field before hashing or consulting persistence', async ({ field, value }) => {
-    const { repository, hasher, useCase } = setup();
-    const emailExists = vi.spyOn(repository, 'emailExists');
-    const register = vi.spyOn(repository, 'register');
-    await expect(useCase.execute({ ...input, [field]: value }))
-      .rejects.toThrowError(new InvalidRegistrationError(field));
-    expect(emailExists).not.toHaveBeenCalled();
-    expect(register).not.toHaveBeenCalled();
-    expect(hasher.hash).not.toHaveBeenCalled();
+    { campo: 'nomeEscritorio', valor: '' },
+    { campo: 'nomeEscritorio', valor: 'A' },
+    { campo: 'nomeEscritorio', valor: 'a'.repeat(121) },
+    { campo: 'nomeAdministrador', valor: ' ' },
+    { campo: 'nomeAdministrador', valor: 'A' },
+    { campo: 'nomeAdministrador', valor: 'a'.repeat(121) },
+    { campo: 'email', valor: 'not-an-email' },
+    { campo: 'email', valor: '' },
+    { campo: 'senha', valor: '' },
+    { campo: 'senha', valor: 'a'.repeat(11) },
+    { campo: 'senha', valor: 'a'.repeat(129) },
+    { campo: 'senha', valor: undefined },
+  ] as const)("rejeita $campo inválido antes de calcular hash ou consultar persistência", async ({ campo, valor }) => {
+    const { repositorio, geradorHash, useCase: casoDeUso } = prepararCenario();
+    const emailExiste = vi.spyOn(repositorio, "possuiUsuarioComEmail");
+    const cadastrar = vi.spyOn(repositorio, "salvarCadastroCompleto");
+    await expect(casoDeUso.cadastrarEscritorioComProprietario({ ...ENTRADA, [campo]: valor }))
+      .rejects.toThrowError(new ErroCadastroInvalido(campo));
+    expect(emailExiste).not.toHaveBeenCalled();
+    expect(cadastrar).not.toHaveBeenCalled();
+    expect(geradorHash.gerarHashDaSenha).not.toHaveBeenCalled();
   });
 
   it.each(['a'.repeat(12), 'a'.repeat(128), '😀'.repeat(12), '  twelve characters  '])(
-    'accepts password limits without trimming the supplied password', async (password) => {
-      const { hasher, useCase } = setup();
-      await useCase.execute({ ...input, password });
-      expect(hasher.hash).toHaveBeenCalledTimes(1);
-      expect(hasher.hash).toHaveBeenCalledWith(password);
+    "aceita limites da senha sem remover seus espaços", async (senha) => {
+      const { geradorHash, useCase: casoDeUso } = prepararCenario();
+      await casoDeUso.cadastrarEscritorioComProprietario({ ...ENTRADA, senha });
+      expect(geradorHash.gerarHashDaSenha).toHaveBeenCalledTimes(1);
+      expect(geradorHash.gerarHashDaSenha).toHaveBeenCalledWith(senha);
     },
   );
 
-  it('rejects a previously registered email case-insensitively before hashing again', async () => {
-    const { repository, hasher, useCase } = setup();
-    await useCase.execute(input);
-    vi.mocked(hasher.hash).mockClear();
-    await expect(useCase.execute({ ...input, email: ' ANA@EXAMPLE.TEST ' }))
-      .rejects.toBeInstanceOf(EmailAlreadyRegisteredError);
-    expect(repository.registrations).toHaveLength(1);
-    expect(hasher.hash).not.toHaveBeenCalled();
+  it("rejeita e-mail já cadastrado independentemente da caixa antes de calcular novo hash", async () => {
+    const { repositorio, geradorHash, useCase: casoDeUso } = prepararCenario();
+    await casoDeUso.cadastrarEscritorioComProprietario(ENTRADA);
+    vi.mocked(geradorHash.gerarHashDaSenha).mockClear();
+    await expect(casoDeUso.cadastrarEscritorioComProprietario({ ...ENTRADA, email: ' ANA@EXAMPLE.TEST ' }))
+      .rejects.toBeInstanceOf(ErroEmailJaCadastrado);
+    expect(repositorio.cadastros).toHaveLength(1);
+    expect(geradorHash.gerarHashDaSenha).not.toHaveBeenCalled();
   });
 
-  it('propagates a uniqueness conflict detected by atomic persistence after a stale precheck', async () => {
-    const { repository, useCase } = setup();
-    vi.spyOn(repository, 'emailExists').mockResolvedValue(false);
-    vi.spyOn(repository, 'register').mockRejectedValue(new EmailAlreadyRegisteredError());
-    await expect(useCase.execute(input)).rejects.toBeInstanceOf(EmailAlreadyRegisteredError);
-    expect(repository.registrations).toHaveLength(0);
+  it("propaga conflito de unicidade detectado na persistência atômica após consulta desatualizada", async () => {
+    const { repositorio, useCase: casoDeUso } = prepararCenario();
+    vi.spyOn(repositorio, "possuiUsuarioComEmail").mockResolvedValue(false);
+    vi.spyOn(repositorio, "salvarCadastroCompleto").mockRejectedValue(new ErroEmailJaCadastrado());
+    await expect(casoDeUso.cadastrarEscritorioComProprietario(ENTRADA)).rejects.toBeInstanceOf(ErroEmailJaCadastrado);
+    expect(repositorio.cadastros).toHaveLength(0);
   });
 
-  it('does not persist anything if the password hasher fails', async () => {
-    const { repository, hasher, useCase } = setup();
-    const failure = new Error('Hasher unavailable');
-    vi.mocked(hasher.hash).mockRejectedValue(failure);
-    const register = vi.spyOn(repository, 'register');
-    await expect(useCase.execute(input)).rejects.toBe(failure);
-    expect(register).not.toHaveBeenCalled();
+  it("não persiste dados quando o cálculo do hash da senha falha", async () => {
+    const { repositorio, geradorHash, useCase: casoDeUso } = prepararCenario();
+    const falha = new Error('Hasher unavailable');
+    vi.mocked(geradorHash.gerarHashDaSenha).mockRejectedValue(falha);
+    const cadastrar = vi.spyOn(repositorio, "salvarCadastroCompleto");
+    await expect(casoDeUso.cadastrarEscritorioComProprietario(ENTRADA)).rejects.toBe(falha);
+    expect(cadastrar).not.toHaveBeenCalled();
   });
 
-  it('does not return an unpersisted result when registration fails', async () => {
-    const { repository, useCase } = setup();
-    const failure = new Error('Persistence unavailable');
-    vi.spyOn(repository, 'register').mockRejectedValue(failure);
-    await expect(useCase.execute(input)).rejects.toBe(failure);
-    expect(repository.registrations).toHaveLength(0);
+  it("não retorna resultado não persistido quando o cadastro falha", async () => {
+    const { repositorio, useCase: casoDeUso } = prepararCenario();
+    const falha = new Error('Persistence unavailable');
+    vi.spyOn(repositorio, "salvarCadastroCompleto").mockRejectedValue(falha);
+    await expect(casoDeUso.cadastrarEscritorioComProprietario(ENTRADA)).rejects.toBe(falha);
+    expect(repositorio.cadastros).toHaveLength(0);
   });
 
-  it('allows only one concurrent registration for the same canonical email', async () => {
-    const { repository, useCase } = setup();
-    const results = await Promise.allSettled([
-      useCase.execute(input), useCase.execute({ ...input, email: ' ANA@EXAMPLE.TEST ' }),
+  it("permite somente um cadastro concorrente para o mesmo e-mail normalizado", async () => {
+    const { repositorio, useCase: casoDeUso } = prepararCenario();
+    const resultados = await Promise.allSettled([
+      casoDeUso.cadastrarEscritorioComProprietario(ENTRADA), casoDeUso.cadastrarEscritorioComProprietario({ ...ENTRADA, email: ' ANA@EXAMPLE.TEST ' }),
     ]);
-    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
-    const rejected = results.find((result) => result.status === 'rejected');
-    expect(rejected).toMatchObject({ status: 'rejected', reason: new EmailAlreadyRegisteredError() });
-    expect(repository.registrations).toHaveLength(1);
+    expect(resultados.filter((resultado) => resultado.status === 'fulfilled')).toHaveLength(1);
+    const rejeitado = resultados.find((resultado) => resultado.status === 'rejected');
+    expect(rejeitado).toMatchObject({ status: 'rejected', reason: new ErroEmailJaCadastrado() });
+    expect(repositorio.cadastros).toHaveLength(1);
   });
 });

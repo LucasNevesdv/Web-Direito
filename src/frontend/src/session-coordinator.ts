@@ -1,22 +1,22 @@
-import type { Identity } from './auth-client';
+import type { IdentidadeAutenticada } from './auth-client';
 
-export interface SharedSession {
+export interface SessaoCompartilhada {
   id: string;
-  timestamp: number;
-  sessionId: string | null;
-  reason: 'login' | 'refresh' | 'logout' | 'invalid';
-  credentials: { accessToken: string; identity: Identity; expiresAt: number } | null;
+  instante: number;
+  idSessao: string | null;
+  motivo: 'entrar' | 'renovar' | 'sair' | 'invalido';
+  credenciais: { tokenAcesso: string; identidade: IdentidadeAutenticada; expiraEm: number } | null;
 }
 
 // Application code depends on this contract, never on browser coordination APIs.
-export interface SessionCoordinator {
-  readonly canRefresh: boolean;
-  getState(): SharedSession | null;
-  synchronize(): Promise<void>;
-  exclusive<T>(task: (signal?: AbortSignal) => Promise<T>): Promise<T>;
-  publish(accessToken: string, identity: Identity, reason: 'login' | 'refresh'): void;
-  invalidate(reason: 'logout' | 'invalid'): void;
-  subscribe(listener: (state: SharedSession) => void): () => void;
-  onExpiration(listener: () => void): void;
-  close(): void;
+export interface CoordenadorSessao {
+  readonly podeRenovar: boolean;
+  obterSessaoCompartilhada(): SessaoCompartilhada | null;
+  sincronizarSessaoEntreAbas(): Promise<void>;
+  executarOperacaoExclusiva<T>(aoObterExclusividade: (sinal?: AbortSignal) => Promise<T>): Promise<T>;
+  compartilharCredenciaisDaSessao(tokenAcesso: string, identidade: IdentidadeAutenticada, motivo: 'entrar' | 'renovar'): void;
+  propagarInvalidacaoDaSessao(motivo: 'sair' | 'invalido'): void;
+  observarMudancasDaSessao(aoAlterarSessao: (estado: SessaoCompartilhada) => void): () => void;
+  registrarAoExpirarSessao(aoExpirarSessao: () => void): void;
+  encerrarCoordenacao(): void;
 }

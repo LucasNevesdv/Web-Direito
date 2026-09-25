@@ -1,20 +1,20 @@
 import type { PrismaClient } from '@prisma/client';
-import type { OfficesRepository } from '../../application/offices/offices-repository.js';
-import type { Office } from '../../domain/offices/office.js';
-import { officeMapper } from './office-mapper.js';
+import type { RepositorioEscritorios } from '../../application/offices/offices-repository.js';
+import type { Escritorio } from '../../domain/offices/office.js';
+import { MAPEADOR_ESCRITORIO } from './office-mapper.js';
 
-export class PrismaOfficesRepository implements OfficesRepository {
+export class RepositorioEscritoriosPrisma implements RepositorioEscritorios {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async create(office: Office): Promise<Office> {
-    const record = await this.prisma.office.create({
-      data: officeMapper.toPersistence(office),
+  async salvarEscritorio(escritorio: Escritorio): Promise<Escritorio> {
+    const registroEscritorio = await this.prisma.office.create({
+      data: MAPEADOR_ESCRITORIO.converterEscritorioEmRegistroPrisma(escritorio),
     });
-    return officeMapper.toDomain(record);
+    return MAPEADOR_ESCRITORIO.converterRegistroPrismaEmEscritorio(registroEscritorio);
   }
 
-  async findById(id: string): Promise<Office | null> {
-    const record = await this.prisma.office.findUnique({ where: { id } });
-    return record ? officeMapper.toDomain(record) : null;
+  async buscarEscritorioPorId(id: string): Promise<Escritorio | null> {
+    const registroEscritorio = await this.prisma.office.findUnique({ where: { id } });
+    return registroEscritorio ? MAPEADOR_ESCRITORIO.converterRegistroPrismaEmEscritorio(registroEscritorio) : null;
   }
 }

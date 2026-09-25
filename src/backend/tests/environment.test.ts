@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  EnvironmentError,
-  loadEnvironment,
-  parseEnvironment,
+  ErroAmbiente,
+  carregarAmbiente,
+  validarAmbiente,
 } from '../src/environment.js';
 
-const authDefaults = {
+const PADROES_AUTENTICACAO = {
   RATE_LIMIT_ONBOARDING_MAX: 10, RATE_LIMIT_ONBOARDING_WINDOW_SECONDS: 900,
   RATE_LIMIT_LOGIN_IP_MAX: 30, RATE_LIMIT_LOGIN_IDENTITY_MAX: 5, RATE_LIMIT_LOGIN_WINDOW_SECONDS: 900,
   RATE_LIMIT_REFRESH_MAX: 30, RATE_LIMIT_REFRESH_WINDOW_SECONDS: 60,
@@ -18,47 +18,47 @@ const authDefaults = {
   AUTH_JWT_ISSUER: 'neodireito', AUTH_JWT_AUDIENCE: 'neodireito-web',
   AUTH_ACCESS_TTL_SECONDS: 900, AUTH_REFRESH_TTL_SECONDS: 604800,
 };
-const validEnvironment = {
-  AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET,
+const AMBIENTE_VALIDO = {
+  AUTH_JWT_SECRET: PADROES_AUTENTICACAO.AUTH_JWT_SECRET,
   DATABASE_URL: 'postgresql://usuario:senha@localhost:5432/webdireito',
   HOST: '127.0.0.1',
   PORT: '3000',
   NODE_ENV: 'test',
 };
 
-const temporaryDirectories: string[] = [];
+const DIRETORIOS_TEMPORARIOS: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
+    DIRETORIOS_TEMPORARIOS.splice(0).map((diretorio) =>
+      rm(diretorio, { recursive: true, force: true }),
     ),
   );
 });
 
-describe('environment configuration', () => {
-  it.each(['https://app.example.test/', 'https://app.example.test/path', 'https://user:secret@app.example.test', 'null', 'ftp://example.test'])('rejects non-origin frontend configuration (case %#)', (origin) => {
-    expect(() => parseEnvironment({ ...validEnvironment, AUTH_FRONTEND_ORIGIN: origin })).toThrow('AUTH_FRONTEND_ORIGIN');
+describe("configuração de ambiente", () => {
+  it.each(['https://app.example.test/', 'https://app.example.test/path', 'https://user:secret@app.example.test', 'null', 'ftp://example.test'])("rejeita configuração de frontend que não representa origem (caso %#)", (origem) => {
+    expect(() => validarAmbiente({ ...AMBIENTE_VALIDO, AUTH_FRONTEND_ORIGIN: origem })).toThrow('AUTH_FRONTEND_ORIGIN');
   });
-  it('requires an explicit HTTPS frontend origin in production', () => {
-    expect(() => parseEnvironment({ ...validEnvironment, NODE_ENV: 'production' })).toThrow('AUTH_FRONTEND_ORIGIN');
-    expect(parseEnvironment({ ...validEnvironment, NODE_ENV: 'production', AUTH_FRONTEND_ORIGIN: 'https://app.example.test' }).AUTH_FRONTEND_ORIGIN).toBe('https://app.example.test');
+  it("exige origem HTTPS explícita do frontend em produção", () => {
+    expect(() => validarAmbiente({ ...AMBIENTE_VALIDO, NODE_ENV: 'production' })).toThrow('AUTH_FRONTEND_ORIGIN');
+    expect(validarAmbiente({ ...AMBIENTE_VALIDO, NODE_ENV: 'production', AUTH_FRONTEND_ORIGIN: 'https://app.example.test' }).AUTH_FRONTEND_ORIGIN).toBe('https://app.example.test');
   });
-  it('rejects a missing DATABASE_URL without revealing values', () => {
+  it("rejeita DATABASE_URL ausente sem revelar valores", () => {
     expect(() =>
-      parseEnvironment({ AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET, PORT: '3000', NODE_ENV: 'test' }),
+      validarAmbiente({ AUTH_JWT_SECRET: PADROES_AUTENTICACAO.AUTH_JWT_SECRET, PORT: '3000', NODE_ENV: 'test' }),
     ).toThrowError('Invalid environment configuration: DATABASE_URL');
   });
 
-  it('rejects an invalid PORT', () => {
+  it("rejeita PORT inválida", () => {
     expect(() =>
-      parseEnvironment({ ...validEnvironment, PORT: '70000' }),
+      validarAmbiente({ ...AMBIENTE_VALIDO, PORT: '70000' }),
     ).toThrowError('Invalid environment configuration: PORT');
   });
 
-  it('rejects an invalid NODE_ENV', () => {
+  it("rejeita NODE_ENV inválido", () => {
     expect(() =>
-      parseEnvironment({ ...validEnvironment, NODE_ENV: 'staging' }),
+      validarAmbiente({ ...AMBIENTE_VALIDO, NODE_ENV: 'staging' }),
     ).toThrowError('Invalid environment configuration: NODE_ENV');
   });
 
@@ -70,27 +70,27 @@ describe('environment configuration', () => {
     'postgresql://localhost/',
     'postgresql://localhost/%20',
     'postgresql://localhost/database/extra',
-  ])('rejects an invalid DATABASE_URL: %s', (databaseUrl) => {
+  ])("rejeita DATABASE_URL inválida: %s", (urlBancoDados) => {
     expect(() =>
-      parseEnvironment({ ...validEnvironment, DATABASE_URL: databaseUrl }),
+      validarAmbiente({ ...AMBIENTE_VALIDO, DATABASE_URL: urlBancoDados }),
     ).toThrowError('Invalid environment configuration: DATABASE_URL');
   });
 
   it.each(['postgres', 'postgresql'])(
-    'accepts the %s URL protocol',
-    (protocol) => {
-      const databaseUrl = `${protocol}://localhost/webdireito`;
+    "aceita o protocolo de URL %s",
+    (protocolo) => {
+      const urlBancoDados = `${protocolo}://localhost/webdireito`;
       expect(
-        parseEnvironment({ ...validEnvironment, DATABASE_URL: databaseUrl })
+        validarAmbiente({ ...AMBIENTE_VALIDO, DATABASE_URL: urlBancoDados })
           .DATABASE_URL,
-      ).toBe(databaseUrl);
+      ).toBe(urlBancoDados);
     },
   );
 
   it.each(['localhost', 'app.example.test', '127.0.0.1', '0.0.0.0', '::1'])(
-    'accepts HOST %s',
+    "aceita HOST %s",
     (host) => {
-      expect(parseEnvironment({ ...validEnvironment, HOST: host }).HOST).toBe(host);
+      expect(validarAmbiente({ ...AMBIENTE_VALIDO, HOST: host }).HOST).toBe(host);
     },
   );
 
@@ -102,46 +102,46 @@ describe('environment configuration', () => {
     'invalid host',
     '-invalid.example',
     '999.999.999.999',
-  ])('rejects an invalid HOST: %s', (host) => {
+  ])("rejeita HOST inválido: %s", (host) => {
     expect(() =>
-      parseEnvironment({ ...validEnvironment, HOST: host }),
+      validarAmbiente({ ...AMBIENTE_VALIDO, HOST: host }),
     ).toThrowError('Invalid environment configuration: HOST');
   });
 
-  it('accepts a valid isolated configuration', () => {
-    expect(parseEnvironment(validEnvironment)).toEqual({
-      ...authDefaults,
-      DATABASE_URL: validEnvironment.DATABASE_URL,
-      HOST: validEnvironment.HOST,
+  it("aceita configuração isolada válida", () => {
+    expect(validarAmbiente(AMBIENTE_VALIDO)).toEqual({
+      ...PADROES_AUTENTICACAO,
+      DATABASE_URL: AMBIENTE_VALIDO.DATABASE_URL,
+      HOST: AMBIENTE_VALIDO.HOST,
       PORT: 3000,
       NODE_ENV: 'test',
     });
   });
 
-  it('uses defaults for optional variables', () => {
+  it("usa padrões para variáveis opcionais", () => {
     expect(
-      parseEnvironment({ DATABASE_URL: validEnvironment.DATABASE_URL, AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET }),
+      validarAmbiente({ DATABASE_URL: AMBIENTE_VALIDO.DATABASE_URL, AUTH_JWT_SECRET: PADROES_AUTENTICACAO.AUTH_JWT_SECRET }),
     ).toEqual({
-      ...authDefaults,
-      DATABASE_URL: validEnvironment.DATABASE_URL,
+      ...PADROES_AUTENTICACAO,
+      DATABASE_URL: AMBIENTE_VALIDO.DATABASE_URL,
       HOST: '127.0.0.1',
       PORT: 3000,
       NODE_ENV: 'development',
     });
   });
 
-  it('reports only variable names for malformed configuration', () => {
+  it("informa somente nomes das variáveis na configuração malformada", () => {
     expect(() =>
-      parseEnvironment({ AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET, DATABASE_URL: 'super-secret', PORT: 'invalid' }),
-    ).toThrowError(new EnvironmentError(['DATABASE_URL', 'PORT']));
+      validarAmbiente({ AUTH_JWT_SECRET: PADROES_AUTENTICACAO.AUTH_JWT_SECRET, DATABASE_URL: 'super-secret', PORT: 'invalid' }),
+    ).toThrowError(new ErroAmbiente(['DATABASE_URL', 'PORT']));
   });
 
-  it('loads a temporary file with environment variables taking precedence', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'neodireito-environment-'));
-    temporaryDirectories.push(directory);
-    const environmentPath = join(directory, '.env');
+  it("carrega arquivo temporário com precedência das variáveis do ambiente", async () => {
+    const diretorio = await mkdtemp(join(tmpdir(), 'neodireito-environment-'));
+    DIRETORIOS_TEMPORARIOS.push(diretorio);
+    const caminhoAmbiente = join(diretorio, '.env');
     await writeFile(
-      environmentPath,
+      caminhoAmbiente,
       [
         'DATABASE_URL=postgresql://file-user:file-password@localhost/file_database',
         'HOST=localhost',
@@ -150,30 +150,30 @@ describe('environment configuration', () => {
         `AUTH_JWT_SECRET=${Buffer.alloc(48, 1).toString('base64url')}`,
       ].join('\n'),
     );
-    const environment = {
-      AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET,
-      DATABASE_URL: validEnvironment.DATABASE_URL,
+    const ambiente = {
+      AUTH_JWT_SECRET: PADROES_AUTENTICACAO.AUTH_JWT_SECRET,
+      DATABASE_URL: AMBIENTE_VALIDO.DATABASE_URL,
       PORT: '5000',
       NODE_ENV: 'test',
     };
 
-    expect(loadEnvironment(environment, environmentPath)).toEqual({
-      ...authDefaults,
-      DATABASE_URL: validEnvironment.DATABASE_URL,
+    expect(carregarAmbiente(ambiente, caminhoAmbiente)).toEqual({
+      ...PADROES_AUTENTICACAO,
+      DATABASE_URL: AMBIENTE_VALIDO.DATABASE_URL,
       HOST: 'localhost',
       PORT: 5000,
       NODE_ENV: 'test',
     });
-    expect(environment).toEqual({
-      AUTH_JWT_SECRET: authDefaults.AUTH_JWT_SECRET,
-      DATABASE_URL: validEnvironment.DATABASE_URL,
+    expect(ambiente).toEqual({
+      AUTH_JWT_SECRET: PADROES_AUTENTICACAO.AUTH_JWT_SECRET,
+      DATABASE_URL: AMBIENTE_VALIDO.DATABASE_URL,
       PORT: '5000',
       NODE_ENV: 'test',
     });
   });
 
-  it.each([undefined, '', 'short', 'not base64url!'.repeat(5)])('rejects missing or invalid JWT secrets without a fallback', (secret) => {
-    expect(() => parseEnvironment({ ...validEnvironment, NODE_ENV: 'production', AUTH_JWT_SECRET: secret }))
+  it.each([undefined, '', 'short', 'not base64url!'.repeat(5)])("rejeita segredo JWT ausente ou inválido sem valor alternativo", (segredo) => {
+    expect(() => validarAmbiente({ ...AMBIENTE_VALIDO, NODE_ENV: 'production', AUTH_JWT_SECRET: segredo }))
       .toThrowError('Invalid environment configuration: AUTH_JWT_SECRET');
   });
 
@@ -181,7 +181,7 @@ describe('environment configuration', () => {
     ['AUTH_ACCESS_TTL_SECONDS', '0'], ['AUTH_ACCESS_TTL_SECONDS', '901'],
     ['AUTH_REFRESH_TTL_SECONDS', '604801'], ['AUTH_REFRESH_TTL_SECONDS', 'invalid'],
     ['AUTH_JWT_ISSUER', ''], ['AUTH_JWT_AUDIENCE', ''],
-  ])('rejects invalid %s', (field, value) => {
-    expect(() => parseEnvironment({ ...validEnvironment, [field]: value })).toThrowError(`Invalid environment configuration: ${field}`);
+  ])("rejeita %s inválido", (campo, valor) => {
+    expect(() => validarAmbiente({ ...AMBIENTE_VALIDO, [campo]: valor })).toThrowError(`Invalid environment configuration: ${campo}`);
   });
 });

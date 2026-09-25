@@ -1,18 +1,18 @@
-import type { OfficesRepository } from '../../src/application/offices/offices-repository.js';
-import type { Office } from '../../src/domain/offices/office.js';
+import type { RepositorioEscritorios } from '../../src/application/offices/offices-repository.js';
+import type { Escritorio } from '../../src/domain/offices/office.js';
 
-export class InMemoryOfficesRepository implements OfficesRepository {
-  private readonly offices = new Map<string, Office>();
+export class RepositorioEscritoriosEmMemoria implements RepositorioEscritorios {
+  private readonly escritorios = new Map<string, Escritorio>();
 
-  async create(office: Office): Promise<Office> {
-    if (this.offices.has(office.id)) {
+  async salvarEscritorio(escritorio: Escritorio): Promise<Escritorio> {
+    if (this.escritorios.has(escritorio.id)) {
       throw new Error('Office already exists');
     }
-    this.offices.set(office.id, office);
-    return office;
+    this.escritorios.set(escritorio.id, escritorio);
+    return escritorio;
   }
 
-  async findById(id: string): Promise<Office | null> {
-    return this.offices.get(id) ?? null;
+  async buscarEscritorioPorId(id: string): Promise<Escritorio | null> {
+    return this.escritorios.get(id) ?? null;
   }
 }

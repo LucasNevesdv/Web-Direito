@@ -1,11 +1,11 @@
-import { Office } from '../../domain/offices/office.js';
-import type { OfficesRepository } from './offices-repository.js';
+import { Escritorio } from '../../domain/offices/office.js';
+import type { RepositorioEscritorios } from './offices-repository.js';
 
-export class CreateOffice {
-  constructor(private readonly officesRepository: OfficesRepository) {}
+export class CadastroDeEscritorio {
+  constructor(private readonly repositorioEscritorios: RepositorioEscritorios) {}
 
-  async execute(input: { name: string }): Promise<Office> {
-    const office = Office.create({ name: input.name });
-    return this.officesRepository.create(office);
+  async cadastrarEscritorio(entrada: { nome: string }): Promise<Escritorio> {
+    const escritorio = Escritorio.criar({ nome: entrada.nome });
+    return this.repositorioEscritorios.salvarEscritorio(escritorio);
   }
 }

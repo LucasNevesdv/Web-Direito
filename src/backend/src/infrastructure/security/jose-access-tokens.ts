@@ -1,41 +1,41 @@
 import { SignJWT, jwtVerify } from 'jose';
-import type { AccessClaims, AccessTokens } from '../../application/authentication/authentication-contracts.js';
-import { InvalidAccessTokenError } from '../../application/authentication/authentication-errors.js';
+import type { DadosTokenAcesso, TokensAcesso } from '../../application/authentication/authentication-contracts.js';
+import { ErroTokenAcessoInvalido } from '../../application/authentication/authentication-errors.js';
 
-export class JoseAccessTokens implements AccessTokens {
-  readonly #key: Uint8Array;
+export class TokensAcessoJose implements TokensAcesso {
+  readonly #chave: Uint8Array;
   constructor(
-    secret: string,
-    private readonly issuer: string,
-    private readonly audience: string,
-    private readonly ttlSeconds: number,
-    private readonly clock: () => Date = () => new Date(),
-  ) { this.#key = Buffer.from(secret, 'base64url'); }
+    segredo: string,
+    private readonly emissor: string,
+    private readonly audiencia: string,
+    private readonly validadeSegundos: number,
+    private readonly relogio: () => Date = () => new Date(),
+  ) { this.#chave = Buffer.from(segredo, 'base64url'); }
 
-  async sign(claims: AccessClaims): Promise<string> {
-    const now = Math.floor(this.clock().getTime() / 1000);
-    return new SignJWT({ sessionId: claims.sessionId, activeOfficeId: claims.activeOfficeId, role: claims.role })
+  async criarTokenDeAcesso(dadosToken: DadosTokenAcesso): Promise<string> {
+    const agora = Math.floor(this.relogio().getTime() / 1000);
+    return new SignJWT({ sessionId: dadosToken.idSessao, activeOfficeId: dadosToken.idEscritorioAtivo, role: dadosToken.papel === 'PROPRIETARIO' ? 'OWNER' : dadosToken.papel })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
-      .setSubject(claims.userId).setIssuer(this.issuer).setAudience(this.audience)
-      .setIssuedAt(now).setExpirationTime(now + this.ttlSeconds).sign(this.#key);
+      .setSubject(dadosToken.idUsuario).setIssuer(this.emissor).setAudience(this.audiencia)
+      .setIssuedAt(agora).setExpirationTime(agora + this.validadeSegundos).sign(this.#chave);
   }
 
-  async verify(token: string): Promise<AccessClaims> {
+  async validarTokenDeAcesso(token: string): Promise<DadosTokenAcesso> {
     try {
-      const now = this.clock();
-      const { payload } = await jwtVerify(token, this.#key, {
-        algorithms: ['HS256'], typ: 'JWT', issuer: this.issuer, audience: this.audience,
+      const agora = this.relogio();
+      const { payload: conteudo } = await jwtVerify(token, this.#chave, {
+        algorithms: ['HS256'], typ: 'JWT', issuer: this.emissor, audience: this.audiencia,
         requiredClaims: ['sub', 'sessionId', 'activeOfficeId', 'role', 'iat', 'exp', 'iss', 'aud'],
-        currentDate: now, maxTokenAge: this.ttlSeconds,
+        currentDate: agora, maxTokenAge: this.validadeSegundos,
       });
-      const uuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
-      if (typeof payload.sub !== 'string' || !uuid.test(payload.sub)
-        || typeof payload.sessionId !== 'string' || !uuid.test(payload.sessionId)
-        || typeof payload.activeOfficeId !== 'string' || !uuid.test(payload.activeOfficeId)
-        || payload.role !== 'OWNER' || typeof payload.iat !== 'number' || typeof payload.exp !== 'number'
-        || payload.iat > Math.floor(now.getTime() / 1000) || payload.exp <= payload.iat
-        || payload.exp - payload.iat > this.ttlSeconds) throw new InvalidAccessTokenError();
-      return { userId: payload.sub, sessionId: payload.sessionId, activeOfficeId: payload.activeOfficeId, role: payload.role };
-    } catch { throw new InvalidAccessTokenError(); }
+      const padraoUuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+      if (typeof conteudo.sub !== 'string' || !padraoUuid.test(conteudo.sub)
+        || typeof conteudo.sessionId !== 'string' || !padraoUuid.test(conteudo.sessionId)
+        || typeof conteudo.activeOfficeId !== 'string' || !padraoUuid.test(conteudo.activeOfficeId)
+        || conteudo.role !== 'OWNER' || typeof conteudo.iat !== 'number' || typeof conteudo.exp !== 'number'
+        || conteudo.iat > Math.floor(agora.getTime() / 1000) || conteudo.exp <= conteudo.iat
+        || conteudo.exp - conteudo.iat > this.validadeSegundos) throw new ErroTokenAcessoInvalido();
+      return { idUsuario: conteudo.sub, idSessao: conteudo.sessionId, idEscritorioAtivo: conteudo.activeOfficeId, papel: 'PROPRIETARIO' };
+    } catch { throw new ErroTokenAcessoInvalido(); }
   }
 }

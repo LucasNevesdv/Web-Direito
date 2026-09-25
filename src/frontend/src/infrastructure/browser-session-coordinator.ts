@@ -1,169 +1,169 @@
-import type { Identity } from '../auth-client';
-import type { SessionCoordinator, SharedSession } from '../session-coordinator';
+import type { IdentidadeAutenticada } from '../auth-client';
+import type { CoordenadorSessao, SessaoCompartilhada } from '../session-coordinator';
 
-const channelName = 'web-direito:authentication:v1';
-const lockName = 'web-direito:authentication-mutation:v1';
-const uuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
-interface Channel {
-  postMessage(message: unknown): void;
-  addEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
+const NOME_CANAL = 'web-direito:authentication:v1';
+const NOME_LOCK = 'web-direito:authentication-mutation:v1';
+const PADRAO_UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+interface CanalDeMensagensEntreAbas {
+  postMessage(mensagem: unknown): void;
+  addEventListener(tipo: 'message', observador: (evento: MessageEvent) => void): void;
   close(): void;
 }
-export interface BrowserCoordination {
-  channel?: Channel;
-  locks?: Pick<LockManager, 'request'>;
-  exchangeMs?: number;
-  timeoutMs?: number;
+export interface RecursosDeCoordenacaoEntreAbas {
+  canal?: CanalDeMensagensEntreAbas;
+  bloqueios?: Pick<LockManager, 'request'>;
+  tempoDeSincronizacaoMs?: number;
+  tempoLimiteMs?: number;
 }
-interface Envelope {
-  version: 1; tabId: string; id: string; type: 'request' | 'response' | 'state';
-  timestamp: number; correlationId: string | null; sessionId: string | null; state: SharedSession | null;
+interface MensagemDeSincronizacaoDeSessao {
+  versao: 1; idAba: string; id: string; tipo: 'requisicao' | 'resposta' | 'estado';
+  instante: number; idCorrelacao: string | null; idSessao: string | null; estado: SessaoCompartilhada | null;
 }
 
-function credentials(token: string, value: Identity) {
-  if (typeof token !== 'string' || token.length > 4096 || token.split('.').length !== 3) throw new Error('Invalid shared session');
+function validarCredenciaisCompartilhadas(tokenAcesso: string, identidadeRecebida: IdentidadeAutenticada) {
+  if (typeof tokenAcesso !== 'string' || tokenAcesso.length > 4096 || tokenAcesso.split('.').length !== 3) throw new Error('Invalid shared session');
   // Metadata is only for coordination. The API still verifies the JWT on every request.
-  const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-  if (!uuid.test(payload.sessionId) || payload.sub !== value.user?.id || payload.activeOfficeId !== value.office?.id ||
-    payload.role !== 'OWNER' || value.office.role !== 'OWNER' || !uuid.test(value.user.id) || !uuid.test(value.office.id) ||
-    ![value.user.name, value.user.email, value.office.name].every((field) => typeof field === 'string' && field.length > 0 && field.length <= 254) ||
-    !Number.isFinite(payload.exp) || payload.exp * 1000 > Date.now() + 902000 || payload.exp * 1000 <= Date.now()) throw new Error('Invalid shared session');
-  const identity: Identity = { user: { id: value.user.id, name: value.user.name, email: value.user.email },
-    office: { id: value.office.id, name: value.office.name, role: 'OWNER' } };
-  return { sessionId: payload.sessionId as string, credentials: { accessToken: token, identity, expiresAt: payload.exp * 1000 } };
+  const metadadosDoToken = JSON.parse(atob(tokenAcesso.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+  if (!PADRAO_UUID.test(metadadosDoToken.sessionId) || metadadosDoToken.sub !== identidadeRecebida.usuario?.id || metadadosDoToken.activeOfficeId !== identidadeRecebida.escritorio?.id ||
+    metadadosDoToken.role !== 'OWNER' || identidadeRecebida.escritorio.papel !== 'PROPRIETARIO' || !PADRAO_UUID.test(identidadeRecebida.usuario.id) || !PADRAO_UUID.test(identidadeRecebida.escritorio.id) ||
+    ![identidadeRecebida.usuario.nome, identidadeRecebida.usuario.email, identidadeRecebida.escritorio.nome].every((campo) => typeof campo === 'string' && campo.length > 0 && campo.length <= 254) ||
+    !Number.isFinite(metadadosDoToken.exp) || metadadosDoToken.exp * 1000 > Date.now() + 902000 || metadadosDoToken.exp * 1000 <= Date.now()) throw new Error('Invalid shared session');
+  const identidade: IdentidadeAutenticada = { usuario: { id: identidadeRecebida.usuario.id, nome: identidadeRecebida.usuario.nome, email: identidadeRecebida.usuario.email },
+    escritorio: { id: identidadeRecebida.escritorio.id, nome: identidadeRecebida.escritorio.nome, papel: 'PROPRIETARIO' } };
+  return { idSessao: metadadosDoToken.sessionId as string, credenciais: { tokenAcesso: tokenAcesso, identidade, expiraEm: metadadosDoToken.exp * 1000 } };
 }
 
-export class BrowserSessionCoordinator implements SessionCoordinator {
-  private readonly tabId = crypto.randomUUID();
-  private state: SharedSession | null = null;
-  private closed = false;
-  private readonly listeners = new Set<(state: SharedSession) => void>();
-  private readonly pending = new Map<string, () => void>();
-  private readonly seen = new Set<string>();
-  private readonly controllers = new Set<AbortController>();
-  private expiration?: ReturnType<typeof setTimeout>;
-  private expirationListener?: () => void;
-  readonly canRefresh: boolean;
+export class CoordenadorSessaoNavegador implements CoordenadorSessao {
+  private readonly idAba = crypto.randomUUID();
+  private sessaoCompartilhada: SessaoCompartilhada | null = null;
+  private estaEncerrado = false;
+  private readonly observadoresDaSessao = new Set<(sessaoCompartilhada: SessaoCompartilhada) => void>();
+  private readonly sincronizacoesPendentes = new Map<string, () => void>();
+  private readonly idsDeMensagensRecebidas = new Set<string>();
+  private readonly controladoresDeCancelamento = new Set<AbortController>();
+  private temporizadorDeExpiracao?: ReturnType<typeof setTimeout>;
+  private aoExpirarSessao?: () => void;
+  readonly podeRenovar: boolean;
 
-  constructor(private readonly browser: BrowserCoordination) {
-    this.canRefresh = !!browser.locks;
-    browser.channel?.addEventListener('message', (event) => this.receive(event.data));
+  constructor(private readonly recursosDeCoordenacao: RecursosDeCoordenacaoEntreAbas) {
+    this.podeRenovar = !!recursosDeCoordenacao.bloqueios;
+    recursosDeCoordenacao.canal?.addEventListener('message', (evento) => this.tratarMensagemDeOutraAba(evento.data));
   }
 
-  getState() { return this.state; }
-  subscribe(listener: (state: SharedSession) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-  onExpiration(listener: () => void) { this.expirationListener = listener; }
+  obterSessaoCompartilhada() { return this.sessaoCompartilhada; }
+  observarMudancasDaSessao(aoAlterarSessao: (estado: SessaoCompartilhada) => void) { this.observadoresDaSessao.add(aoAlterarSessao); return () => { this.observadoresDaSessao.delete(aoAlterarSessao); }; }
+  registrarAoExpirarSessao(aoExpirarSessao: () => void) { this.aoExpirarSessao = aoExpirarSessao; }
 
-  private scheduleExpiration() {
-    clearTimeout(this.expiration);
-    if (this.state?.credentials && !this.closed) {
-      this.expiration = setTimeout(() => this.expirationListener?.(), Math.max(0, this.state.credentials.expiresAt - Date.now()));
+  private agendarNotificacaoDeExpiracao() {
+    clearTimeout(this.temporizadorDeExpiracao);
+    if (this.sessaoCompartilhada?.credenciais && !this.estaEncerrado) {
+      this.temporizadorDeExpiracao = setTimeout(() => this.aoExpirarSessao?.(), Math.max(0, this.sessaoCompartilhada.credenciais.expiraEm - Date.now()));
     }
   }
 
-  private send(type: Envelope['type'], correlationId: string | null = null) {
-    if (this.closed) return;
-    const state = type === 'request' ? null : this.state;
-    const message: Envelope = { version: 1, tabId: this.tabId, id: crypto.randomUUID(), type,
-      timestamp: Date.now(), correlationId, sessionId: state?.sessionId ?? null, state };
-    this.browser.channel?.postMessage(message);
-    return message.id;
+  private enviarMensagemEntreAbas(tipo: MensagemDeSincronizacaoDeSessao['tipo'], idCorrelacao: string | null = null) {
+    if (this.estaEncerrado) return;
+    const sessaoASincronizar = tipo === "requisicao" ? null : this.sessaoCompartilhada;
+    const mensagem: MensagemDeSincronizacaoDeSessao = { versao: 1, idAba: this.idAba, id: crypto.randomUUID(), tipo,
+      instante: Date.now(), idCorrelacao, idSessao: sessaoASincronizar?.idSessao ?? null, estado: sessaoASincronizar };
+    this.recursosDeCoordenacao.canal?.postMessage(mensagem);
+    return mensagem.id;
   }
 
-  private receive(value: unknown) {
-    if (this.closed) return;
+  private tratarMensagemDeOutraAba(mensagemRecebida: unknown) {
+    if (this.estaEncerrado) return;
     try {
-      const message = value as Envelope;
-      if (!message || message.version !== 1 || !uuid.test(message.tabId) || !uuid.test(message.id) || message.tabId === this.tabId ||
-        !Number.isFinite(message.timestamp) || Math.abs(Date.now() - message.timestamp) > 15000 || this.seen.has(message.id)) return;
-      this.seen.add(message.id);
-      if (this.seen.size > 256) this.seen.delete(this.seen.values().next().value!);
-      if (message.type === 'request') { if (this.state) this.send('response', message.id); return; }
-      if (message.type !== 'state' && message.type !== 'response') return;
-      if (message.type === 'response' && (!message.correlationId || !this.pending.has(message.correlationId))) return;
-      const state = message.state;
-      if (!state || !uuid.test(state.id) || !Number.isFinite(state.timestamp) || state.timestamp > Date.now() + 2000 ||
-        state.sessionId !== message.sessionId || (state.sessionId !== null && !uuid.test(state.sessionId)) ||
-        !['login', 'refresh', 'logout', 'invalid'].includes(state.reason)) return;
-      if (this.state?.sessionId && this.state.sessionId !== state.sessionId && state.reason !== 'login') return;
+      const mensagem = mensagemRecebida as MensagemDeSincronizacaoDeSessao;
+      if (!mensagem || mensagem.versao !== 1 || !PADRAO_UUID.test(mensagem.idAba) || !PADRAO_UUID.test(mensagem.id) || mensagem.idAba === this.idAba ||
+        !Number.isFinite(mensagem.instante) || Math.abs(Date.now() - mensagem.instante) > 15000 || this.idsDeMensagensRecebidas.has(mensagem.id)) return;
+      this.idsDeMensagensRecebidas.add(mensagem.id);
+      if (this.idsDeMensagensRecebidas.size > 256) this.idsDeMensagensRecebidas.delete(this.idsDeMensagensRecebidas.values().next().value!);
+      if (mensagem.tipo === "requisicao") { if (this.sessaoCompartilhada) this.enviarMensagemEntreAbas("resposta", mensagem.id); return; }
+      if (mensagem.tipo !== "estado" && mensagem.tipo !== "resposta") return;
+      if (mensagem.tipo === "resposta" && (!mensagem.idCorrelacao || !this.sincronizacoesPendentes.has(mensagem.idCorrelacao))) return;
+      const sessaoRecebida = mensagem.estado;
+      if (!sessaoRecebida || !PADRAO_UUID.test(sessaoRecebida.id) || !Number.isFinite(sessaoRecebida.instante) || sessaoRecebida.instante > Date.now() + 2000 ||
+        sessaoRecebida.idSessao !== mensagem.idSessao || (sessaoRecebida.idSessao !== null && !PADRAO_UUID.test(sessaoRecebida.idSessao)) ||
+        !["entrar", "renovar", "sair", "invalido"].includes(sessaoRecebida.motivo)) return;
+      if (this.sessaoCompartilhada?.idSessao && this.sessaoCompartilhada.idSessao !== sessaoRecebida.idSessao && sessaoRecebida.motivo !== "entrar") return;
       // Revocation is terminal for a session, even if an in-flight refresh broadcasts later.
-      const invalidatesCurrent = this.state?.credentials && state.sessionId === this.state.sessionId &&
-        !state.credentials && (state.reason === 'logout' || state.reason === 'invalid');
-      if (!invalidatesCurrent && this.state && (state.timestamp < this.state.timestamp || (state.timestamp === this.state.timestamp && state.id <= this.state.id))) return;
-      if (this.state && !this.state.credentials && state.reason === 'refresh') return;
-      let safe: SharedSession;
-      if (state.credentials) {
-        if (state.reason !== 'login' && state.reason !== 'refresh') return;
-        const parsed = credentials(state.credentials.accessToken, state.credentials.identity);
-        if (parsed.sessionId !== state.sessionId) return;
-        safe = { id: state.id, timestamp: state.timestamp, reason: state.reason, ...parsed };
+      const deveInvalidarSessaoAtual = this.sessaoCompartilhada?.credenciais && sessaoRecebida.idSessao === this.sessaoCompartilhada.idSessao &&
+        !sessaoRecebida.credenciais && (sessaoRecebida.motivo === "sair" || sessaoRecebida.motivo === "invalido");
+      if (!deveInvalidarSessaoAtual && this.sessaoCompartilhada && (sessaoRecebida.instante < this.sessaoCompartilhada.instante || (sessaoRecebida.instante === this.sessaoCompartilhada.instante && sessaoRecebida.id <= this.sessaoCompartilhada.id))) return;
+      if (this.sessaoCompartilhada && !this.sessaoCompartilhada.credenciais && sessaoRecebida.motivo === "renovar") return;
+      let sessaoValidada: SessaoCompartilhada;
+      if (sessaoRecebida.credenciais) {
+        if (sessaoRecebida.motivo !== "entrar" && sessaoRecebida.motivo !== "renovar") return;
+        const credenciaisValidadas = validarCredenciaisCompartilhadas(sessaoRecebida.credenciais.tokenAcesso, sessaoRecebida.credenciais.identidade);
+        if (credenciaisValidadas.idSessao !== sessaoRecebida.idSessao) return;
+        sessaoValidada = { id: sessaoRecebida.id, instante: sessaoRecebida.instante, motivo: sessaoRecebida.motivo, ...credenciaisValidadas };
       } else {
-        if (state.reason !== 'logout' && state.reason !== 'invalid') return;
-        safe = { id: state.id, timestamp: state.timestamp, sessionId: state.sessionId, reason: state.reason, credentials: null };
+        if (sessaoRecebida.motivo !== "sair" && sessaoRecebida.motivo !== "invalido") return;
+        sessaoValidada = { id: sessaoRecebida.id, instante: sessaoRecebida.instante, idSessao: sessaoRecebida.idSessao, motivo: sessaoRecebida.motivo, credenciais: null };
       }
-      this.state = safe;
-      this.scheduleExpiration();
-      this.listeners.forEach((listener) => listener(safe));
+      this.sessaoCompartilhada = sessaoValidada;
+      this.agendarNotificacaoDeExpiracao();
+      this.observadoresDaSessao.forEach((aoAlterarSessao) => aoAlterarSessao(sessaoValidada));
     } catch { /* Malformed messages never affect the current identity. */ }
   }
 
-  async synchronize(): Promise<void> {
-    if (this.closed) throw new Error('Coordination closed');
-    if (!this.browser.channel) return;
+  async sincronizarSessaoEntreAbas(): Promise<void> {
+    if (this.estaEncerrado) throw new Error('Coordination closed');
+    if (!this.recursosDeCoordenacao.canal) return;
     // Replies are collected for a bounded interval, including multiple peers.
-    await new Promise<void>((resolve) => {
-      const id = this.send('request')!;
-      const timer = setTimeout(() => { this.pending.delete(id); resolve(); }, this.browser.exchangeMs ?? 250);
-      this.pending.set(id, () => { clearTimeout(timer); resolve(); });
+    await new Promise<void>((resolver) => {
+      const id = this.enviarMensagemEntreAbas("requisicao")!;
+      const temporizador = setTimeout(() => { this.sincronizacoesPendentes.delete(id); resolver(); }, this.recursosDeCoordenacao.tempoDeSincronizacaoMs ?? 250);
+      this.sincronizacoesPendentes.set(id, () => { clearTimeout(temporizador); resolver(); });
     });
   }
 
-  async exclusive<T>(task: (signal?: AbortSignal) => Promise<T>): Promise<T> {
-    if (this.closed) throw new Error('Coordination closed');
-    const controller = new AbortController();
-    this.controllers.add(controller);
-    const timer = setTimeout(() => controller.abort(), this.browser.timeoutMs ?? 20000);
-    const run = () => {
-      controller.signal.throwIfAborted();
-      return task(controller.signal);
+  async executarOperacaoExclusiva<T>(aoObterExclusividade: (sinal?: AbortSignal) => Promise<T>): Promise<T> {
+    if (this.estaEncerrado) throw new Error('Coordination closed');
+    const controlador = new AbortController();
+    this.controladoresDeCancelamento.add(controlador);
+    const temporizador = setTimeout(() => controlador.abort(), this.recursosDeCoordenacao.tempoLimiteMs ?? 20000);
+    const executarOperacaoSeNaoCancelada = () => {
+      controlador.signal.throwIfAborted();
+      return aoObterExclusividade(controlador.signal);
     };
     try {
-      return this.browser.locks
-        ? await this.browser.locks.request(lockName, { mode: 'exclusive', signal: controller.signal }, run)
-        : await run();
-    } finally { clearTimeout(timer); this.controllers.delete(controller); }
+      return this.recursosDeCoordenacao.bloqueios
+        ? await this.recursosDeCoordenacao.bloqueios.request(NOME_LOCK, { mode: 'exclusive', signal: controlador.signal }, executarOperacaoSeNaoCancelada)
+        : await executarOperacaoSeNaoCancelada();
+    } finally { clearTimeout(temporizador); this.controladoresDeCancelamento.delete(controlador); }
   }
 
-  publish(token: string, identity: Identity, reason: 'login' | 'refresh') {
-    if (this.closed) return;
-    const parsed = credentials(token, identity);
-    this.state = { id: crypto.randomUUID(), timestamp: Math.max(Date.now(), (this.state?.timestamp ?? 0) + 1), reason, ...parsed };
-    this.scheduleExpiration();
-    this.send('state');
+  compartilharCredenciaisDaSessao(tokenAcesso: string, identidade: IdentidadeAutenticada, motivo: 'entrar' | 'renovar') {
+    if (this.estaEncerrado) return;
+    const credenciaisValidadas = validarCredenciaisCompartilhadas(tokenAcesso, identidade);
+    this.sessaoCompartilhada = { id: crypto.randomUUID(), instante: Math.max(Date.now(), (this.sessaoCompartilhada?.instante ?? 0) + 1), motivo, ...credenciaisValidadas };
+    this.agendarNotificacaoDeExpiracao();
+    this.enviarMensagemEntreAbas("estado");
   }
 
-  invalidate(reason: 'logout' | 'invalid') {
-    if (this.closed) return;
-    this.state = { id: crypto.randomUUID(), timestamp: Math.max(Date.now(), (this.state?.timestamp ?? 0) + 1),
-      sessionId: this.state?.sessionId ?? null, reason, credentials: null };
-    clearTimeout(this.expiration);
-    this.send('state');
+  propagarInvalidacaoDaSessao(motivo: 'sair' | 'invalido') {
+    if (this.estaEncerrado) return;
+    this.sessaoCompartilhada = { id: crypto.randomUUID(), instante: Math.max(Date.now(), (this.sessaoCompartilhada?.instante ?? 0) + 1),
+      idSessao: this.sessaoCompartilhada?.idSessao ?? null, motivo, credenciais: null };
+    clearTimeout(this.temporizadorDeExpiracao);
+    this.enviarMensagemEntreAbas("estado");
   }
 
-  close() {
-    this.closed = true;
-    clearTimeout(this.expiration);
-    this.controllers.forEach((controller) => controller.abort());
-    this.pending.forEach((finish) => finish());
-    this.pending.clear();
-    this.listeners.clear();
-    this.browser.channel?.close();
-    this.state = null;
+  encerrarCoordenacao() {
+    this.estaEncerrado = true;
+    clearTimeout(this.temporizadorDeExpiracao);
+    this.controladoresDeCancelamento.forEach((controlador) => controlador.abort());
+    this.sincronizacoesPendentes.forEach((aoConcluirSincronizacao) => aoConcluirSincronizacao());
+    this.sincronizacoesPendentes.clear();
+    this.observadoresDaSessao.clear();
+    this.recursosDeCoordenacao.canal?.close();
+    this.sessaoCompartilhada = null;
   }
 }
 
-export function createBrowserSessionCoordinator(): SessionCoordinator {
-  let channel: Channel | undefined;
-  try { if (typeof BroadcastChannel !== 'undefined') channel = new BroadcastChannel(channelName); } catch { /* Safe degraded mode. */ }
-  return new BrowserSessionCoordinator({ channel, locks: typeof navigator !== 'undefined' ? navigator.locks : undefined });
+export function criarCoordenadorSessaoNavegador(): CoordenadorSessao {
+  let canal: CanalDeMensagensEntreAbas | undefined;
+  try { if (typeof BroadcastChannel !== 'undefined') canal = new BroadcastChannel(NOME_CANAL); } catch { /* Safe degraded mode. */ }
+  return new CoordenadorSessaoNavegador({ canal, bloqueios: typeof navigator !== 'undefined' ? navigator.locks : undefined });
 }

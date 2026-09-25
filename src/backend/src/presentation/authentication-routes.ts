@@ -1,132 +1,132 @@
 import cookie from '@fastify/cookie';
-import type { RateLimiter } from '../application/security/rate-limiter.js';
-import { rateLimitHook } from './rate-limit-hook.js';
+import type { LimitadorRequisicoes } from '../application/security/rate-limiter.js';
+import { criarTratadorDeLimiteDeRequisicoes } from './rate-limit-hook.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import type { AuthenticateUser } from '../application/authentication/authenticate-user.js';
-import type { GetAuthenticatedIdentity } from '../application/authentication/get-authenticated-identity.js';
-import type { RefreshSession } from '../application/authentication/refresh-session.js';
-import type { LogoutSession } from '../application/authentication/logout-session.js';
-import type { PublicIdentity } from '../application/authentication/authentication-contracts.js';
-import { InactiveOfficeError, InactiveUserError, InvalidAccessTokenError, InvalidCredentialsError, MultipleActiveOfficesError } from '../application/authentication/authentication-errors.js';
+import type { AutenticacaoDeUsuario } from '../application/authentication/authenticate-user.js';
+import type { ConsultaDeIdentidadeAutenticada } from '../application/authentication/get-authenticated-identity.js';
+import type { RenovacaoDeSessao } from '../application/authentication/refresh-session.js';
+import type { EncerramentoDeSessao } from '../application/authentication/logout-session.js';
+import type { IdentidadePublica } from '../application/authentication/authentication-contracts.js';
+import { ErroEscritorioInativo, ErroUsuarioInativo, ErroTokenAcessoInvalido, ErroCredenciaisInvalidas, ErroMultiplosEscritoriosAtivos } from '../application/authentication/authentication-errors.js';
 
-export interface AuthenticationRoutes {
-  login: Pick<AuthenticateUser, 'execute'>;
-  identity: Pick<GetAuthenticatedIdentity, 'execute'>;
-  refresh: Pick<RefreshSession, 'execute'>;
-  logout: Pick<LogoutSession, 'execute'>;
-  frontendOrigin: string;
-  secureCookie: boolean;
-  refreshTtlSeconds: number;
+export interface ServicosRotasAutenticacao {
+  autenticacao: Pick<AutenticacaoDeUsuario, 'autenticarUsuario'>;
+  consultaIdentidade: Pick<ConsultaDeIdentidadeAutenticada, 'consultarIdentidadeAutenticada'>;
+  renovacao: Pick<RenovacaoDeSessao, 'renovarSessao'>;
+  encerramento: Pick<EncerramentoDeSessao, 'encerrarSessao'>;
+  origemFrontend: string;
+  deveUsarCookieSeguro: boolean;
+  validadeRenovacaoSegundos: number;
 }
 
-const loginBody = z.object({
+const CORPO_LOGIN = z.object({
   email: z.string().trim().toLowerCase().max(254).email(),
-  password: z.string().refine((value) => Array.from(value).length >= 1 && Array.from(value).length <= 128),
+  senha: z.string().refine((valor) => Array.from(valor).length >= 1 && Array.from(valor).length <= 128),
 }).strict();
-const invalidCredentials = { error: 'INVALID_CREDENTIALS', message: 'Não foi possível entrar. Confira suas credenciais.' };
-const tooManyAttempts = { error: 'TOO_MANY_ATTEMPTS', message: 'Muitas tentativas. Aguarde antes de tentar novamente.' };
+const CREDENCIAIS_INVALIDAS = { erro: 'CREDENCIAIS_INVALIDAS', mensagem: 'Não foi possível entrar. Confira suas credenciais.' };
+const EXCESSO_TENTATIVAS = { erro: 'EXCESSO_TENTATIVAS', mensagem: 'Muitas tentativas. Aguarde antes de tentar novamente.' };
 
-function publicResponse(identity: PublicIdentity): PublicIdentity {
+function selecionarCamposDaIdentidadePublica(identidade: IdentidadePublica): IdentidadePublica {
   return {
-    user: { id: identity.user.id, name: identity.user.name, email: identity.user.email },
-    office: { id: identity.office.id, name: identity.office.name, role: identity.office.role },
+    usuario: { id: identidade.usuario.id, nome: identidade.usuario.nome, email: identidade.usuario.email },
+    escritorio: { id: identidade.escritorio.id, nome: identidade.escritorio.nome, papel: identidade.escritorio.papel },
   };
 }
 
-export function registerAuthenticationRoutes(app: FastifyInstance, services: AuthenticationRoutes, limiter: RateLimiter): void {
-  const cookieOptions = {
-    httpOnly: true, sameSite: 'lax' as const, path: '/api/v1/auth', secure: services.secureCookie,
+export function registrarRotasAutenticacao(aplicacao: FastifyInstance, servicos: ServicosRotasAutenticacao, limitador: LimitadorRequisicoes): void {
+  const opcoesCookie = {
+    httpOnly: true, sameSite: 'lax' as const, path: '/api/v1/auth', secure: servicos.deveUsarCookieSeguro,
   };
-  app.register(async (auth) => {
-    await auth.register(cookie);
-    auth.addHook('onSend', async (_request, reply, payload) => {
-      reply.header('Cache-Control', 'no-store');
-      return payload;
+  aplicacao.register(async (autenticacao) => {
+    await autenticacao.register(cookie);
+    autenticacao.addHook('onSend', async (_requisicao, respostaHttp, conteudo) => {
+      respostaHttp.header('Cache-Control', 'no-store');
+      return conteudo;
     });
-    auth.addHook('onRequest', async (request, reply) => {
+    autenticacao.addHook('onRequest', async (requisicao, respostaHttp) => {
       // Same-origin proxy deployment: never trust Host/X-Forwarded-Host as the allowed origin.
-      if (request.method === 'POST' && request.headers.origin !== services.frontendOrigin) {
-        return reply.status(403).send({ error: 'FORBIDDEN', message: 'Solicitação não permitida.' });
+      if (requisicao.method === 'POST' && requisicao.headers.origin !== servicos.origemFrontend) {
+        return respostaHttp.status(403).send({ erro: 'PROIBIDO', mensagem: 'Solicitação não permitida.' });
       }
-      if ((request.headers.cookie?.length ?? 0) > 4096) {
-        reply.clearCookie('refresh_token', cookieOptions);
-        if (request.routeOptions.url === '/api/v1/auth/logout') {
-          await services.logout.execute(request.cookies.refresh_token);
-          return reply.status(204).send();
+      if ((requisicao.headers.cookie?.length ?? 0) > 4096) {
+        respostaHttp.clearCookie('refresh_token', opcoesCookie);
+        if (requisicao.routeOptions.url === '/api/v1/auth/logout') {
+          await servicos.encerramento.encerrarSessao(requisicao.cookies.refresh_token);
+          return respostaHttp.status(204).send();
         }
-        throw new InvalidAccessTokenError();
+        throw new ErroTokenAcessoInvalido();
       }
     });
-    auth.setErrorHandler((error, _request, reply) => {
-      if (error instanceof InvalidCredentialsError || error instanceof InactiveUserError || error instanceof InactiveOfficeError) {
-        return reply.status(401).send(invalidCredentials);
+    autenticacao.setErrorHandler((erro, _requisicao, respostaHttp) => {
+      if (erro instanceof ErroCredenciaisInvalidas || erro instanceof ErroUsuarioInativo || erro instanceof ErroEscritorioInativo) {
+        return respostaHttp.status(401).send(CREDENCIAIS_INVALIDAS);
       }
-      if (error instanceof InvalidAccessTokenError) {
-        if (_request.routeOptions.url === '/api/v1/auth/refresh') reply.clearCookie('refresh_token', cookieOptions);
-        return reply.status(401).send({ error: 'UNAUTHORIZED', message: 'Entre novamente para continuar.' });
+      if (erro instanceof ErroTokenAcessoInvalido) {
+        if (_requisicao.routeOptions.url === '/api/v1/auth/refresh') respostaHttp.clearCookie('refresh_token', opcoesCookie);
+        return respostaHttp.status(401).send({ erro: 'NAO_AUTORIZADO', mensagem: 'Entre novamente para continuar.' });
       }
-      if (error instanceof MultipleActiveOfficesError) {
-        return reply.status(409).send({ error: 'OFFICE_SELECTION_REQUIRED', message: 'A seleção entre escritórios ainda não está disponível.' });
+      if (erro instanceof ErroMultiplosEscritoriosAtivos) {
+        return respostaHttp.status(409).send({ erro: 'SELECAO_ESCRITORIO_NECESSARIA', mensagem: 'A seleção entre escritórios ainda não está disponível.' });
       }
-      const status = error && typeof error === 'object' && 'statusCode' in error ? error.statusCode : undefined;
-      if (status === 429) return reply.status(429).send(tooManyAttempts);
-      if (typeof status === 'number' && status >= 400 && status < 500) {
-        return reply.status(400).send({ error: 'VALIDATION_ERROR', message: 'Confira os dados informados.' });
+      const situacao = erro && typeof erro === 'object' && 'statusCode' in erro ? erro.statusCode : undefined;
+      if (situacao === 429) return respostaHttp.status(429).send(EXCESSO_TENTATIVAS);
+      if (typeof situacao === 'number' && situacao >= 400 && situacao < 500) {
+        return respostaHttp.status(400).send({ erro: 'ERRO_VALIDACAO', mensagem: 'Confira os dados informados.' });
       }
-      return reply.status(500).send({ error: 'INTERNAL_ERROR', message: 'Não foi possível concluir a solicitação. Tente novamente.' });
+      return respostaHttp.status(500).send({ erro: 'ERRO_INTERNO', mensagem: 'Não foi possível concluir a solicitação. Tente novamente.' });
     });
 
-    auth.post('/api/v1/auth/login', {
+    autenticacao.post('/api/v1/auth/login', {
       bodyLimit: 4 * 1024,
-      onRequest: rateLimitHook(limiter, 'login-ip'),
-      preValidation: rateLimitHook(limiter, 'login-identity'),
-    }, async (request, reply) => {
-      const parsed = loginBody.safeParse(request.body);
-      if (!parsed.success) {
-        const fields: Record<string, string> = {};
-        for (const issue of parsed.error.issues) {
-          if (issue.path[0] === 'email') fields.email = 'Informe um e-mail válido.';
-          if (issue.path[0] === 'password') fields.password = 'Informe sua senha com até 128 caracteres.';
+      onRequest: criarTratadorDeLimiteDeRequisicoes(limitador, 'login-ip'),
+      preValidation: criarTratadorDeLimiteDeRequisicoes(limitador, 'login-identity'),
+    }, async (requisicao, respostaHttp) => {
+      const interpretado = CORPO_LOGIN.safeParse(requisicao.body);
+      if (!interpretado.success) {
+        const campos: Record<string, string> = {};
+        for (const problema of interpretado.error.issues) {
+          if (problema.path[0] === 'email') campos.email = 'Informe um e-mail válido.';
+          if (problema.path[0] === 'senha') campos.senha = 'Informe sua senha com até 128 caracteres.';
         }
-        return reply.status(400).send({ error: 'VALIDATION_ERROR', message: 'Confira os dados informados.', fields });
+        return respostaHttp.status(400).send({ erro: 'ERRO_VALIDACAO', mensagem: 'Confira os dados informados.', campos });
       }
-      const result = await services.login.execute(parsed.data);
-      reply.setCookie('refresh_token', result.refreshToken, {
-        ...cookieOptions,
-        maxAge: services.refreshTtlSeconds, expires: result.refreshExpiresAt,
+      const resultado = await servicos.autenticacao.autenticarUsuario(interpretado.data);
+      respostaHttp.setCookie('refresh_token', resultado.tokenRenovacao, {
+        ...opcoesCookie,
+        maxAge: servicos.validadeRenovacaoSegundos, expires: resultado.renovacaoExpiraEm,
       });
-      return reply.send({
-        accessToken: result.response.accessToken, expiresIn: result.response.expiresIn,
-        ...publicResponse(result.response),
+      return respostaHttp.send({
+        tokenAcesso: resultado.resposta.tokenAcesso, expiraEmSegundos: resultado.resposta.expiraEmSegundos,
+        ...selecionarCamposDaIdentidadePublica(resultado.resposta),
       });
     });
 
-    auth.post('/api/v1/auth/refresh', {
+    autenticacao.post('/api/v1/auth/refresh', {
       bodyLimit: 1024,
-      onRequest: rateLimitHook(limiter, 'refresh-ip'),
-    }, async (request, reply) => {
+      onRequest: criarTratadorDeLimiteDeRequisicoes(limitador, 'refresh-ip'),
+    }, async (requisicao, respostaHttp) => {
       // No token accepted from query or body, including when a valid cookie is present.
-      if (request.body !== undefined || Object.keys(request.query as object).length) throw new InvalidAccessTokenError();
-      const result = await services.refresh.execute(request.cookies.refresh_token);
-      reply.setCookie('refresh_token', result.refreshToken, {
-        ...cookieOptions, expires: result.refreshExpiresAt,
-        maxAge: Math.max(0, Math.floor((result.refreshExpiresAt.getTime() - Date.now()) / 1000)),
+      if (requisicao.body !== undefined || Object.keys(requisicao.query as object).length) throw new ErroTokenAcessoInvalido();
+      const resultado = await servicos.renovacao.renovarSessao(requisicao.cookies.refresh_token);
+      respostaHttp.setCookie('refresh_token', resultado.tokenRenovacao, {
+        ...opcoesCookie, expires: resultado.renovacaoExpiraEm,
+        maxAge: Math.max(0, Math.floor((resultado.renovacaoExpiraEm.getTime() - Date.now()) / 1000)),
       });
-      return reply.send({ accessToken: result.response.accessToken, expiresIn: result.response.expiresIn, ...publicResponse(result.response) });
+      return respostaHttp.send({ tokenAcesso: resultado.resposta.tokenAcesso, expiraEmSegundos: resultado.resposta.expiraEmSegundos, ...selecionarCamposDaIdentidadePublica(resultado.resposta) });
     });
 
-    auth.post('/api/v1/auth/logout', { bodyLimit: 1024 }, async (request, reply) => {
-      try { await services.logout.execute(request.cookies.refresh_token); }
-      finally { reply.clearCookie('refresh_token', cookieOptions); }
-      return reply.status(204).send();
+    autenticacao.post('/api/v1/auth/logout', { bodyLimit: 1024 }, async (requisicao, respostaHttp) => {
+      try { await servicos.encerramento.encerrarSessao(requisicao.cookies.refresh_token); }
+      finally { respostaHttp.clearCookie('refresh_token', opcoesCookie); }
+      return respostaHttp.status(204).send();
     });
 
-    auth.get('/api/v1/auth/me', async (request, reply) => {
-      const authorization = request.headers.authorization;
-      const match = authorization?.match(/^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/i);
-      if (!match) throw new InvalidAccessTokenError();
-      return reply.send(publicResponse(await services.identity.execute(match[1])));
+    autenticacao.get('/api/v1/auth/me', async (requisicao, respostaHttp) => {
+      const autorizacao = requisicao.headers.authorization;
+      const correspondencia = autorizacao?.match(/^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/i);
+      if (!correspondencia) throw new ErroTokenAcessoInvalido();
+      return respostaHttp.send(selecionarCamposDaIdentidadePublica(await servicos.consultaIdentidade.consultarIdentidadeAutenticada(correspondencia[1])));
     });
   });
 }

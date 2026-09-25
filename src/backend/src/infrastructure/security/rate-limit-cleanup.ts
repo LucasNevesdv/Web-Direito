@@ -1,13 +1,13 @@
-import type { RateLimitStore } from '../../application/security/rate-limiter.js';
+import type { ArmazenamentoLimiteRequisicoes } from '../../application/security/rate-limiter.js';
 
-export function startRateLimitCleanup(store: Pick<RateLimitStore, 'deleteExpired'>, intervalMs: number,
-  reportFailure: () => void = () => console.error('Rate limit cleanup failed.')) {
-  let pending: Promise<void> | undefined;
-  let stopped = false;
-  const timer = setInterval(() => {
-    if (stopped || pending) return;
-    pending = store.deleteExpired().then(() => {}, () => reportFailure()).finally(() => { pending = undefined; });
-  }, intervalMs);
-  timer.unref();
-  return { async stop(): Promise<void> { stopped = true; clearInterval(timer); await pending; } };
+export function iniciarLimpezaLimites(armazenamento: Pick<ArmazenamentoLimiteRequisicoes, 'removerLimitesExpirados'>, intervaloMs: number,
+  aoFalharLimpeza: () => void = () => console.error('Rate limit cleanup failed.')) {
+  let promessaDeLimpeza: Promise<void> | undefined;
+  let estaEncerrado = false;
+  const temporizador = setInterval(() => {
+    if (estaEncerrado || promessaDeLimpeza) return;
+    promessaDeLimpeza = armazenamento.removerLimitesExpirados().then(() => {}, () => aoFalharLimpeza()).finally(() => { promessaDeLimpeza = undefined; });
+  }, intervaloMs);
+  temporizador.unref();
+  return { async parar(): Promise<void> { estaEncerrado = true; clearInterval(temporizador); await promessaDeLimpeza; } };
 }

@@ -1,38 +1,38 @@
-export function createShutdown(
-  app: { close(): Promise<unknown> },
-  database: { $disconnect(): Promise<void> },
-  background?: { stop(): Promise<void> },
+export function criarEncerramento(
+  aplicacao: { close(): Promise<unknown> },
+  bancoDados: { $disconnect(): Promise<void> },
+  tarefasSegundoPlano?: { parar(): Promise<void> },
 ): () => Promise<void> {
-  let shutdownPromise: Promise<void> | undefined;
+  let promessaEncerramento: Promise<void> | undefined;
 
   return () => {
-    shutdownPromise ??= Promise.resolve().then(async () => {
-      const errors: unknown[] = [];
+    promessaEncerramento ??= Promise.resolve().then(async () => {
+      const erros: unknown[] = [];
 
-      if (background) {
-        try { await background.stop(); } catch (error) { errors.push(error); }
+      if (tarefasSegundoPlano) {
+        try { await tarefasSegundoPlano.parar(); } catch (erro) { erros.push(erro); }
       }
 
       try {
-        await app.close();
-      } catch (error) {
-        errors.push(error);
+        await aplicacao.close();
+      } catch (erro) {
+        erros.push(erro);
       }
 
       try {
-        await database.$disconnect();
-      } catch (error) {
-        errors.push(error);
+        await bancoDados.$disconnect();
+      } catch (erro) {
+        erros.push(erro);
       }
 
-      if (errors.length === 1) {
-        throw errors[0];
+      if (erros.length === 1) {
+        throw erros[0];
       }
-      if (errors.length > 1) {
-        throw new AggregateError(errors, 'Resource cleanup failed');
+      if (erros.length > 1) {
+        throw new AggregateError(erros, 'Resource cleanup failed');
       }
     });
 
-    return shutdownPromise;
+    return promessaEncerramento;
   };
 }

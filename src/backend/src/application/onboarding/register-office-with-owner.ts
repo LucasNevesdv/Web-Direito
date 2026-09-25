@@ -1,86 +1,86 @@
-import { Membership } from '../../domain/memberships/membership.js';
-import { InvalidOfficeError } from '../../domain/offices/invalid-office-error.js';
-import { Office, type OfficeStatus } from '../../domain/offices/office.js';
-import { InvalidUserError } from '../../domain/users/invalid-user-error.js';
-import { User } from '../../domain/users/user.js';
-import type { PasswordHasher } from '../security/password-hasher.js';
-import { EmailAlreadyRegisteredError } from './email-already-registered-error.js';
-import { InvalidRegistrationError } from './invalid-registration-error.js';
-import type { OfficeRegistrationRepository } from './office-registration-repository.js';
+import { VinculoEscritorio } from '../../domain/memberships/membership.js';
+import { ErroEscritorioInvalido } from '../../domain/offices/invalid-office-error.js';
+import { Escritorio, type SituacaoEscritorio } from '../../domain/offices/office.js';
+import { ErroUsuarioInvalido } from '../../domain/users/invalid-user-error.js';
+import { Usuario } from '../../domain/users/user.js';
+import type { ProtecaoDeSenhas } from '../security/password-hasher.js';
+import { ErroEmailJaCadastrado } from './email-already-registered-error.js';
+import { ErroCadastroInvalido } from './invalid-registration-error.js';
+import type { RepositorioCadastroEscritorio } from './office-registration-repository.js';
 
-export interface RegisterOfficeInput {
-  officeName: string;
-  adminName: string;
+export interface EntradaCadastroEscritorio {
+  nomeEscritorio: string;
+  nomeAdministrador: string;
   email: string;
-  password: string;
+  senha: string;
 }
 
-export interface RegisterOfficeResult {
-  office: {
+export interface ResultadoCadastroEscritorio {
+  escritorio: {
     id: string;
-    name: string;
-    status: OfficeStatus;
-    createdAt: Date;
-    updatedAt: Date;
+    nome: string;
+    situacao: SituacaoEscritorio;
+    criadoEm: Date;
+    atualizadoEm: Date;
   };
-  user: { id: string; name: string; email: string };
-  role: 'OWNER';
+  usuario: { id: string; nome: string; email: string };
+  papel: 'PROPRIETARIO';
 }
 
-export class RegisterOfficeWithOwner {
+export class CadastroDeEscritorioComProprietario {
   constructor(
-    private readonly repository: OfficeRegistrationRepository,
-    private readonly passwordHasher: PasswordHasher,
+    private readonly repositorioCadastro: RepositorioCadastroEscritorio,
+    private readonly protecaoDeSenhas: ProtecaoDeSenhas,
   ) {}
 
-  async execute(input: RegisterOfficeInput): Promise<RegisterOfficeResult> {
-    let office: Office;
-    let name: string;
+  async cadastrarEscritorioComProprietario(dadosDoCadastro: EntradaCadastroEscritorio): Promise<ResultadoCadastroEscritorio> {
+    let escritorio: Escritorio;
+    let nomeAdministrador: string;
     let email: string;
     try {
-      office = Office.create({ name: input.officeName });
-      name = User.normalizeName(input.adminName);
-      email = User.normalizeEmail(input.email);
-    } catch (error) {
-      if (error instanceof InvalidOfficeError && error.field === 'name') {
-        throw new InvalidRegistrationError('officeName');
+      escritorio = Escritorio.criar({ nome: dadosDoCadastro.nomeEscritorio });
+      nomeAdministrador = Usuario.normalizarNome(dadosDoCadastro.nomeAdministrador);
+      email = Usuario.normalizarEmail(dadosDoCadastro.email);
+    } catch (erro) {
+      if (erro instanceof ErroEscritorioInvalido && erro.campo === 'nome') {
+        throw new ErroCadastroInvalido('nomeEscritorio');
       }
-      if (error instanceof InvalidUserError && error.field === 'name') {
-        throw new InvalidRegistrationError('adminName');
+      if (erro instanceof ErroUsuarioInvalido && erro.campo === 'nome') {
+        throw new ErroCadastroInvalido('nomeAdministrador');
       }
-      if (error instanceof InvalidUserError && error.field === 'email') {
-        throw new InvalidRegistrationError('email');
+      if (erro instanceof ErroUsuarioInvalido && erro.campo === 'email') {
+        throw new ErroCadastroInvalido('email');
       }
-      throw error;
+      throw erro;
     }
 
-    if (typeof input.password !== 'string') {
-      throw new InvalidRegistrationError('password');
+    if (typeof dadosDoCadastro.senha !== 'string') {
+      throw new ErroCadastroInvalido('senha');
     }
-    const passwordLength = Array.from(input.password).length;
-    if (passwordLength < 12 || passwordLength > 128) {
-      throw new InvalidRegistrationError('password');
+    const tamanhoSenha = Array.from(dadosDoCadastro.senha).length;
+    if (tamanhoSenha < 12 || tamanhoSenha > 128) {
+      throw new ErroCadastroInvalido('senha');
     }
-    if (await this.repository.emailExists(email)) {
-      throw new EmailAlreadyRegisteredError();
+    if (await this.repositorioCadastro.possuiUsuarioComEmail(email)) {
+      throw new ErroEmailJaCadastrado();
     }
 
     // Hash before opening the transaction so its connection is not held during Argon2 work.
-    const passwordHash = await this.passwordHasher.hash(input.password);
-    const user = User.create({ name, email, passwordHash });
-    const membership = Membership.create({ officeId: office.id, userId: user.id });
-    await this.repository.register({ office, user, membership });
+    const hashSenha = await this.protecaoDeSenhas.gerarHashDaSenha(dadosDoCadastro.senha);
+    const usuario = Usuario.criar({ nome: nomeAdministrador, email, hashSenha });
+    const vinculo = VinculoEscritorio.criar({ idEscritorio: escritorio.id, idUsuario: usuario.id });
+    await this.repositorioCadastro.salvarCadastroCompleto({ escritorio, usuario, vinculo });
 
     return {
-      office: {
-        id: office.id,
-        name: office.name,
-        status: office.status,
-        createdAt: office.createdAt,
-        updatedAt: office.updatedAt,
+      escritorio: {
+        id: escritorio.id,
+        nome: escritorio.nome,
+        situacao: escritorio.situacao,
+        criadoEm: escritorio.criadoEm,
+        atualizadoEm: escritorio.atualizadoEm,
       },
-      user: { id: user.id, name: user.name, email: user.email },
-      role: membership.role,
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
+      papel: vinculo.papel,
     };
   }
 }

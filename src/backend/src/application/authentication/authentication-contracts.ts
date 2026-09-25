@@ -1,46 +1,46 @@
-import type { Session } from '../../domain/sessions/session.js';
-import type { User } from '../../domain/users/user.js';
+import type { Sessao } from '../../domain/sessions/session.js';
+import type { Usuario } from '../../domain/users/user.js';
 
-export interface AuthenticationAccount {
-  user: User;
-  memberships: { office: { id: string; name: string; status: 'ACTIVE' | 'INACTIVE' }; role: 'OWNER' }[];
+export interface UsuarioComVinculos {
+  usuario: Usuario;
+  vinculos: { escritorio: { id: string; nome: string; situacao: 'ATIVO' | 'INATIVO' }; papel: 'PROPRIETARIO' }[];
 }
 
-export interface AuthenticationRepository {
-  findByEmail(email: string): Promise<AuthenticationAccount | null>;
-  createSession(session: Session): Promise<void>;
-  findSession(id: string): Promise<{ session: Session; account: AuthenticationAccount } | null>;
-  rotateSession(input: { id: string; currentHash: string; nextHash: string; now: Date }): Promise<boolean>;
-  revokeSession(id: string, now: Date): Promise<void>;
+export interface RepositorioAutenticacao {
+  buscarUsuarioComVinculosPorEmail(email: string): Promise<UsuarioComVinculos | null>;
+  salvarSessao(sessao: Sessao): Promise<void>;
+  buscarSessaoComUsuarioPorId(id: string): Promise<{ sessao: Sessao; usuarioComVinculos: UsuarioComVinculos } | null>;
+  substituirHashDeRenovacao(entrada: { id: string; hashAtual: string; proximoHash: string; agora: Date }): Promise<boolean>;
+  revogarSessao(id: string, agora: Date): Promise<void>;
 }
 
-export interface AccessClaims {
-  userId: string;
-  sessionId: string;
-  activeOfficeId: string;
-  role: 'OWNER';
+export interface DadosTokenAcesso {
+  idUsuario: string;
+  idSessao: string;
+  idEscritorioAtivo: string;
+  papel: 'PROPRIETARIO';
 }
 
-export interface AccessTokens {
-  sign(claims: AccessClaims): Promise<string>;
-  verify(token: string): Promise<AccessClaims>;
+export interface TokensAcesso {
+  criarTokenDeAcesso(dadosToken: DadosTokenAcesso): Promise<string>;
+  validarTokenDeAcesso(token: string): Promise<DadosTokenAcesso>;
 }
 
-export interface RefreshTokens {
-  generate(sessionId?: string): { sessionId: string; token: string; hash: string };
-  parse(token: string): { sessionId: string; hash: string } | null;
-  matches(receivedHash: string, storedHash: string): boolean;
+export interface TokensRenovacao {
+  gerarTokenDeRenovacao(idSessao?: string): { idSessao: string; token: string; hash: string };
+  interpretarTokenDeRenovacao(token: string): { idSessao: string; hash: string } | null;
+  compararHashesDeRenovacao(hashRecebido: string, hashArmazenado: string): boolean;
 }
 
-export interface PublicIdentity {
-  user: { id: string; name: string; email: string };
-  office: { id: string; name: string; role: 'OWNER' };
+export interface IdentidadePublica {
+  usuario: { id: string; nome: string; email: string };
+  escritorio: { id: string; nome: string; papel: 'PROPRIETARIO' };
 }
 
-export function publicIdentity(account: AuthenticationAccount, officeId: string): PublicIdentity {
-  const membership = account.memberships.find((item) => item.office.id === officeId)!;
+export function extrairIdentidadePublicaDoVinculo(usuarioComVinculos: UsuarioComVinculos, idEscritorio: string): IdentidadePublica {
+  const vinculo = usuarioComVinculos.vinculos.find((vinculoDoUsuario) => vinculoDoUsuario.escritorio.id === idEscritorio)!;
   return {
-    user: { id: account.user.id, name: account.user.name, email: account.user.email },
-    office: { id: membership.office.id, name: membership.office.name, role: membership.role },
+    usuario: { id: usuarioComVinculos.usuario.id, nome: usuarioComVinculos.usuario.nome, email: usuarioComVinculos.usuario.email },
+    escritorio: { id: vinculo.escritorio.id, nome: vinculo.escritorio.nome, papel: vinculo.papel },
   };
 }

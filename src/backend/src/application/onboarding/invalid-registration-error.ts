@@ -1,10 +1,10 @@
-export type InvalidRegistrationField = 'officeName' | 'adminName' | 'email' | 'password';
+export type CampoCadastroInvalido = 'nomeEscritorio' | 'nomeAdministrador' | 'email' | 'senha';
 
-export class InvalidRegistrationError extends Error {
-  readonly code = 'INVALID_REGISTRATION';
+export class ErroCadastroInvalido extends Error {
+  readonly codigo = 'CADASTRO_INVALIDO';
 
-  constructor(readonly field: InvalidRegistrationField) {
-    super(`Invalid registration field: ${field}`);
-    this.name = 'InvalidRegistrationError';
+  constructor(readonly campo: CampoCadastroInvalido) {
+    super(`Invalid registration field: ${campo}`);
+    this.name = 'ErroCadastroInvalido';
   }
 }

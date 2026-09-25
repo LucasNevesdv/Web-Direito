@@ -1,14 +1,14 @@
-import type { AuthenticationRepository, RefreshTokens } from './authentication-contracts.js';
+import type { RepositorioAutenticacao, TokensRenovacao } from './authentication-contracts.js';
 
-export class LogoutSession {
+export class EncerramentoDeSessao {
   constructor(
-    private readonly repository: Pick<AuthenticationRepository, 'revokeSession'>,
-    private readonly refreshTokens: Pick<RefreshTokens, 'parse'>,
-    private readonly clock: () => Date = () => new Date(),
+    private readonly repositorioAutenticacao: Pick<RepositorioAutenticacao, 'revogarSessao'>,
+    private readonly tokensRenovacao: Pick<TokensRenovacao, 'interpretarTokenDeRenovacao'>,
+    private readonly relogio: () => Date = () => new Date(),
   ) {}
 
-  async execute(token: string | undefined): Promise<void> {
-    const parsed = token ? this.refreshTokens.parse(token) : null;
-    if (parsed) await this.repository.revokeSession(parsed.sessionId, this.clock());
+  async encerrarSessao(tokenDeRenovacao: string | undefined): Promise<void> {
+    const tokenInterpretado = tokenDeRenovacao ? this.tokensRenovacao.interpretarTokenDeRenovacao(tokenDeRenovacao) : null;
+    if (tokenInterpretado) await this.repositorioAutenticacao.revogarSessao(tokenInterpretado.idSessao, this.relogio());
   }
 }

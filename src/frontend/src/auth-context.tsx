@@ -1,29 +1,29 @@
 import { createContext, useContext, useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
-import type { AuthClient } from './auth-client';
-import { authClient } from './authentication';
+import type { ClienteAutenticacao } from './auth-client';
+import { CLIENTE_AUTENTICACAO } from './authentication';
 
-const Context = createContext<AuthClient>(authClient);
+const CONTEXTO_AUTENTICACAO = createContext<ClienteAutenticacao>(CLIENTE_AUTENTICACAO);
 
-export function AuthProvider({ children, client = authClient }: { children: ReactNode; client?: AuthClient }) {
+export function ProvedorAutenticacao({ children: filhos, cliente = CLIENTE_AUTENTICACAO }: { children: ReactNode; cliente?: ClienteAutenticacao }) {
   useEffect(() => {
-    void client.restore();
-    const restorePage = (event: PageTransitionEvent) => {
-      if (event.persisted) window.location.reload();
+    void cliente.restaurarSessao();
+    const tratarRestauracaoDaPagina = (evento: PageTransitionEvent) => {
+      if (evento.persisted) window.location.reload();
     };
     // Erase protected DOM before the browser can retain a back/forward snapshot.
-    const hidePage = () => flushSync(() => client.prepareForNavigation());
-    window.addEventListener('pagehide', hidePage);
-    window.addEventListener('pageshow', restorePage);
+    const tratarSaidaDaPagina = () => flushSync(() => cliente.prepararSaidaDaPagina());
+    window.addEventListener('pagehide', tratarSaidaDaPagina);
+    window.addEventListener('pageshow', tratarRestauracaoDaPagina);
     return () => {
-      window.removeEventListener('pagehide', hidePage);
-      window.removeEventListener('pageshow', restorePage);
+      window.removeEventListener('pagehide', tratarSaidaDaPagina);
+      window.removeEventListener('pageshow', tratarRestauracaoDaPagina);
     };
-  }, [client]);
-  return <Context.Provider value={client}>{children}</Context.Provider>;
+  }, [cliente]);
+  return <CONTEXTO_AUTENTICACAO.Provider value={cliente}>{filhos}</CONTEXTO_AUTENTICACAO.Provider>;
 }
 
-export function useAuth() {
-  const client = useContext(Context);
-  return { client, ...useSyncExternalStore(client.subscribe, client.getSnapshot) };
+export function useAutenticacao() {
+  const cliente = useContext(CONTEXTO_AUTENTICACAO);
+  return { cliente, ...useSyncExternalStore(cliente.observarMudancasDaAutenticacao, cliente.obterEstadoDaAutenticacao) };
 }

@@ -1,15 +1,15 @@
-export class InvalidCredentialsError extends Error {
-  constructor() { super('Invalid credentials'); this.name = 'InvalidCredentialsError'; }
+export class ErroCredenciaisInvalidas extends Error {
+  constructor() { super('Invalid credentials'); this.name = 'ErroCredenciaisInvalidas'; }
 }
-export class InactiveUserError extends Error {
-  constructor() { super('Inactive user'); this.name = 'InactiveUserError'; }
+export class ErroUsuarioInativo extends Error {
+  constructor() { super('Inactive user'); this.name = 'ErroUsuarioInativo'; }
 }
-export class InactiveOfficeError extends Error {
-  constructor() { super('No active office membership'); this.name = 'InactiveOfficeError'; }
+export class ErroEscritorioInativo extends Error {
+  constructor() { super('No active office membership'); this.name = 'ErroEscritorioInativo'; }
 }
-export class MultipleActiveOfficesError extends Error {
-  constructor() { super('Office selection is not available'); this.name = 'MultipleActiveOfficesError'; }
+export class ErroMultiplosEscritoriosAtivos extends Error {
+  constructor() { super('Office selection is not available'); this.name = 'ErroMultiplosEscritoriosAtivos'; }
 }
-export class InvalidAccessTokenError extends Error {
-  constructor() { super('Invalid authenticated session'); this.name = 'InvalidAccessTokenError'; }
+export class ErroTokenAcessoInvalido extends Error {
+  constructor() { super('Invalid authenticated session'); this.name = 'ErroTokenAcessoInvalido'; }
 }

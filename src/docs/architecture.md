@@ -6,10 +6,10 @@ O repositório Git está em `Neodireito/`; o workspace pnpm permanece em
 ## Aplicação e infraestrutura
 
 - `backend/src/database-health-checker.ts` define somente
-  `DatabaseHealthChecker.check(): Promise<void>`.
+  `VerificadorSaudeBanco.verificar(): Promise<void>`.
 - `backend/src/app.ts` constrói o Fastify e recebe esse contrato e o caso de uso
   de cadastro e os serviços de autenticação. Não importa Prisma ou a infraestrutura. `/health` informa liveness sem chamar o verificador;
-  `/ready` chama apenas `check()` e converte sucesso/falha em HTTP 200/503.
+  `/ready` chama apenas `verificar()` e converte sucesso/falha em HTTP 200/503.
 - `backend/src/database.ts` cria o Prisma Client e implementa o verificador com
   uma consulta `SELECT 1`. A dependência instalada é Prisma ORM 6.19.3, com o
   engine PostgreSQL padrão da versão 6, sem adaptador ou driver adicional.
@@ -27,18 +27,18 @@ TASK-002:
 
 | Camada | Arquivos | Responsabilidade |
 | --- | --- | --- |
-| Domínio | `domain/offices/office.ts`, `domain/offices/invalid-office-error.ts` | Entidade `Office`, validação das invariantes e erro previsível de domínio; sem dependências de Prisma, Fastify, Zod ou das outras camadas. |
-| Aplicação | `application/offices/create-office.ts`, `application/offices/offices-repository.ts` | Caso de uso `CreateOffice` e contrato específico `OfficesRepository`, com `create` e `findById`; depende do domínio e não conhece Prisma. |
+| Domínio | `domain/offices/office.ts`, `domain/offices/invalid-office-error.ts` | Entidade `Escritorio`, validação das invariantes e erro previsível de domínio; sem dependências de Prisma, Fastify, Zod ou das outras camadas. |
+| Aplicação | `application/offices/create-office.ts`, `application/offices/offices-repository.ts` | Caso de uso `CadastroDeEscritorio` e contrato específico `RepositorioEscritorios`, com `salvarEscritorio` e `buscarEscritorioPorId`; depende do domínio e não conhece Prisma. |
 | Infraestrutura | `infrastructure/prisma/prisma-offices-repository.ts`, `infrastructure/prisma/office-mapper.ts` | Persistência com Prisma e conversão entre o registro armazenado e a entidade; depende dos contratos da aplicação e do domínio. |
 
-`CreateOffice` recebe somente `name`, cria uma entidade válida, persiste pelo
+`CadastroDeEscritorio` recebe somente `nome`, cria uma entidade válida, persiste pelo
 contrato e retorna o escritório. O repositório Prisma recebe o cliente como
 dependência. O mapper reconstitui a entidade preservando UUID, estado e datas.
 O repositório em memória fica em `backend/tests/support/` e atende ao mesmo
 contrato nos testes de aplicação, sem exigir PostgreSQL.
 
-`Office` é a raiz do tenant: os futuros clientes, processos, tarefas e documentos
-terão vínculo com um escritório. `CreateOffice` permanece um caso de uso interno,
+`Escritorio` é a raiz do tenant: os futuros clientes, processos, tarefas e documentos
+terão vínculo com um escritório. `CadastroDeEscritorio` permanece um caso de uso interno,
 sem endpoint próprio. O cadastro público descrito abaixo cria o escritório junto
 ao usuário administrador em outra operação, com uma única transação. Autorização
 e isolamento das consultas dos demais módulos ainda não estão implementados.
@@ -48,8 +48,8 @@ e isolamento das consultas dos demais módulos ainda não estão implementados.
 O schema está em `backend/prisma/schema.prisma`; migrations versionadas ficam
 em `backend/prisma/migrations/`. A primeira migration,
 `20260922163757_create_offices`, cria a tabela de escritórios e o enum de estado.
-A aplicação usa nomes em camelCase; os nomes
-SQL adotam snake_case: `Office` mapeia para `offices`, `OfficeStatus` para
+O domínio usa nomes em português; o mapper converte para os nomes gerados pelo
+Prisma, preservados em inglês. Os nomes SQL adotam snake_case: `Office` mapeia para `offices`, `OfficeStatus` para
 `office_status`, `createdAt` para `created_at` e `updatedAt` para `updated_at`.
 Este é o padrão inicial da persistência de negócio.
 
@@ -65,22 +65,22 @@ como substitutos desse fluxo.
 
 ## Cadastro público de escritório e primeiro administrador — RF-001 e RF-002
 
-O fluxo disponível em `/register` envia `officeName`, `adminName`, `email` e
-`password` para `POST /api/v1/onboarding`. A confirmação de senha existe somente
+O fluxo disponível em `/register` envia `nomeEscritorio`, `nomeAdministrador`, `email` e
+`senha` para `POST /api/v1/onboarding`. A confirmação de senha existe somente
 no formulário. Nenhum ID, papel, estado ou data é aceito do cliente.
 
 | Camada | Componentes | Responsabilidade |
 | --- | --- | --- |
-| Domínio | `User`, `Membership` e seus erros específicos | Validar nome, e-mail, UUIDs, datas, estado `ACTIVE` do usuário e papel `OWNER` do vínculo; armazenar somente `passwordHash`, sem dependência de frameworks. |
-| Aplicação | `RegisterOfficeWithOwner`, `OfficeRegistrationRepository`, `PasswordHasher` | Normalizar e validar entrada, verificar e-mail existente, proteger a senha, criar as três entidades, solicitar persistência atômica e retornar dados públicos. |
-| Infraestrutura | `PrismaOfficeRegistrationRepository`, `Argon2PasswordHasher` | Executar a transação de cadastro, traduzir conflito de e-mail e implementar Argon2id. |
+| Domínio | `Usuario`, `VinculoEscritorio` e seus erros específicos | Validar nome, e-mail, UUIDs, datas, estado `ATIVO` do usuário e papel `PROPRIETARIO` do vínculo; armazenar somente `hashSenha`, sem dependência de frameworks. |
+| Aplicação | `CadastroDeEscritorioComProprietario`, `RepositorioCadastroEscritorio`, `ProtecaoDeSenhas` | Normalizar e validar entrada, verificar e-mail existente, proteger a senha, criar as três entidades, solicitar persistência atômica e retornar dados públicos. |
+| Infraestrutura | `RepositorioCadastroEscritorioPrisma`, `GeradorHashSenhaArgon2` | Executar a transação de cadastro, traduzir conflito de e-mail e implementar Argon2id. |
 | Apresentação | `presentation/onboarding-route.ts` | Validar o corpo com Zod estrito, rejeitar campos extras e serializar somente dados públicos e erros sanitizados. |
 | Frontend | Página `/register` | Validar campos e confirmação, impedir envio duplicado, apresentar erro por campo, conflito e confirmação de cadastro; não persistir senha no navegador. |
 
 Os nomes são normalizados com trim e têm entre 2 e 120 pontos de código Unicode.
 O e-mail recebe trim e lowercase, tem formato validado e é único globalmente.
 A senha tem entre 12 e 128 caracteres e não sofre trim. O primeiro vínculo é
-sempre `OWNER`, único papel implementado e responsável pela autoridade
+sempre `PROPRIETARIO`, único papel implementado e responsável pela autoridade
 administrativa máxima prevista. A aplicação dessa autoridade às operações
 protegidas depende da futura autenticação e autorização.
 
@@ -89,7 +89,7 @@ o trabalho do Argon2. A transação grava `Office`, `User` e `Membership`, nessa
 ordem, com `maxWait=5000` e `timeout=10000` milissegundos; qualquer falha desfaz
 as três gravações. A consulta prévia de e-mail melhora a resposta ao usuário,
 mas a restrição única do PostgreSQL garante a unicidade em concorrência. O
-repositório converte esse conflito em `EmailAlreadyRegisteredError`.
+repositório converte esse conflito em `ErroEmailJaCadastrado`.
 
 A migration `20260923160423_create_users_and_memberships`, revisada e aplicada,
 acrescenta `users`, `memberships`, `user_status` e `membership_role`. Há unicidade
@@ -99,7 +99,7 @@ usuário admite `ACTIVE` e `INACTIVE` desde RF-003; o único papel é `OWNER`. A
 e os dados existentes são preservados.
 
 O endpoint retorna HTTP 201 com os cinco campos públicos de escritório, somente
-`id`, `name` e `email` do usuário e `role: OWNER`. HTTP 400 indica entrada
+`id`, `nome` e `email` do usuário e `papel: PROPRIETARIO`. HTTP 400 indica entrada
 inválida, 409 indica e-mail existente e 500 contém mensagem genérica. Projeção
 explícita e schemas de resposta impedem serializar campos adicionais. Erros de
 JSON, tipo de conteúdo e corpo acima de 16 KiB também são sanitizados. O logger
@@ -127,10 +127,10 @@ consultas dos demais módulos entre escritórios nesta entrega.
 
 ## Autenticação e sessão — RF-003 a RF-006
 
-`application/authentication/` contém `AuthenticateUser`, `GetAuthenticatedIdentity`, `RefreshSession` e `LogoutSession`
+`application/authentication/` contém `AutenticacaoDeUsuario`, `ConsultaDeIdentidadeAutenticada`, `RenovacaoDeSessao` e `EncerramentoDeSessao`
 e contratos específicos para consultas de autenticação, sessões e tokens. Não
-importa Prisma, JWT, Fastify ou cookies. A entidade `Session` valida UUIDs,
-datas e o digest do refresh, mantendo estado privado. `User` admite INACTIVE para
+importa Prisma, JWT, Fastify ou cookies. A entidade `Sessao` valida UUIDs,
+datas e o digest do refresh, mantendo estado privado. `Usuario` admite INATIVO para
 negar acesso; não há operação administrativa de inativação nesta entrega.
 
 O login normaliza o e-mail e verifica Argon2id antes de avaliar estado e vínculos.
@@ -140,11 +140,11 @@ credenciais inválidas, usuário inativo e ausência de escritório ativo; todos
 resultam no mesmo HTTP 401 externo. Mais de um escritório ativo retorna 409,
 pois seleção de escritório ainda não existe.
 
-`PrismaAuthenticationRepository` consulta o usuário e seus vínculos, persiste
-Session e recupera sessão por ID para `/me`. A migration
+`RepositorioAutenticacaoPrisma` consulta o usuário e seus vínculos, persiste
+Sessao e recupera sessão por ID para `/me`. A migration
 `20260923171012_create_sessions` acrescenta `sessions`, INACTIVE ao enum de usuário
 e índice de `memberships.user_id`, usado na busca dos vínculos no login.
-Session referencia usuário, escritório e o par do Membership com RESTRICT.
+A tabela de sessões referencia usuário, escritório e o par do vínculo com RESTRICT.
 A chave primária atende a busca por sessão. A migration
 `20260924074000_index_session_expiration` acrescenta índice em `expires_at` para
 localizar lotes expirados no futuro cleanup; nenhum job foi criado nesta etapa.
@@ -152,31 +152,31 @@ As datas e o formato SHA-256 possuem
 restrições no domínio e no banco; `revokedAt` e `lastUsedAt` começam nulos.
 A renovação atualiza `lastUsedAt` e `updatedAt`; a revogação define `revokedAt`.
 
-`JoseAccessTokens` usa a biblioteca `jose` e HS256 fixo. O token contém `sub`,
+`TokensAcessoJose` usa a biblioteca `jose` e HS256 fixo. O token contém `sub`,
 `sessionId`, `activeOfficeId`, `role`, `iat`, `exp`, `iss` e `aud`, sem dados
 pessoais. A verificação exige assinatura, algoritmo, tipo JWT, emissor, audiência,
 claims obrigatórias e prazo máximo de 900 segundos; rejeita emissão futura.
 O segredo base64url de pelo menos 32 bytes é obrigatório em todos os ambientes,
 sem valor padrão. `authentication.ts` compõe adaptadores e casos de uso no bootstrap.
 
-`CryptoRefreshTokens` usa o formato `UUID-da-sessão.segredo-base64url`, com 32 bytes
+`TokensRenovacaoCriptograficos` usa o formato `UUID-da-sessão.segredo-base64url`, com 32 bytes
 aleatórios criptográficos e SHA-256 do token completo. O parser exige UUID e
 base64url canônico, com 80 caracteres ao todo; `timingSafeEqual` compara hashes.
 O token não contém identidade, escritório ou papel. Esse hash rápido é adequado ao segredo aleatório de 256 bits;
-as senhas humanas continuam usando Argon2id. Session dura, por padrão, 604800
+as senhas humanas continuam usando Argon2id. Sessao dura, por padrão, 604800
 segundos. O token original só sai por cookie `refresh_token`, HttpOnly,
 SameSite=Lax, Path=/api/v1/auth, sem Domain, com Max-Age/Expires e Secure em
 produção. O desenvolvimento HTTP local usa Secure=false. Produção exige HTTPS.
 
-`POST /api/v1/auth/login` aceita apenas e-mail e senha, retorna access token,
-`expiresIn` e identidade pública; não retorna refresh nem hashes no JSON.
+`POST /api/v1/auth/login` aceita apenas e-mail e senha, retorna `tokenAcesso`,
+`expiraEmSegundos` e identidade pública; não retorna refresh nem hashes no JSON.
 `GET /api/v1/auth/me` exige Bearer, valida o JWT e reconfirma sessão não revogada
 ou expirada, usuário/escritório ACTIVE e vínculo/papel atuais no banco.
 Respostas de autenticação usam Cache-Control: no-store. Cookies não autenticam
 `/me`. `POST /api/v1/auth/refresh` recebe somente cookie e retorna o mesmo DTO
 público do login com um novo access token; nunca retorna refresh no JSON.
 
-`RefreshSession` reconfirma validade, estado e vínculo. O repositório faz
+`RenovacaoDeSessao` reconfirma validade, estado e vínculo. O repositório faz
 `updateMany` condicionado por ID, hash atual, `revokedAt=null`, expiração futura,
 usuário/escritório ACTIVE e Membership OWNER. O hash funciona como versão de
 concorrência: somente uma atualização pode consumir o token atual. Uma divergência
@@ -185,7 +185,7 @@ renovações concorrentes, uma pode responder 200, mas a detecção da outra rev
 a sessão, incluindo o refresh substituto. A expiração original nunca é alterada;
 Expires e Max-Age do cookie refletem o prazo restante.
 
-`LogoutSession` identifica e revoga a sessão quando possível. O endpoint limpa
+`EncerramentoDeSessao` identifica e revoga a sessão quando possível. O endpoint limpa
 o cookie com os mesmos atributos e responde 204 também para token ausente,
 inválido, expirado ou sessão já revogada. Falhas de infraestrutura retornam erro
 genérico; não se afirma revogação quando o banco falha. JWT não tem blacklist e
@@ -206,8 +206,8 @@ Referências: [Prisma 6 — concorrência otimista](https://www.prisma.io/docs/o
 e [OWASP — verificação de origem e CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#using-standard-headers-to-verify-origin).
 
 `application/security/rate-limiter.ts` define contratos sem Prisma e o
-`SharedRateLimiter`. A composição `rate-limiting.ts` injeta o adaptador
-`PrismaRateLimitStore`, HMAC das chaves e políticas do ambiente. Hooks protegem
+`LimitadorRequisicoesCompartilhado`. A composição `rate-limiting.ts` injeta o adaptador
+`ArmazenamentoLimiteRequisicoesPrisma`, HMAC das chaves e políticas do ambiente. Hooks protegem
 cadastro, login por IP, login por IP/e-mail normalizado e refresh antes do trabalho
 caro de senha. O plugin com armazenamento local foi removido.
 
@@ -244,8 +244,8 @@ Referências oficiais: [PostgreSQL — ON CONFLICT](https://www.postgresql.org/d
 [PostgreSQL — SKIP LOCKED](https://www.postgresql.org/docs/current/sql-select.html)
 e [Fastify — trustProxy](https://fastify.dev/docs/latest/Reference/Server/#trustproxy).
 
-`AuthClient` centraliza token em memória, identidade e estados loading,
-authenticated e unauthenticated. `AuthProvider` inicia uma única restauração,
+`ClienteAutenticacao` centraliza token em memória, identidade e estados `carregando`,
+`autenticado` e `naoAutenticado`. `ProvedorAutenticacao` inicia uma única restauração,
 inclusive sob StrictMode. `/app` só mostra conteúdo após identidade validada;
 `/login` consulta `/me` ao entrar e redireciona à área autenticada. Recarregar
 renova pelo cookie, sem token em localStorage, sessionStorage ou IndexedDB.
@@ -259,7 +259,7 @@ restauração via cache de navegação limpa memória/DOM antes do snapshot e fo
 revalidação ao retornar. Falha de logout no servidor
 é informada sem afirmar revogação.
 
-`AuthClient` depende de `SessionCoordinator`; não acessa BroadcastChannel ou
+`ClienteAutenticacao` depende de `CoordenadorSessao`; não acessa BroadcastChannel ou
 Web Locks diretamente. `infrastructure/browser-session-coordinator.ts` implementa
 o protocolo, e `authentication.ts` compõe cliente, transporte e navegação. Um
 lock exclusivo por origem serializa mutações de autenticação. Antes de renovar,
@@ -384,7 +384,7 @@ dependências falsas e handlers capturados, sem enviar sinais ao processo real.
 
 Na raiz do workspace: `pnpm lint`, `pnpm typecheck`, `pnpm test` e `pnpm build`.
 A validação de prontidão com o banco local usa somente consultas de leitura.
-Os testes de domínio e de `CreateOffice` não exigem banco nem leem o `.env` real.
+Os testes de domínio e de `CadastroDeEscritorio` não exigem banco nem leem o `.env` real.
 A verificação real do repositório Prisma é separada da suíte comum: usa um único
 escritório identificável como teste, recupera e compara seus dados, remove somente
 esse registro e confirma sua ausência ao terminar. Em qualquer verificação,
@@ -408,10 +408,10 @@ não integra a suíte unitária padrão.
 
 Após o build, `pnpm --filter ./backend run verify:auth-browser` inicia os serviços
 locais e Chrome headless com perfil temporário, cria a conta por `/register`,
-entra por `/login`, inspeciona cookie/requisições e confirma Session no PostgreSQL.
+entra por `/login`, inspeciona cookie/requisições e confirma Sessao no PostgreSQL.
 Também testa restauração após reload, expiração controlada de JWT, renovação e
 repetição, reutilização e logout. Nenhum segredo é impresso;
-o cleanup remove Session, Membership, User e Office próprios nessa ordem e fecha
+o cleanup remove sessões, vínculos, usuários e escritórios próprios nessa ordem e fecha
 somente os recursos criados. A suíte unitária não depende desse comando ou do banco.
 Inclui duas abas reais no mesmo perfil: identidade compartilhada, dois 401 com
 uma chamada de refresh, rotação/estado no PostgreSQL, login/logout/revogação
@@ -420,3 +420,17 @@ dois backends reais e testa orçamento conjunto, concorrência por dois clientes
 nova janela e ausência de dados legíveis. O SQL de limpeza é exercitado em tabela
 temporária da conexão para não remover buckets existentes. Verificadores usam
 segredo HMAC efêmero próprio e removem somente suas chaves ao terminar.
+
+## Nomenclatura e compatibilidade
+
+O domínio, a aplicação e os contratos públicos usam português brasileiro.
+A infraestrutura converte `ATIVO`/`INATIVO` e `PROPRIETARIO` para
+`ACTIVE`/`INACTIVE` e `OWNER`, sem alterar schema, migrations ou registros.
+`authentication-mapper.ts` concentra as conversões de usuário e sessão;
+`office-mapper.ts` converte escritórios. Nomes físicos citados acima são
+intencionais e não representam os identificadores do domínio.
+
+A mudança de JSON exige publicar frontend e backend juntos e recarregar abas
+antigas. O formato assinado dos JWTs, o cookie e as chaves dos contadores
+permanecem compatíveis. Consulte [nomenclatura](nomenclature.md) para contratos
+e exceções da tradução.

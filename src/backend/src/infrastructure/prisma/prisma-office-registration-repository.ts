@@ -1,72 +1,72 @@
 import { Prisma } from '@prisma/client';
-import { EmailAlreadyRegisteredError } from '../../application/onboarding/email-already-registered-error.js';
-import type { OfficeRegistrationRepository } from '../../application/onboarding/office-registration-repository.js';
-import { officeMapper } from './office-mapper.js';
+import { ErroEmailJaCadastrado } from '../../application/onboarding/email-already-registered-error.js';
+import type { RepositorioCadastroEscritorio } from '../../application/onboarding/office-registration-repository.js';
+import { MAPEADOR_ESCRITORIO } from './office-mapper.js';
 
 // Only operations used by onboarding; also accepts Prisma query extensions.
-interface RegistrationTransaction {
-  office: { create(args: { data: Prisma.OfficeCreateInput }): Promise<unknown> };
-  user: { create(args: { data: Prisma.UserCreateInput; select: { id: true } }): Promise<unknown> };
-  membership: { create(args: { data: Prisma.MembershipUncheckedCreateInput }): Promise<unknown> };
+interface TransacaoCadastro {
+  office: { create(argumentos: { data: Prisma.OfficeCreateInput }): Promise<unknown> };
+  user: { create(argumentos: { data: Prisma.UserCreateInput; select: { id: true } }): Promise<unknown> };
+  membership: { create(argumentos: { data: Prisma.MembershipUncheckedCreateInput }): Promise<unknown> };
 }
 
-interface RegistrationPrismaClient {
+interface ClientePrismaCadastro {
   user: {
-    findUnique(args: { where: { email: string }; select: { id: true } }): Promise<{ id: string } | null>;
+    findUnique(argumentos: { where: { email: string }; select: { id: true } }): Promise<{ id: string } | null>;
   };
   $transaction(
-    work: (transaction: RegistrationTransaction) => Promise<void>,
-    options: { maxWait: number; timeout: number },
+    trabalho: (transacao: TransacaoCadastro) => Promise<void>,
+    opcoes: { maxWait: number; timeout: number },
   ): Promise<void>;
 }
 
-export class PrismaOfficeRegistrationRepository implements OfficeRegistrationRepository {
-  constructor(private readonly prisma: RegistrationPrismaClient) {}
+export class RepositorioCadastroEscritorioPrisma implements RepositorioCadastroEscritorio {
+  constructor(private readonly prisma: ClientePrismaCadastro) {}
 
-  async emailExists(email: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
+  async possuiUsuarioComEmail(email: string): Promise<boolean> {
+    const usuario = await this.prisma.user.findUnique({
       where: { email },
       select: { id: true },
     });
-    return user !== null;
+    return usuario !== null;
   }
 
-  async register({ office, user, membership }: Parameters<OfficeRegistrationRepository['register']>[0]): Promise<void> {
+  async salvarCadastroCompleto({ escritorio, usuario, vinculo }: Parameters<RepositorioCadastroEscritorio['salvarCadastroCompleto']>[0]): Promise<void> {
     try {
-      await this.prisma.$transaction(async (transaction) => {
-        await transaction.office.create({ data: officeMapper.toPersistence(office) });
-        await transaction.user.create({
+      await this.prisma.$transaction(async (transacao) => {
+        await transacao.office.create({ data: MAPEADOR_ESCRITORIO.converterEscritorioEmRegistroPrisma(escritorio) });
+        await transacao.user.create({
           data: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            passwordHash: user.passwordHash,
-            status: user.status,
-            createdAt: user.createdAt,
-            updatedAt: user.updatedAt,
+            id: usuario.id,
+            name: usuario.nome,
+            email: usuario.email,
+            passwordHash: usuario.hashSenha,
+            status: usuario.situacao === 'ATIVO' ? 'ACTIVE' : 'INACTIVE',
+            createdAt: usuario.criadoEm,
+            updatedAt: usuario.atualizadoEm,
           },
           select: { id: true },
         });
-        await transaction.membership.create({
+        await transacao.membership.create({
           data: {
-            id: membership.id,
-            officeId: membership.officeId,
-            userId: membership.userId,
-            role: membership.role,
-            createdAt: membership.createdAt,
+            id: vinculo.id,
+            officeId: vinculo.idEscritorio,
+            userId: vinculo.idUsuario,
+            role: 'OWNER',
+            createdAt: vinculo.criadoEm,
           },
         });
       }, { maxWait: 5000, timeout: 10000 });
-    } catch (error) {
+    } catch (erro) {
       if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002' &&
-        Array.isArray(error.meta?.target) &&
-        error.meta.target.includes('email')
+        erro instanceof Prisma.PrismaClientKnownRequestError &&
+        erro.code === 'P2002' &&
+        Array.isArray(erro.meta?.target) &&
+        erro.meta.target.includes('email')
       ) {
-        throw new EmailAlreadyRegisteredError();
+        throw new ErroEmailJaCadastrado();
       }
-      throw error;
+      throw erro;
     }
   }
 }

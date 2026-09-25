@@ -1,34 +1,34 @@
 import { PrismaClient } from '@prisma/client';
-import type { DatabaseHealthChecker } from './database-health-checker.js';
+import type { VerificadorSaudeBanco } from './database-health-checker.js';
 
-const CONNECTION_TIMEOUT_SECONDS = 5;
-const POOL_TIMEOUT_SECONDS = 5;
-const SOCKET_TIMEOUT_SECONDS = 10;
+const TEMPO_LIMITE_CONEXAO_SEGUNDOS = 5;
+const TEMPO_LIMITE_POOL_SEGUNDOS = 5;
+const TEMPO_LIMITE_SOCKET_SEGUNDOS = 10;
 
-export function createPrismaClient(databaseUrl: string): PrismaClient {
-  const url = new URL(databaseUrl);
+export function criarClientePrisma(urlBancoDados: string): PrismaClient {
+  const url = new URL(urlBancoDados);
   // Enforce finite waits even when the supplied URL disables a timeout with 0.
-  url.searchParams.set('connect_timeout', String(CONNECTION_TIMEOUT_SECONDS));
-  url.searchParams.set('pool_timeout', String(POOL_TIMEOUT_SECONDS));
-  url.searchParams.set('socket_timeout', String(SOCKET_TIMEOUT_SECONDS));
+  url.searchParams.set('connect_timeout', String(TEMPO_LIMITE_CONEXAO_SEGUNDOS));
+  url.searchParams.set('pool_timeout', String(TEMPO_LIMITE_POOL_SEGUNDOS));
+  url.searchParams.set('socket_timeout', String(TEMPO_LIMITE_SOCKET_SEGUNDOS));
 
   return new PrismaClient({
     datasources: { db: { url: url.toString() } },
   });
 }
 
-export function createPrismaHealthChecker(
+export function criarVerificadorSaudePrisma(
   prisma: PrismaClient,
-): DatabaseHealthChecker {
+): VerificadorSaudeBanco {
   return {
-    async check(): Promise<void> {
+    async verificarConexaoComBanco(): Promise<void> {
       await prisma.$transaction(
-        async (transaction) => {
+        async (transacao) => {
           // PostgreSQL cancels the statement; SET LOCAL ends with the transaction.
-          await transaction.$executeRaw`SET LOCAL statement_timeout = '5s'`;
-          await transaction.$queryRaw`SELECT 1`;
+          await transacao.$executeRaw`SET LOCAL statement_timeout = '5s'`;
+          await transacao.$queryRaw`SELECT 1`;
         },
-        { maxWait: POOL_TIMEOUT_SECONDS * 1000, timeout: 10000 },
+        { maxWait: TEMPO_LIMITE_POOL_SEGUNDOS * 1000, timeout: 10000 },
       );
     },
   };

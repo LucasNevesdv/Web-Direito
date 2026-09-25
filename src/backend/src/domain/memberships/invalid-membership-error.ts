@@ -1,10 +1,10 @@
-export type InvalidMembershipField = 'id' | 'officeId' | 'userId' | 'role' | 'createdAt';
+export type CampoVinculoInvalido = 'id' | 'idEscritorio' | 'idUsuario' | 'papel' | 'criadoEm';
 
-export class InvalidMembershipError extends Error {
-  readonly code = 'INVALID_MEMBERSHIP';
+export class ErroVinculoInvalido extends Error {
+  readonly codigo = 'VINCULO_INVALIDO';
 
-  constructor(readonly field: InvalidMembershipField) {
-    super(`Invalid membership field: ${field}`);
-    this.name = 'InvalidMembershipError';
+  constructor(readonly campo: CampoVinculoInvalido) {
+    super(`Invalid membership field: ${campo}`);
+    this.name = 'ErroVinculoInvalido';
   }
 }

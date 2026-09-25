@@ -1,8 +1,8 @@
-export class EmailAlreadyRegisteredError extends Error {
-  readonly code = 'EMAIL_ALREADY_REGISTERED';
+export class ErroEmailJaCadastrado extends Error {
+  readonly codigo = 'EMAIL_JA_CADASTRADO';
 
   constructor() {
     super('Email already registered');
-    this.name = 'EmailAlreadyRegisteredError';
+    this.name = 'ErroEmailJaCadastrado';
   }
 }

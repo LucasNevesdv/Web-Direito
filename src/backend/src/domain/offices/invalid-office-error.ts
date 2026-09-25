@@ -1,15 +1,15 @@
-export type InvalidOfficeField =
+export type CampoEscritorioInvalido =
   | 'id'
-  | 'name'
-  | 'status'
-  | 'createdAt'
-  | 'updatedAt';
+  | 'nome'
+  | 'situacao'
+  | 'criadoEm'
+  | 'atualizadoEm';
 
-export class InvalidOfficeError extends Error {
-  readonly code = 'INVALID_OFFICE';
+export class ErroEscritorioInvalido extends Error {
+  readonly codigo = 'ESCRITORIO_INVALIDO';
 
-  constructor(readonly field: InvalidOfficeField) {
-    super(`Invalid office field: ${field}`);
-    this.name = 'InvalidOfficeError';
+  constructor(readonly campo: CampoEscritorioInvalido) {
+    super(`Invalid office field: ${campo}`);
+    this.name = 'ErroEscritorioInvalido';
   }
 }

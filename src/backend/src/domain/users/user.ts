@@ -1,122 +1,122 @@
 import { randomUUID } from 'node:crypto';
-import { InvalidUserError } from './invalid-user-error.js';
+import { ErroUsuarioInvalido } from './invalid-user-error.js';
 
-export type UserStatus = 'ACTIVE' | 'INACTIVE';
+export type SituacaoUsuario = 'ATIVO' | 'INATIVO';
 
-interface UserState {
+interface EstadoUsuario {
   id: string;
-  name: string;
+  nome: string;
   email: string;
-  passwordHash: string;
-  status: UserStatus;
-  createdAt: Date;
-  updatedAt: Date;
+  hashSenha: string;
+  situacao: SituacaoUsuario;
+  criadoEm: Date;
+  atualizadoEm: Date;
 }
 
-const UUID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
-const EMAIL_LOCAL_PATTERN = /^[a-z\d.!#$%&'*+/=?^_`{|}~-]+$/;
-const EMAIL_DOMAIN_LABEL_PATTERN = /^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/;
+const PADRAO_UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+const PADRAO_EMAIL_LOCAL = /^[a-z\d.!#$%&'*+/=?^_`{|}~-]+$/;
+const PADRAO_SEGMENTO_DOMINIO_EMAIL = /^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/;
 
-export class User {
+export class Usuario {
   readonly #id: string;
-  readonly #name: string;
+  readonly #nome: string;
   readonly #email: string;
-  readonly #passwordHash: string;
-  readonly #status: UserStatus;
-  readonly #createdAt: number;
-  readonly #updatedAt: number;
+  readonly #hashSenha: string;
+  readonly #situacao: SituacaoUsuario;
+  readonly #criadoEm: number;
+  readonly #atualizadoEm: number;
 
-  private constructor(state: UserState) {
-    if (typeof state.id !== 'string' || !UUID_PATTERN.test(state.id)) {
-      throw new InvalidUserError('id');
+  private constructor(estado: EstadoUsuario) {
+    if (typeof estado.id !== 'string' || !PADRAO_UUID.test(estado.id)) {
+      throw new ErroUsuarioInvalido('id');
     }
-    const name = User.normalizeName(state.name);
-    const email = User.normalizeEmail(state.email);
-    if (typeof state.passwordHash !== 'string' || state.passwordHash.trim().length === 0) {
-      throw new InvalidUserError('passwordHash');
+    const nome = Usuario.normalizarNome(estado.nome);
+    const email = Usuario.normalizarEmail(estado.email);
+    if (typeof estado.hashSenha !== 'string' || estado.hashSenha.trim().length === 0) {
+      throw new ErroUsuarioInvalido('hashSenha');
     }
-    if (state.status !== 'ACTIVE' && state.status !== 'INACTIVE') {
-      throw new InvalidUserError('status');
+    if (estado.situacao !== 'ATIVO' && estado.situacao !== 'INATIVO') {
+      throw new ErroUsuarioInvalido('situacao');
     }
-    if (!(state.createdAt instanceof Date) || !Number.isFinite(state.createdAt.getTime())) {
-      throw new InvalidUserError('createdAt');
+    if (!(estado.criadoEm instanceof Date) || !Number.isFinite(estado.criadoEm.getTime())) {
+      throw new ErroUsuarioInvalido('criadoEm');
     }
     if (
-      !(state.updatedAt instanceof Date) ||
-      !Number.isFinite(state.updatedAt.getTime()) ||
-      state.updatedAt.getTime() < state.createdAt.getTime()
+      !(estado.atualizadoEm instanceof Date) ||
+      !Number.isFinite(estado.atualizadoEm.getTime()) ||
+      estado.atualizadoEm.getTime() < estado.criadoEm.getTime()
     ) {
-      throw new InvalidUserError('updatedAt');
+      throw new ErroUsuarioInvalido('atualizadoEm');
     }
 
-    this.#id = state.id.toLowerCase();
-    this.#name = name;
+    this.#id = estado.id.toLowerCase();
+    this.#nome = nome;
     this.#email = email;
-    this.#passwordHash = state.passwordHash;
-    this.#status = state.status;
-    this.#createdAt = state.createdAt.getTime();
-    this.#updatedAt = state.updatedAt.getTime();
+    this.#hashSenha = estado.hashSenha;
+    this.#situacao = estado.situacao;
+    this.#criadoEm = estado.criadoEm.getTime();
+    this.#atualizadoEm = estado.atualizadoEm.getTime();
   }
 
-  static normalizeName(value: string): string {
-    if (typeof value !== 'string') {
-      throw new InvalidUserError('name');
+  static normalizarNome(nomeInformado: string): string {
+    if (typeof nomeInformado !== 'string') {
+      throw new ErroUsuarioInvalido('nome');
     }
-    const name = value.trim();
-    const length = Array.from(name).length;
-    if (length < 2 || length > 120) {
-      throw new InvalidUserError('name');
+    const nome = nomeInformado.trim();
+    const tamanho = Array.from(nome).length;
+    if (tamanho < 2 || tamanho > 120) {
+      throw new ErroUsuarioInvalido('nome');
     }
-    return name;
+    return nome;
   }
 
-  static normalizeEmail(value: string): string {
-    if (typeof value !== 'string') {
-      throw new InvalidUserError('email');
+  static normalizarEmail(emailInformado: string): string {
+    if (typeof emailInformado !== 'string') {
+      throw new ErroUsuarioInvalido('email');
     }
-    const email = value.trim().toLowerCase();
-    const parts = email.split('@');
-    const [local = '', domain = ''] = parts;
-    const domainLabels = domain.split('.');
+    const email = emailInformado.trim().toLowerCase();
+    const partes = email.split('@');
+    const [parteLocalDoEmail = '', dominio = ''] = partes;
+    const segmentosDominio = dominio.split('.');
     if (
       email.length > 254 ||
-      parts.length !== 2 ||
-      local.length > 64 ||
-      !EMAIL_LOCAL_PATTERN.test(local) ||
-      local.startsWith('.') ||
-      local.endsWith('.') ||
-      local.includes('..') ||
-      domainLabels.length < 2 ||
-      !domainLabels.every((label) => EMAIL_DOMAIN_LABEL_PATTERN.test(label)) ||
-      !/^[a-z]{2,}$/.test(domainLabels[domainLabels.length - 1])
+      partes.length !== 2 ||
+      parteLocalDoEmail.length > 64 ||
+      !PADRAO_EMAIL_LOCAL.test(parteLocalDoEmail) ||
+      parteLocalDoEmail.startsWith('.') ||
+      parteLocalDoEmail.endsWith('.') ||
+      parteLocalDoEmail.includes('..') ||
+      segmentosDominio.length < 2 ||
+      !segmentosDominio.every((rotulo) => PADRAO_SEGMENTO_DOMINIO_EMAIL.test(rotulo)) ||
+      !/^[a-z]{2,}$/.test(segmentosDominio[segmentosDominio.length - 1])
     ) {
-      throw new InvalidUserError('email');
+      throw new ErroUsuarioInvalido('email');
     }
     return email;
   }
 
-  static create(input: { name: string; email: string; passwordHash: string; id?: string }): User {
-    const now = new Date();
-    return new User({
-      id: input.id === undefined ? randomUUID() : input.id,
-      name: input.name,
-      email: input.email,
-      passwordHash: input.passwordHash,
-      status: 'ACTIVE',
-      createdAt: now,
-      updatedAt: now,
+  static criar(entrada: { nome: string; email: string; hashSenha: string; id?: string }): Usuario {
+    const agora = new Date();
+    return new Usuario({
+      id: entrada.id === undefined ? randomUUID() : entrada.id,
+      nome: entrada.nome,
+      email: entrada.email,
+      hashSenha: entrada.hashSenha,
+      situacao: 'ATIVO',
+      criadoEm: agora,
+      atualizadoEm: agora,
     });
   }
 
-  static restore(state: UserState): User {
-    return new User(state);
+  static restaurar(estado: EstadoUsuario): Usuario {
+    return new Usuario(estado);
   }
 
   get id(): string { return this.#id; }
-  get name(): string { return this.#name; }
+  get nome(): string { return this.#nome; }
   get email(): string { return this.#email; }
-  get passwordHash(): string { return this.#passwordHash; }
-  get status(): UserStatus { return this.#status; }
-  get createdAt(): Date { return new Date(this.#createdAt); }
-  get updatedAt(): Date { return new Date(this.#updatedAt); }
+  get hashSenha(): string { return this.#hashSenha; }
+  get situacao(): SituacaoUsuario { return this.#situacao; }
+  get criadoEm(): Date { return new Date(this.#criadoEm); }
+  get atualizadoEm(): Date { return new Date(this.#atualizadoEm); }
 }

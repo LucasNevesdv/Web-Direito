@@ -1,59 +1,59 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { decodeJwt, SignJWT } from 'jose';
 import { describe, expect, it } from 'vitest';
-import { InvalidAccessTokenError } from '../../src/application/authentication/authentication-errors.js';
-import { CryptoRefreshTokens } from '../../src/infrastructure/security/crypto-refresh-tokens.js';
-import { JoseAccessTokens } from '../../src/infrastructure/security/jose-access-tokens.js';
-import { testSecret } from '../support/authentication-fixture.js';
+import { ErroTokenAcessoInvalido } from '../../src/application/authentication/authentication-errors.js';
+import { TokensRenovacaoCriptograficos } from '../../src/infrastructure/security/crypto-refresh-tokens.js';
+import { TokensAcessoJose } from '../../src/infrastructure/security/jose-access-tokens.js';
+import { SEGREDO_TESTE } from '../support/authentication-fixture.js';
 
-const now = new Date('2026-09-23T12:00:00Z');
-const claims = { userId: randomUUID(), sessionId: randomUUID(), activeOfficeId: randomUUID(), role: 'OWNER' as const };
-const service = () => new JoseAccessTokens(testSecret, 'issuer', 'audience', 900, () => now);
+const AGORA = new Date('2026-09-23T12:00:00Z');
+const DADOS_TOKEN = { idUsuario: randomUUID(), idSessao: randomUUID(), idEscritorioAtivo: randomUUID(), papel: 'PROPRIETARIO' as const };
+const criarServicoDeTokens = () => new TokensAcessoJose(SEGREDO_TESTE, 'issuer', 'audience', 900, () => AGORA);
 
-describe('JWT access tokens', () => {
-  it('signs only necessary claims with a fifteen-minute expiration', async () => {
-    const token = await service().sign(claims);
-    const payload = decodeJwt(token);
-    expect(Object.keys(payload).sort()).toEqual(['activeOfficeId', 'aud', 'exp', 'iat', 'iss', 'role', 'sessionId', 'sub']);
-    expect(payload.exp! - payload.iat!).toBe(900);
-    expect(await service().verify(token)).toEqual(claims);
+describe("tokens de acesso JWT", () => {
+  it("assina somente claims necessárias com expiração de quinze minutos", async () => {
+    const token = await criarServicoDeTokens().criarTokenDeAcesso(DADOS_TOKEN);
+    const conteudo = decodeJwt(token);
+    expect(Object.keys(conteudo).sort()).toEqual(['activeOfficeId', 'aud', 'exp', 'iat', 'iss', 'role', 'sessionId', 'sub']);
+    expect(conteudo.exp! - conteudo.iat!).toBe(900);
+    expect(await criarServicoDeTokens().validarTokenDeAcesso(token)).toEqual(DADOS_TOKEN);
   });
 
-  it.each(['expired', 'future-issued', 'wrong-issuer', 'wrong-audience', 'wrong-algorithm', 'wrong-signature', 'missing-session', 'invalid-role', 'long-lifetime'] as const)('rejects %s', async (scenario) => {
-    const timestamp = Math.floor(now.getTime() / 1000);
-    const payload: Record<string, unknown> = { sub: claims.userId, sessionId: claims.sessionId, activeOfficeId: claims.activeOfficeId, role: 'OWNER', iss: 'issuer', aud: 'audience', iat: timestamp, exp: timestamp + 900 };
-    if (scenario === 'expired') { payload.iat = timestamp - 901; payload.exp = timestamp - 1; }
-    if (scenario === 'future-issued') { payload.iat = timestamp + 10; payload.exp = timestamp + 900; }
-    if (scenario === 'wrong-issuer') payload.iss = 'another';
-    if (scenario === 'wrong-audience') payload.aud = 'another';
-    if (scenario === 'missing-session') delete payload.sessionId;
-    if (scenario === 'invalid-role') payload.role = 'ADMIN';
-    if (scenario === 'long-lifetime') payload.exp = timestamp + 901;
-    const token = await new SignJWT(payload).setProtectedHeader({ alg: scenario === 'wrong-algorithm' ? 'HS384' : 'HS256', typ: 'JWT' })
-      .sign(scenario === 'wrong-signature' ? Buffer.alloc(48, 8) : Buffer.from(testSecret, 'base64url'));
-    await expect(service().verify(token)).rejects.toBeInstanceOf(InvalidAccessTokenError);
+  it.each(['expired', 'future-issued', 'wrong-issuer', 'wrong-audience', 'wrong-algorithm', 'wrong-signature', 'missing-session', 'invalid-role', 'long-lifetime'] as const)("rejeita %s", async (cenario) => {
+    const instante = Math.floor(AGORA.getTime() / 1000);
+    const conteudo: Record<string, unknown> = { sub: DADOS_TOKEN.idUsuario, sessionId: DADOS_TOKEN.idSessao, activeOfficeId: DADOS_TOKEN.idEscritorioAtivo, role: 'OWNER', iss: 'issuer', aud: 'audience', iat: instante, exp: instante + 900 };
+    if (cenario === 'expired') { conteudo.iat = instante - 901; conteudo.exp = instante - 1; }
+    if (cenario === 'future-issued') { conteudo.iat = instante + 10; conteudo.exp = instante + 900; }
+    if (cenario === 'wrong-issuer') conteudo.iss = 'another';
+    if (cenario === 'wrong-audience') conteudo.aud = 'another';
+    if (cenario === 'missing-session') delete conteudo.sessionId;
+    if (cenario === 'invalid-role') conteudo.role = 'ADMIN';
+    if (cenario === 'long-lifetime') conteudo.exp = instante + 901;
+    const token = await new SignJWT(conteudo).setProtectedHeader({ alg: cenario === 'wrong-algorithm' ? 'HS384' : 'HS256', typ: 'JWT' })
+      .sign(cenario === 'wrong-signature' ? Buffer.alloc(48, 8) : Buffer.from(SEGREDO_TESTE, 'base64url'));
+    await expect(criarServicoDeTokens().validarTokenDeAcesso(token)).rejects.toBeInstanceOf(ErroTokenAcessoInvalido);
   });
 
-  it.each(['invalid', 'eyJhbGciOiJub25lIn0.e30.', ''])('rejects malformed or unsigned input', async (token) => {
-    await expect(service().verify(token)).rejects.toBeInstanceOf(InvalidAccessTokenError);
+  it.each(['invalid', 'eyJhbGciOiJub25lIn0.e30.', ''])("rejeita entrada malformada ou sem assinatura", async (token) => {
+    await expect(criarServicoDeTokens().validarTokenDeAcesso(token)).rejects.toBeInstanceOf(ErroTokenAcessoInvalido);
   });
 });
 
-describe('Refresh tokens', () => {
-  it('generates independent 256-bit tokens and stores only SHA-256 digests', () => {
-    const generator = new CryptoRefreshTokens();
-    const first = generator.generate(), second = generator.generate();
-    expect(Buffer.from(first.token.split('.')[1], 'base64url')).toHaveLength(32);
-    expect(generator.parse(first.token)).toEqual({ sessionId: first.sessionId, hash: first.hash });
-    expect(generator.matches(first.hash, first.hash)).toBe(true);
-    expect(generator.matches(first.hash, second.hash)).toBe(false);
-    expect(generator.matches(first.hash, 'invalid')).toBe(false);
-    expect(first.token === second.token).toBe(false);
-    expect(first.hash === createHash('sha256').update(first.token).digest('hex')).toBe(true);
-    expect(first.hash).toMatch(/^[a-f0-9]{64}$/);
-    expect(first.hash.includes(first.token)).toBe(false);
+describe("tokens de renovação", () => {
+  it("gera tokens independentes de 256 bits e armazena somente hashes SHA-256", () => {
+    const gerador = new TokensRenovacaoCriptograficos();
+    const primeiro = gerador.gerarTokenDeRenovacao(), segundo = gerador.gerarTokenDeRenovacao();
+    expect(Buffer.from(primeiro.token.split('.')[1], 'base64url')).toHaveLength(32);
+    expect(gerador.interpretarTokenDeRenovacao(primeiro.token)).toEqual({ idSessao: primeiro.idSessao, hash: primeiro.hash });
+    expect(gerador.compararHashesDeRenovacao(primeiro.hash, primeiro.hash)).toBe(true);
+    expect(gerador.compararHashesDeRenovacao(primeiro.hash, segundo.hash)).toBe(false);
+    expect(gerador.compararHashesDeRenovacao(primeiro.hash, 'invalid')).toBe(false);
+    expect(primeiro.token === segundo.token).toBe(false);
+    expect(primeiro.hash === createHash('sha256').update(primeiro.token).digest('hex')).toBe(true);
+    expect(primeiro.hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(primeiro.hash.includes(primeiro.token)).toBe(false);
   });
-  it.each(['', 'legacy-token', 'x'.repeat(10000), `${randomUUID()}.${'!'.repeat(43)}`, `${randomUUID()}.${'A'.repeat(42)}B`])('rejects malformed refresh format %s', (token) => {
-    expect(new CryptoRefreshTokens().parse(token)).toBeNull();
+  it.each(['', 'legacy-token', 'x'.repeat(10000), `${randomUUID()}.${'!'.repeat(43)}`, `${randomUUID()}.${'A'.repeat(42)}B`])("rejeita formato de renovação malformado %s", (token) => {
+    expect(new TokensRenovacaoCriptograficos().interpretarTokenDeRenovacao(token)).toBeNull();
   });
 });

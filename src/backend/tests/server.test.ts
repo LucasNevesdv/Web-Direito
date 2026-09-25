@@ -1,95 +1,95 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => {
-  class EnvironmentError extends Error {
-    constructor(variables: string[]) {
-      super(`Invalid environment configuration: ${variables.join(', ')}`);
-      this.name = 'EnvironmentError';
+const SIMULACOES = vi.hoisted(() => {
+  class ErroAmbiente extends Error {
+    constructor(variaveis: string[]) {
+      super(`Invalid environment configuration: ${variaveis.join(', ')}`);
+      this.name = 'ErroAmbiente';
     }
   }
 
-  const environment = {
+  const ambiente = {
     DATABASE_URL: 'postgresql://example:private-password@localhost/example',
     HOST: '127.0.0.2',
     PORT: 4321,
     NODE_ENV: 'test',
   };
-  const app = {
+  const aplicacao = {
     listen: vi.fn(async () => {}),
     close: vi.fn(async () => {}),
   };
   const prisma = { $disconnect: vi.fn(async () => {}) };
-  const checker = { check: vi.fn(async () => {}) };
-  const repository = {};
-  const passwordHasher = {};
-  const registration = { execute: vi.fn() };
-  const authentication = {};
+  const verificador = { verificarConexaoComBanco: vi.fn(async () => {}) };
+  const repositorio = {};
+  const protecaoDeSenhas = {};
+  const cadastro = { cadastrarEscritorioComProprietario: vi.fn() };
+  const autenticacao = {};
 
   return {
-    EnvironmentError,
-    environment,
-    app,
+    ErroAmbiente,
+    ambiente,
+    aplicacao,
     prisma,
-    checker,
-    repository,
-    passwordHasher,
-    registration,
-    authentication,
-    limiter: {},
-    cleanup: { stop: vi.fn(async () => {}) },
-    createAuthentication: vi.fn(async () => authentication),
-    PrismaOfficeRegistrationRepository: vi.fn(function () { return repository; }),
-    Argon2PasswordHasher: vi.fn(function () { return passwordHasher; }),
-    RegisterOfficeWithOwner: vi.fn(function () { return registration; }),
-    loadEnvironment: vi.fn(() => environment),
-    createPrismaClient: vi.fn(() => prisma),
-    createPrismaHealthChecker: vi.fn(() => checker),
-    buildApp: vi.fn(() => app),
+    verificador,
+    repositorio,
+    protecaoDeSenhas,
+    cadastro,
+    autenticacao,
+    limitador: {},
+    limpeza: { parar: vi.fn(async () => {}) },
+    comporServicosDeAutenticacao: vi.fn(async () => autenticacao),
+    RepositorioCadastroEscritorioPrisma: vi.fn(function () { return repositorio; }),
+    ProtecaoDeSenhasArgon2: vi.fn(function () { return protecaoDeSenhas; }),
+    CadastroDeEscritorioComProprietario: vi.fn(function () { return cadastro; }),
+    carregarAmbiente: vi.fn(() => ambiente),
+    criarClientePrisma: vi.fn(() => prisma),
+    criarVerificadorSaudePrisma: vi.fn(() => verificador),
+    criarAplicacao: vi.fn(() => aplicacao),
   };
 });
 
-vi.mock('../src/app.js', () => ({ buildApp: mocks.buildApp }));
-vi.mock('../src/authentication.js', () => ({ createAuthentication: mocks.createAuthentication }));
-vi.mock('../src/rate-limiting.js', () => ({ createRateLimiting: () => ({ limiter: mocks.limiter, startCleanup: () => mocks.cleanup }) }));
+vi.mock('../src/app.js', () => ({ criarAplicacao: SIMULACOES.criarAplicacao }));
+vi.mock('../src/authentication.js', () => ({ comporServicosDeAutenticacao: SIMULACOES.comporServicosDeAutenticacao }));
+vi.mock('../src/rate-limiting.js', () => ({ comporLimitacaoDeRequisicoes: () => ({ limitador: SIMULACOES.limitador, iniciarLimpeza: () => SIMULACOES.limpeza }) }));
 vi.mock('../src/database.js', () => ({
-  createPrismaClient: mocks.createPrismaClient,
-  createPrismaHealthChecker: mocks.createPrismaHealthChecker,
+  criarClientePrisma: SIMULACOES.criarClientePrisma,
+  criarVerificadorSaudePrisma: SIMULACOES.criarVerificadorSaudePrisma,
 }));
 vi.mock('../src/environment.js', () => ({
-  EnvironmentError: mocks.EnvironmentError,
-  loadEnvironment: mocks.loadEnvironment,
+  ErroAmbiente: SIMULACOES.ErroAmbiente,
+  carregarAmbiente: SIMULACOES.carregarAmbiente,
 }));
 vi.mock('../src/application/onboarding/register-office-with-owner.js', () => ({
-  RegisterOfficeWithOwner: mocks.RegisterOfficeWithOwner,
+  CadastroDeEscritorioComProprietario: SIMULACOES.CadastroDeEscritorioComProprietario,
 }));
 vi.mock('../src/infrastructure/prisma/prisma-office-registration-repository.js', () => ({
-  PrismaOfficeRegistrationRepository: mocks.PrismaOfficeRegistrationRepository,
+  RepositorioCadastroEscritorioPrisma: SIMULACOES.RepositorioCadastroEscritorioPrisma,
 }));
 vi.mock('../src/infrastructure/security/argon2-password-hasher.js', () => ({
-  Argon2PasswordHasher: mocks.Argon2PasswordHasher,
+  ProtecaoDeSenhasArgon2: SIMULACOES.ProtecaoDeSenhasArgon2,
 }));
 
-const signalHandlers = new Map<string, () => void>();
-let previousExitCode: typeof process.exitCode;
+const TRATADORES_SINAIS = new Map<string, () => void>();
+let codigoSaidaAnterior: typeof process.exitCode;
 
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
-  mocks.app.listen.mockReset().mockResolvedValue(undefined);
-  mocks.app.close.mockReset().mockResolvedValue(undefined);
-  mocks.prisma.$disconnect.mockReset().mockResolvedValue(undefined);
-  mocks.loadEnvironment.mockReset().mockReturnValue(mocks.environment);
-  previousExitCode = process.exitCode;
+  SIMULACOES.aplicacao.listen.mockReset().mockResolvedValue(undefined);
+  SIMULACOES.aplicacao.close.mockReset().mockResolvedValue(undefined);
+  SIMULACOES.prisma.$disconnect.mockReset().mockResolvedValue(undefined);
+  SIMULACOES.carregarAmbiente.mockReset().mockReturnValue(SIMULACOES.ambiente);
+  codigoSaidaAnterior = process.exitCode;
   process.exitCode = undefined;
-  signalHandlers.clear();
+  TRATADORES_SINAIS.clear();
 
-  const originalOn = process.on.bind(process);
-  vi.spyOn(process, 'on').mockImplementation((event, listener) => {
-    if (event === 'SIGINT' || event === 'SIGTERM') {
-      signalHandlers.set(event, () => listener());
+  const registradorOriginal = process.on.bind(process);
+  vi.spyOn(process, 'on').mockImplementation((evento, observador) => {
+    if (evento === 'SIGINT' || evento === 'SIGTERM') {
+      TRATADORES_SINAIS.set(evento, () => observador());
       return process;
     }
-    return originalOn(event, listener);
+    return registradorOriginal(evento, observador);
   });
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(process, 'exit').mockImplementation(() => {
@@ -98,51 +98,51 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  process.exitCode = previousExitCode;
+  process.exitCode = codigoSaidaAnterior;
   vi.restoreAllMocks();
 });
 
-function triggerSignal(signal: 'SIGINT' | 'SIGTERM'): void {
-  const handler = signalHandlers.get(signal);
-  expect(handler).toBeTypeOf('function');
-  handler?.();
+function dispararSinal(sinal: 'SIGINT' | 'SIGTERM'): void {
+  const tratador = TRATADORES_SINAIS.get(sinal);
+  expect(tratador).toBeTypeOf('function');
+  tratador?.();
 }
 
-describe('backend bootstrap', () => {
-  it('composes registration, hashing and readiness and listens on the validated host and port', async () => {
+describe("inicialização do backend", () => {
+  it("compõe cadastro, hash e prontidão e escuta no host e porta validados", async () => {
     await import('../src/server.js');
 
-    expect(mocks.loadEnvironment).toHaveBeenCalledOnce();
-    expect(mocks.createPrismaClient).toHaveBeenCalledWith(
-      mocks.environment.DATABASE_URL,
+    expect(SIMULACOES.carregarAmbiente).toHaveBeenCalledOnce();
+    expect(SIMULACOES.criarClientePrisma).toHaveBeenCalledWith(
+      SIMULACOES.ambiente.DATABASE_URL,
     );
-    expect(mocks.createPrismaHealthChecker).toHaveBeenCalledWith(mocks.prisma);
-    expect(mocks.PrismaOfficeRegistrationRepository).toHaveBeenCalledWith(mocks.prisma);
-    expect(mocks.Argon2PasswordHasher).toHaveBeenCalledOnce();
-    expect(mocks.RegisterOfficeWithOwner).toHaveBeenCalledWith(
-      mocks.repository, mocks.passwordHasher,
+    expect(SIMULACOES.criarVerificadorSaudePrisma).toHaveBeenCalledWith(SIMULACOES.prisma);
+    expect(SIMULACOES.RepositorioCadastroEscritorioPrisma).toHaveBeenCalledWith(SIMULACOES.prisma);
+    expect(SIMULACOES.ProtecaoDeSenhasArgon2).toHaveBeenCalledOnce();
+    expect(SIMULACOES.CadastroDeEscritorioComProprietario).toHaveBeenCalledWith(
+      SIMULACOES.repositorio, SIMULACOES.protecaoDeSenhas,
     );
-    expect(mocks.createAuthentication).toHaveBeenCalledWith(mocks.prisma, mocks.environment, mocks.passwordHasher);
-    expect(mocks.buildApp).toHaveBeenCalledWith(mocks.checker, mocks.registration, mocks.authentication, { limiter: mocks.limiter, trustProxy: undefined });
-    expect(mocks.app.listen).toHaveBeenCalledWith({
-      host: mocks.environment.HOST,
-      port: mocks.environment.PORT,
+    expect(SIMULACOES.comporServicosDeAutenticacao).toHaveBeenCalledWith(SIMULACOES.prisma, SIMULACOES.ambiente, SIMULACOES.protecaoDeSenhas);
+    expect(SIMULACOES.criarAplicacao).toHaveBeenCalledWith(SIMULACOES.verificador, SIMULACOES.cadastro, SIMULACOES.autenticacao, { limitador: SIMULACOES.limitador, trustProxy: undefined });
+    expect(SIMULACOES.aplicacao.listen).toHaveBeenCalledWith({
+      host: SIMULACOES.ambiente.HOST,
+      port: SIMULACOES.ambiente.PORT,
     });
-    expect([...signalHandlers.keys()]).toEqual(['SIGINT', 'SIGTERM']);
-    expect(mocks.app.close).not.toHaveBeenCalled();
-    expect(mocks.prisma.$disconnect).not.toHaveBeenCalled();
+    expect([...TRATADORES_SINAIS.keys()]).toEqual(['SIGINT', 'SIGTERM']);
+    expect(SIMULACOES.aplicacao.close).not.toHaveBeenCalled();
+    expect(SIMULACOES.prisma.$disconnect).not.toHaveBeenCalled();
     expect(process.exitCode).toBeUndefined();
   });
 
-  it('cleans up a listen failure without logging the raw error or credentials', async () => {
-    mocks.app.listen.mockRejectedValueOnce(
-      new Error(`Cannot listen: ${mocks.environment.DATABASE_URL}`),
+  it("limpa recursos após falha ao escutar sem registrar erro bruto ou credenciais", async () => {
+    SIMULACOES.aplicacao.listen.mockRejectedValueOnce(
+      new Error(`Cannot listen: ${SIMULACOES.ambiente.DATABASE_URL}`),
     );
 
     await import('../src/server.js');
 
-    expect(mocks.app.close).toHaveBeenCalledOnce();
-    expect(mocks.prisma.$disconnect).toHaveBeenCalledOnce();
+    expect(SIMULACOES.aplicacao.close).toHaveBeenCalledOnce();
+    expect(SIMULACOES.prisma.$disconnect).toHaveBeenCalledOnce();
     expect(process.exitCode).toBe(1);
     expect(vi.mocked(console.error).mock.calls).toEqual([
       ['Backend startup failed.'],
@@ -150,16 +150,16 @@ describe('backend bootstrap', () => {
     expect(process.exit).not.toHaveBeenCalled();
   });
 
-  it('attempts disconnection and sanitizes cleanup errors after startup fails', async () => {
-    const privateError = new Error(mocks.environment.DATABASE_URL);
-    mocks.app.listen.mockRejectedValueOnce(privateError);
-    mocks.app.close.mockRejectedValueOnce(privateError);
-    mocks.prisma.$disconnect.mockRejectedValueOnce(privateError);
+  it("tenta desconectar e sanitiza falhas de limpeza após erro de inicialização", async () => {
+    const erroPrivado = new Error(SIMULACOES.ambiente.DATABASE_URL);
+    SIMULACOES.aplicacao.listen.mockRejectedValueOnce(erroPrivado);
+    SIMULACOES.aplicacao.close.mockRejectedValueOnce(erroPrivado);
+    SIMULACOES.prisma.$disconnect.mockRejectedValueOnce(erroPrivado);
 
     await import('../src/server.js');
 
-    expect(mocks.app.close).toHaveBeenCalledOnce();
-    expect(mocks.prisma.$disconnect).toHaveBeenCalledOnce();
+    expect(SIMULACOES.aplicacao.close).toHaveBeenCalledOnce();
+    expect(SIMULACOES.prisma.$disconnect).toHaveBeenCalledOnce();
     expect(process.exitCode).toBe(1);
     expect(vi.mocked(console.error).mock.calls).toEqual([
       ['Backend startup failed.'],
@@ -169,22 +169,22 @@ describe('backend bootstrap', () => {
   });
 
   it.each(['SIGINT', 'SIGTERM'] as const)(
-    'handles a rejected cleanup on %s and shares cleanup for repeated signals',
-    async (signal) => {
-      mocks.app.close.mockRejectedValueOnce(
-        new Error(mocks.environment.DATABASE_URL),
+    "trata rejeição de limpeza em %s e compartilha a limpeza entre sinais repetidos",
+    async (sinal) => {
+      SIMULACOES.aplicacao.close.mockRejectedValueOnce(
+        new Error(SIMULACOES.ambiente.DATABASE_URL),
       );
       await import('../src/server.js');
 
-      triggerSignal(signal);
-      triggerSignal(signal);
+      dispararSinal(sinal);
+      dispararSinal(sinal);
 
       await vi.waitFor(() => {
         expect(process.exitCode).toBe(1);
         expect(console.error).toHaveBeenCalledTimes(2);
       });
-      expect(mocks.app.close).toHaveBeenCalledOnce();
-      expect(mocks.prisma.$disconnect).toHaveBeenCalledOnce();
+      expect(SIMULACOES.aplicacao.close).toHaveBeenCalledOnce();
+      expect(SIMULACOES.prisma.$disconnect).toHaveBeenCalledOnce();
       expect(vi.mocked(console.error).mock.calls).toEqual([
         ['Backend shutdown failed.'],
         ['Backend shutdown failed.'],
@@ -193,38 +193,38 @@ describe('backend bootstrap', () => {
     },
   );
 
-  it('shares successful cleanup between SIGINT and SIGTERM', async () => {
+  it("compartilha limpeza bem-sucedida entre SIGINT e SIGTERM", async () => {
     await import('../src/server.js');
 
-    triggerSignal('SIGINT');
-    triggerSignal('SIGTERM');
+    dispararSinal('SIGINT');
+    dispararSinal('SIGTERM');
 
     await vi.waitFor(() => {
-      expect(mocks.prisma.$disconnect).toHaveBeenCalledOnce();
+      expect(SIMULACOES.prisma.$disconnect).toHaveBeenCalledOnce();
     });
-    expect(mocks.app.close).toHaveBeenCalledOnce();
+    expect(SIMULACOES.aplicacao.close).toHaveBeenCalledOnce();
     expect(process.exitCode).toBeUndefined();
-    expect(mocks.cleanup.stop).toHaveBeenCalledOnce();
+    expect(SIMULACOES.limpeza.parar).toHaveBeenCalledOnce();
     expect(console.error).not.toHaveBeenCalled();
     expect(process.exit).not.toHaveBeenCalled();
   });
 
-  it('reports invalid configuration before creating application or database resources', async () => {
-    mocks.loadEnvironment.mockImplementationOnce(() => {
-      throw new mocks.EnvironmentError(['DATABASE_URL', 'PORT']);
+  it("informa configuração inválida antes de criar recursos da aplicação ou do banco", async () => {
+    SIMULACOES.carregarAmbiente.mockImplementationOnce(() => {
+      throw new SIMULACOES.ErroAmbiente(['DATABASE_URL', 'PORT']);
     });
 
     await import('../src/server.js');
 
-    expect(mocks.createPrismaClient).not.toHaveBeenCalled();
-    expect(mocks.createPrismaHealthChecker).not.toHaveBeenCalled();
-    expect(mocks.buildApp).not.toHaveBeenCalled();
-    expect(mocks.PrismaOfficeRegistrationRepository).not.toHaveBeenCalled();
-    expect(mocks.Argon2PasswordHasher).not.toHaveBeenCalled();
-    expect(mocks.RegisterOfficeWithOwner).not.toHaveBeenCalled();
-    expect(mocks.app.listen).not.toHaveBeenCalled();
-    expect(mocks.app.close).not.toHaveBeenCalled();
-    expect(mocks.prisma.$disconnect).not.toHaveBeenCalled();
+    expect(SIMULACOES.criarClientePrisma).not.toHaveBeenCalled();
+    expect(SIMULACOES.criarVerificadorSaudePrisma).not.toHaveBeenCalled();
+    expect(SIMULACOES.criarAplicacao).not.toHaveBeenCalled();
+    expect(SIMULACOES.RepositorioCadastroEscritorioPrisma).not.toHaveBeenCalled();
+    expect(SIMULACOES.ProtecaoDeSenhasArgon2).not.toHaveBeenCalled();
+    expect(SIMULACOES.CadastroDeEscritorioComProprietario).not.toHaveBeenCalled();
+    expect(SIMULACOES.aplicacao.listen).not.toHaveBeenCalled();
+    expect(SIMULACOES.aplicacao.close).not.toHaveBeenCalled();
+    expect(SIMULACOES.prisma.$disconnect).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
     expect(vi.mocked(console.error).mock.calls).toEqual([
       ['Invalid environment configuration: DATABASE_URL, PORT'],

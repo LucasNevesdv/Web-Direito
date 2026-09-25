@@ -20,8 +20,8 @@ seguir Clean Architecture, com PostgreSQL e Prisma como infraestrutura.
 
 ## Progresso da TASK-003
 
-**Domínio e persistência de escritórios: concluída no escopo da TASK-003.** Entidade `Office` com
-UUID, nome normalizado, estado e datas; caso de uso `CreateOffice`; contrato
+**Domínio e persistência de escritórios: concluída no escopo da TASK-003.** Entidade `Escritorio` com
+UUID, nome normalizado, estado e datas; caso de uso `CadastroDeEscritorio`; contrato
 específico, repositórios em memória e Prisma e mapper organizados em camadas.
 O schema e a primeira migration introduzem a tabela de escritórios.
 
@@ -45,7 +45,7 @@ com usuário e vínculo iniciais.**
 
 A página `/register` envia o cadastro para `POST /api/v1/onboarding`; o backend
 valida os dados, protege a senha com Argon2id e persiste escritório, usuário e
-vínculo OWNER na mesma transação. O e-mail normalizado possui restrição única
+vínculo PROPRIETARIO na mesma transação. O e-mail normalizado possui restrição única
 global, com conflito previsível em concorrência. A interface trata erros de
 campo, conflito, carregamento e sucesso, sem persistir senha no navegador ou
 iniciar sessão.
@@ -75,13 +75,13 @@ escritórios e usuários nem implementa auditoria ou autorização entre escrit�
 
 ## Login — RF-003
 
-RF-003 concluído: login por e-mail/senha, Session persistida, access token de
+RF-003 concluído: login por e-mail/senha, Sessao persistida, access token de
 15 minutos, refresh protegido de 7 dias, `/me` autenticado e área provisória
 no frontend. O gerenciamento dos tokens, a renovação e o logout foram concluídos
 na entrega RF-004/RF-005/RF-006 abaixo. Autorização dos demais módulos permanece pendente.
 
 A migration `20260923171012_create_sessions` foi revisada e aplicada sem remover
-dados ou migrations anteriores. Usuário INACTIVE é reconhecido para negar acesso.
+dados ou migrations anteriores. Usuário INATIVO é reconhecido para negar acesso.
 Na versão inicial de RF-003, recarregar exigia novo login; esse limite foi
 resolvido por RF-005. A numeração dos requisitos posteriores foi
 ajustada em [requirements.md](requirements.md), preservando os módulos planejados.
@@ -93,8 +93,8 @@ ausência de tokens no armazenamento web/logs e limpeza dos registros de teste.
 Verificação histórica de RF-003: 309 testes aprovados (277 backend e 32 frontend), lint, typecheck
 e build. No Chrome headless, cadastro retornou 201, login e `/me` retornaram 200,
 e senha errada retornou 401 genérico. Cookie HttpOnly/SameSite=Lax confirmado;
-nenhum token em localStorage/sessionStorage e somente hash do refresh na Session.
-Recarregar exigiu novo login. Session, Membership, User e Office temporários
+nenhum token em localStorage/sessionStorage e somente hash do refresh na Sessao.
+Recarregar exigiu novo login. Sessao, VinculoEscritorio, Usuario e Escritorio temporários
 foram removidos e os recursos de teste encerrados. O 404 preexistente de
 `/favicon.ico` foi registrado como pendência visual e resolvido na melhoria técnica abaixo.
 
@@ -128,7 +128,7 @@ reutilização 401 com revogação persistida e logout 204 com cookie removido.
 Reload e retorno pelo histórico após logout exibiram login. Duas atualizações
 concorrentes reais consumiram o hash uma única vez. Nenhum token no armazenamento
 web ou logs. Limpeza confirmou zero resíduos após remover três sessões, um
-Membership, um User e um Office; somente os processos do teste foram encerrados.
+VinculoEscritorio, um Usuario e um Escritorio; somente os processos do teste foram encerrados.
 O 404 de favicon preexistente foi resolvido na melhoria técnica seguinte.
 
 ## Melhoria técnica dos RF-004 a RF-006 e RNF-002/RNF-003

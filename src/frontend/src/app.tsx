@@ -1,33 +1,33 @@
-import { RegisterPage } from './register-page';
-import { LoginPage } from './login-page';
+import { PaginaCadastro } from './register-page';
+import { PaginaLogin } from './login-page';
 import { useEffect, useSyncExternalStore } from 'react';
-import { AuthProvider, useAuth } from './auth-context';
-import type { AuthClient } from './auth-client';
-import { authClient } from './authentication';
-import { navigate } from './routing';
+import { ProvedorAutenticacao, useAutenticacao } from './auth-context';
+import type { ClienteAutenticacao } from './auth-client';
+import { CLIENTE_AUTENTICACAO } from './authentication';
+import { navegar } from './routing';
 
-const subscribePath = (listener: () => void) => {
-  window.addEventListener('popstate', listener);
-  return () => window.removeEventListener('popstate', listener);
+const observarCaminho = (aoAlterarCaminho: () => void) => {
+  window.addEventListener('popstate', aoAlterarCaminho);
+  return () => window.removeEventListener('popstate', aoAlterarCaminho);
 };
 
-export function App({ client = authClient }: { client?: AuthClient }) {
-  return <AuthProvider client={client}><Routes /></AuthProvider>;
+export function Aplicacao({ cliente = CLIENTE_AUTENTICACAO }: { cliente?: ClienteAutenticacao }) {
+  return <ProvedorAutenticacao cliente={cliente}><Rotas /></ProvedorAutenticacao>;
 }
 
-function Routes() {
-  const { status } = useAuth();
-  const path = useSyncExternalStore(subscribePath, () => window.location.pathname);
+function Rotas() {
+  const { situacao } = useAutenticacao();
+  const caminho = useSyncExternalStore(observarCaminho, () => window.location.pathname);
   useEffect(() => {
-    if (path === '/login' && status === 'authenticated') navigate('/app');
-    if (path !== '/' && path !== '/register' && path !== '/login' && status === 'unauthenticated') navigate('/login');
-  }, [path, status]);
-  if (path !== '/' && path !== '/register') {
-    if (status === 'loading') return <main className="min-h-screen bg-slate-950 p-12 text-slate-100"><p role="status">Restaurando sessão…</p></main>;
-    return <LoginPage />;
+    if (caminho === '/login' && situacao === 'autenticado') navegar('/app');
+    if (caminho !== '/' && caminho !== '/register' && caminho !== '/login' && situacao === 'naoAutenticado') navegar('/login');
+  }, [caminho, situacao]);
+  if (caminho !== '/' && caminho !== '/register') {
+    if (situacao === 'carregando') return <main className="min-h-screen bg-slate-950 p-12 text-slate-100"><p role="status">Restaurando sessão…</p></main>;
+    return <PaginaLogin />;
   }
-  if (path === '/register') {
-    return <RegisterPage />;
+  if (caminho === '/register') {
+    return <PaginaCadastro />;
   }
 
   return (

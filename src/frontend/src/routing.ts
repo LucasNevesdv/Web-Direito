@@ -1,4 +1,4 @@
-export function navigate(path: string) {
-  window.history.replaceState({}, '', path);
+export function navegar(caminho: string) {
+  window.history.replaceState({}, '', caminho);
   window.dispatchEvent(new PopStateEvent('popstate'));
 }

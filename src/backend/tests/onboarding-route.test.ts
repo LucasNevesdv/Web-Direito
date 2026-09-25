@@ -1,244 +1,244 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildApp } from '../src/app.js';
-import { rateLimiterFixture } from './support/rate-limiter-fixture.js';
-import { EmailAlreadyRegisteredError } from '../src/application/onboarding/email-already-registered-error.js';
-import { InvalidRegistrationError } from '../src/application/onboarding/invalid-registration-error.js';
-import type { RegisterOfficeWithOwner } from '../src/application/onboarding/register-office-with-owner.js';
+import { criarAplicacao } from '../src/app.js';
+import { criarCenarioLimitador } from './support/rate-limiter-fixture.js';
+import { ErroEmailJaCadastrado } from '../src/application/onboarding/email-already-registered-error.js';
+import { ErroCadastroInvalido } from '../src/application/onboarding/invalid-registration-error.js';
+import type { CadastroDeEscritorioComProprietario } from '../src/application/onboarding/register-office-with-owner.js';
 
-const apps: ReturnType<typeof buildApp>[] = [];
-const input = {
-  officeName: 'Escritório de teste',
-  adminName: 'Responsável de teste',
+const APLICACOES: ReturnType<typeof criarAplicacao>[] = [];
+const ENTRADA = {
+  nomeEscritorio: 'Escritório de teste',
+  nomeAdministrador: 'Responsável de teste',
   email: 'owner@example.test',
-  password: 'test-only-password',
+  senha: 'test-only-password',
 };
-const publicResult = {
-  office: {
+const RESULTADO_PUBLICO = {
+  escritorio: {
     id: '650a7eb3-55ed-4b2c-9232-6ef73164bc10',
-    name: input.officeName,
-    status: 'ACTIVE' as const,
-    createdAt: new Date('2026-01-01T00:00:00.000Z'),
-    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    nome: ENTRADA.nomeEscritorio,
+    situacao: 'ATIVO' as const,
+    criadoEm: new Date('2026-01-01T00:00:00.000Z'),
+    atualizadoEm: new Date('2026-01-01T00:00:00.000Z'),
   },
-  user: {
+  usuario: {
     id: '99796506-2a94-45a7-b15a-93d9c5990c97',
-    name: input.adminName,
-    email: input.email,
+    nome: ENTRADA.nomeAdministrador,
+    email: ENTRADA.email,
   },
-  role: 'OWNER' as const,
+  papel: 'PROPRIETARIO' as const,
 };
 
-function createApp() {
-  const execute = vi.fn<RegisterOfficeWithOwner['execute']>()
-    .mockResolvedValue(publicResult);
-  const check = vi.fn().mockResolvedValue(undefined);
-  const app = buildApp({ check }, { execute }, undefined, { limiter: rateLimiterFixture().limiter });
-  apps.push(app);
-  return { app, execute, check };
+function criarAplicacaoTeste() {
+  const cadastrarEscritorioSimulado = vi.fn<CadastroDeEscritorioComProprietario['cadastrarEscritorioComProprietario']>()
+    .mockResolvedValue(RESULTADO_PUBLICO);
+  const verificarConexaoSimulada = vi.fn().mockResolvedValue(undefined);
+  const aplicacao = criarAplicacao({ verificarConexaoComBanco: verificarConexaoSimulada }, { cadastrarEscritorioComProprietario: cadastrarEscritorioSimulado }, undefined, { limitador: criarCenarioLimitador().limitador });
+  APLICACOES.push(aplicacao);
+  return { aplicacao, cadastrarEscritorioSimulado, verificarConexaoSimulada };
 }
 
 afterEach(async () => {
-  await Promise.all(apps.splice(0).map((app) => app.close()));
+  await Promise.all(APLICACOES.splice(0).map((aplicacao) => aplicacao.close()));
   vi.restoreAllMocks();
 });
 
 describe('POST /api/v1/onboarding', () => {
-  it('returns only the public office, user and OWNER role with HTTP 201', async () => {
-    const { app, execute, check } = createApp();
-    const resultWithPrivateFields = {
-      ...publicResult,
-      password: input.password,
+  it("retorna somente escritório, usuário e papel PROPRIETARIO públicos com HTTP 201", async () => {
+    const { aplicacao, cadastrarEscritorioSimulado, verificarConexaoSimulada } = criarAplicacaoTeste();
+    const resultadoComCamposPrivados = {
+      ...RESULTADO_PUBLICO,
+      senha: ENTRADA.senha,
       token: 'should-not-be-returned',
-      user: { ...publicResult.user, passwordHash: 'private-hash' },
+      usuario: { ...RESULTADO_PUBLICO.usuario, hashSenha: 'private-hash' },
     };
-    execute.mockResolvedValueOnce(resultWithPrivateFields);
+    cadastrarEscritorioSimulado.mockResolvedValueOnce(resultadoComCamposPrivados);
 
-    const response = await app.inject({
-      method: 'POST', url: '/api/v1/onboarding', payload: input,
+    const resposta = await aplicacao.inject({
+      method: 'POST', url: '/api/v1/onboarding', payload: ENTRADA,
     });
 
-    expect(response.statusCode).toBe(201);
-    expect(response.json()).toEqual({
-      ...publicResult,
-      office: {
-        ...publicResult.office,
-        createdAt: publicResult.office.createdAt.toISOString(),
-        updatedAt: publicResult.office.updatedAt.toISOString(),
+    expect(resposta.statusCode).toBe(201);
+    expect(resposta.json()).toEqual({
+      ...RESULTADO_PUBLICO,
+      escritorio: {
+        ...RESULTADO_PUBLICO.escritorio,
+        criadoEm: RESULTADO_PUBLICO.escritorio.criadoEm.toISOString(),
+        atualizadoEm: RESULTADO_PUBLICO.escritorio.atualizadoEm.toISOString(),
       },
     });
-    expect(execute).toHaveBeenCalledOnce();
-    expect(execute).toHaveBeenCalledWith(input);
-    expect(check).not.toHaveBeenCalled();
-    expect(response.headers['set-cookie']).toBeUndefined();
-    for (const privateValue of [input.password, 'passwordHash', 'private-hash', 'token']) {
-      expect(response.body).not.toContain(privateValue);
+    expect(cadastrarEscritorioSimulado).toHaveBeenCalledOnce();
+    expect(cadastrarEscritorioSimulado).toHaveBeenCalledWith(ENTRADA);
+    expect(verificarConexaoSimulada).not.toHaveBeenCalled();
+    expect(resposta.headers['set-cookie']).toBeUndefined();
+    for (const valorPrivado of [ENTRADA.senha, 'hashSenha', 'private-hash', 'token']) {
+      expect(resposta.body).not.toContain(valorPrivado);
     }
   });
 
-  it('normalizes names and email without trimming the password', async () => {
-    const { app, execute } = createApp();
-    const password = ` ${input.password} `;
+  it("normaliza nomes e e-mail sem remover espaços da senha", async () => {
+    const { aplicacao, cadastrarEscritorioSimulado } = criarAplicacaoTeste();
+    const senha = ` ${ENTRADA.senha} `;
 
-    const response = await app.inject({
+    const resposta = await aplicacao.inject({
       method: 'POST', url: '/api/v1/onboarding', payload: {
-        officeName: `  ${input.officeName}  `,
-        adminName: `  ${input.adminName}  `,
+        nomeEscritorio: `  ${ENTRADA.nomeEscritorio}  `,
+        nomeAdministrador: `  ${ENTRADA.nomeAdministrador}  `,
         email: '  OWNER@EXAMPLE.TEST  ',
-        password,
+        senha,
       },
     });
 
-    expect(response.statusCode).toBe(201);
-    expect(execute).toHaveBeenCalledOnce();
-    expect(execute).toHaveBeenCalledWith({ ...input, password });
+    expect(resposta.statusCode).toBe(201);
+    expect(cadastrarEscritorioSimulado).toHaveBeenCalledOnce();
+    expect(cadastrarEscritorioSimulado).toHaveBeenCalledWith({ ...ENTRADA, senha });
   });
 
   it.each([
-    ['officeName', ''],
-    ['officeName', 'x'],
-    ['officeName', 'x'.repeat(121)],
-    ['adminName', '  '],
-    ['adminName', 'x'],
-    ['adminName', 'x'.repeat(121)],
+    ['nomeEscritorio', ''],
+    ['nomeEscritorio', 'x'],
+    ['nomeEscritorio', 'x'.repeat(121)],
+    ['nomeAdministrador', '  '],
+    ['nomeAdministrador', 'x'],
+    ['nomeAdministrador', 'x'.repeat(121)],
     ['email', 'invalid-email'],
-    ['password', 'x'.repeat(11)],
-    ['password', 'x'.repeat(129)],
-    ['password', { private: 'nested-private-value' }],
-  ])('rejects invalid %s with a safe field message and HTTP 400', async (field, value) => {
-    const { app, execute } = createApp();
+    ['senha', 'x'.repeat(11)],
+    ['senha', 'x'.repeat(129)],
+    ['senha', { private: 'nested-private-value' }],
+  ])("rejeita %s inválido com mensagem segura por campo e HTTP 400", async (campo, valor) => {
+    const { aplicacao, cadastrarEscritorioSimulado } = criarAplicacaoTeste();
 
-    const response = await app.inject({
-      method: 'POST', url: '/api/v1/onboarding', payload: { ...input, [field]: value },
+    const resposta = await aplicacao.inject({
+      method: 'POST', url: '/api/v1/onboarding', payload: { ...ENTRADA, [campo]: valor },
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
-      error: 'VALIDATION_ERROR', fields: { [field]: expect.any(String) },
+    expect(resposta.statusCode).toBe(400);
+    expect(resposta.json()).toMatchObject({
+      erro: 'ERRO_VALIDACAO', campos: { [campo]: expect.any(String) },
     });
-    expect(response.body).not.toContain(input.password);
-    expect(response.body).not.toContain('nested-private-value');
-    expect(execute).not.toHaveBeenCalled();
+    expect(resposta.body).not.toContain(ENTRADA.senha);
+    expect(resposta.body).not.toContain('nested-private-value');
+    expect(cadastrarEscritorioSimulado).not.toHaveBeenCalled();
   });
 
-  it('rejects missing required fields without running registration', async () => {
-    const { app, execute } = createApp();
-    const response = await app.inject({
+  it("rejeita campos obrigatórios ausentes sem executar o cadastro", async () => {
+    const { aplicacao, cadastrarEscritorioSimulado } = criarAplicacaoTeste();
+    const resposta = await aplicacao.inject({
       method: 'POST', url: '/api/v1/onboarding', payload: {},
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(Object.keys(response.json().fields)).toEqual([
-      'officeName', 'adminName', 'email', 'password',
+    expect(resposta.statusCode).toBe(400);
+    expect(Object.keys(resposta.json().campos)).toEqual([
+      'nomeEscritorio', 'nomeAdministrador', 'email', 'senha',
     ]);
-    expect(execute).not.toHaveBeenCalled();
+    expect(cadastrarEscritorioSimulado).not.toHaveBeenCalled();
   });
 
-  it.each(['id', 'officeId', 'userId', 'role', 'status', 'createdAt', 'updatedAt', 'passwordConfirmation'])(
-    'rejects a client-supplied %s', async (field) => {
-      const { app, execute } = createApp();
-      const response = await app.inject({
+  it.each(['id', 'idEscritorio', 'idUsuario', 'papel', 'situacao', 'criadoEm', 'atualizadoEm', 'confirmacaoSenha'])(
+    "rejeita %s fornecido pelo cliente", async (campo) => {
+      const { aplicacao, cadastrarEscritorioSimulado } = criarAplicacaoTeste();
+      const resposta = await aplicacao.inject({
         method: 'POST', url: '/api/v1/onboarding',
-        payload: { ...input, [field]: 'private-client-value' },
+        payload: { ...ENTRADA, [campo]: 'private-client-value' },
       });
 
-      expect(response.statusCode).toBe(400);
-      expect(response.json()).toEqual({
-        error: 'VALIDATION_ERROR', message: 'Confira os dados do cadastro.',
+      expect(resposta.statusCode).toBe(400);
+      expect(resposta.json()).toEqual({
+        erro: 'ERRO_VALIDACAO', mensagem: 'Confira os dados do cadastro.',
       });
-      expect(response.body).not.toContain('private-client-value');
-      expect(execute).not.toHaveBeenCalled();
+      expect(resposta.body).not.toContain('private-client-value');
+      expect(cadastrarEscritorioSimulado).not.toHaveBeenCalled();
     },
   );
 
-  it('translates an application validation failure into a safe HTTP 400 response', async () => {
-    const { app, execute } = createApp();
-    execute.mockRejectedValueOnce(new InvalidRegistrationError('adminName'));
+  it("converte falha de validação da aplicação em resposta HTTP 400 segura", async () => {
+    const { aplicacao, cadastrarEscritorioSimulado } = criarAplicacaoTeste();
+    cadastrarEscritorioSimulado.mockRejectedValueOnce(new ErroCadastroInvalido('nomeAdministrador'));
 
-    const response = await app.inject({
-      method: 'POST', url: '/api/v1/onboarding', payload: input,
+    const resposta = await aplicacao.inject({
+      method: 'POST', url: '/api/v1/onboarding', payload: ENTRADA,
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
-      error: 'VALIDATION_ERROR', fields: { adminName: expect.any(String) },
+    expect(resposta.statusCode).toBe(400);
+    expect(resposta.json()).toMatchObject({
+      erro: 'ERRO_VALIDACAO', campos: { nomeAdministrador: expect.any(String) },
     });
   });
 
-  it('returns HTTP 409 for a known email conflict without exposing the email', async () => {
-    const { app, execute } = createApp();
-    execute.mockRejectedValueOnce(new EmailAlreadyRegisteredError());
+  it("retorna HTTP 409 para conflito conhecido sem expor o e-mail", async () => {
+    const { aplicacao, cadastrarEscritorioSimulado } = criarAplicacaoTeste();
+    cadastrarEscritorioSimulado.mockRejectedValueOnce(new ErroEmailJaCadastrado());
 
-    const response = await app.inject({
-      method: 'POST', url: '/api/v1/onboarding', payload: input,
+    const resposta = await aplicacao.inject({
+      method: 'POST', url: '/api/v1/onboarding', payload: ENTRADA,
     });
 
-    expect(response.statusCode).toBe(409);
-    expect(response.json()).toEqual({
-      error: 'EMAIL_ALREADY_REGISTERED', message: 'Este e-mail já está cadastrado.',
+    expect(resposta.statusCode).toBe(409);
+    expect(resposta.json()).toEqual({
+      erro: 'EMAIL_JA_CADASTRADO', mensagem: 'Este e-mail já está cadastrado.',
     });
-    expect(response.body).not.toContain(input.email);
-    expect(response.body).not.toContain(input.password);
+    expect(resposta.body).not.toContain(ENTRADA.email);
+    expect(resposta.body).not.toContain(ENTRADA.senha);
   });
 
-  it('sanitizes unexpected failures without logging request data or database errors', async () => {
-    const { app, execute } = createApp();
-    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const infoLog = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const internalError = new Error('private database connection and hash details');
-    execute.mockRejectedValueOnce(internalError);
+  it("sanitiza falhas inesperadas sem registrar dados da requisição ou erros do banco", async () => {
+    const { aplicacao, cadastrarEscritorioSimulado } = criarAplicacaoTeste();
+    const logErros = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logInformacoes = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const erroInterno = new Error('private database connection and hash details');
+    cadastrarEscritorioSimulado.mockRejectedValueOnce(erroInterno);
 
-    const response = await app.inject({
-      method: 'POST', url: '/api/v1/onboarding', payload: input,
+    const resposta = await aplicacao.inject({
+      method: 'POST', url: '/api/v1/onboarding', payload: ENTRADA,
     });
 
-    expect(response.statusCode).toBe(500);
-    expect(response.json()).toEqual({
-      error: 'INTERNAL_ERROR',
-      message: 'Não foi possível concluir o cadastro. Tente novamente.',
+    expect(resposta.statusCode).toBe(500);
+    expect(resposta.json()).toEqual({
+      erro: 'ERRO_INTERNO',
+      mensagem: 'Não foi possível concluir o cadastro. Tente novamente.',
     });
-    for (const value of [input.password, internalError.message, 'stack', 'passwordHash']) {
-      expect(response.body).not.toContain(value);
+    for (const valor of [ENTRADA.senha, erroInterno.message, 'stack', 'hashSenha']) {
+      expect(resposta.body).not.toContain(valor);
     }
-    expect(errorLog).not.toHaveBeenCalled();
-    expect(infoLog).not.toHaveBeenCalled();
+    expect(logErros).not.toHaveBeenCalled();
+    expect(logInformacoes).not.toHaveBeenCalled();
   });
 
   it.each([
     ['application/json', '{"password":"private-invalid-json"'],
-    ['application/json', JSON.stringify({ ...input, password: 'private-oversized-value'.repeat(1000) })],
+    ['application/json', JSON.stringify({ ...ENTRADA, senha: 'private-oversized-value'.repeat(1000) })],
     ['application/octet-stream', 'private-unsupported-body'],
-  ])('sanitizes parser errors for %s', async (contentType, payload) => {
-    const { app, execute } = createApp();
-    const response = await app.inject({
+  ])("sanitiza erros de interpretação de %s", async (tipoConteudo, conteudo) => {
+    const { aplicacao, cadastrarEscritorioSimulado } = criarAplicacaoTeste();
+    const resposta = await aplicacao.inject({
       method: 'POST', url: '/api/v1/onboarding',
-      headers: { 'content-type': contentType }, payload,
+      headers: { 'content-type': tipoConteudo }, payload: conteudo,
     });
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({
-      error: 'VALIDATION_ERROR', message: 'Confira os dados do cadastro.',
+    expect(resposta.statusCode).toBe(400);
+    expect(resposta.json()).toEqual({
+      erro: 'ERRO_VALIDACAO', mensagem: 'Confira os dados do cadastro.',
     });
-    expect(response.body).not.toContain('private-');
-    expect(execute).not.toHaveBeenCalled();
+    expect(resposta.body).not.toContain('private-');
+    expect(cadastrarEscritorioSimulado).not.toHaveBeenCalled();
   });
 
-  it('preserves health and readiness independently of onboarding', async () => {
-    const { app, execute, check } = createApp();
-    execute.mockRejectedValue(new Error('registration unavailable'));
+  it("preserva saúde e prontidão independentemente do cadastro", async () => {
+    const { aplicacao, cadastrarEscritorioSimulado, verificarConexaoSimulada } = criarAplicacaoTeste();
+    cadastrarEscritorioSimulado.mockRejectedValue(new Error('registration unavailable'));
 
-    const health = await app.inject({ method: 'GET', url: '/health' });
-    expect(health.statusCode).toBe(200);
-    expect(health.json()).toEqual({ status: 'ok' });
-    expect(check).not.toHaveBeenCalled();
+    const saude = await aplicacao.inject({ method: 'GET', url: '/health' });
+    expect(saude.statusCode).toBe(200);
+    expect(saude.json()).toEqual({ situacao: 'ok' });
+    expect(verificarConexaoSimulada).not.toHaveBeenCalled();
 
-    const ready = await app.inject({ method: 'GET', url: '/ready' });
-    expect(ready.statusCode).toBe(200);
-    expect(ready.json()).toEqual({ status: 'ready' });
+    const prontidao = await aplicacao.inject({ method: 'GET', url: '/ready' });
+    expect(prontidao.statusCode).toBe(200);
+    expect(prontidao.json()).toEqual({ situacao: 'ready' });
 
-    check.mockRejectedValueOnce(new Error('private database failure'));
-    const unavailable = await app.inject({ method: 'GET', url: '/ready' });
-    expect(unavailable.statusCode).toBe(503);
-    expect(unavailable.json()).toEqual({ status: 'not_ready' });
-    expect(execute).not.toHaveBeenCalled();
+    verificarConexaoSimulada.mockRejectedValueOnce(new Error('private database failure'));
+    const indisponivel = await aplicacao.inject({ method: 'GET', url: '/ready' });
+    expect(indisponivel.statusCode).toBe(503);
+    expect(indisponivel.json()).toEqual({ situacao: 'not_ready' });
+    expect(cadastrarEscritorioSimulado).not.toHaveBeenCalled();
   });
 });

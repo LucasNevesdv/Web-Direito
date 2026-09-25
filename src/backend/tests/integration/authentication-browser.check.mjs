@@ -8,415 +8,477 @@ import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from '../../../frontend/node_modules/vite/dist/node/index.js';
-import { loadEnvironment } from '../../dist/environment.js';
-import { createPrismaClient } from '../../dist/database.js';
+import { carregarAmbiente } from '../../dist/environment.js';
+import { criarClientePrisma } from '../../dist/database.js';
 import { SignJWT } from 'jose';
-import { PrismaAuthenticationRepository } from '../../dist/infrastructure/prisma/prisma-authentication-repository.js';
-import { Session } from '../../dist/domain/sessions/session.js';
-import { HmacRateLimitKeys } from '../../dist/infrastructure/security/hmac-rate-limit-keys.js';
+import { RepositorioAutenticacaoPrisma } from '../../dist/infrastructure/prisma/prisma-authentication-repository.js';
+import { Sessao } from '../../dist/domain/sessions/session.js';
+import { ChavesLimiteRequisicoesHmac } from '../../dist/infrastructure/security/hmac-rate-limit-keys.js';
+import { RepositorioEscritoriosPrisma } from '../../dist/infrastructure/prisma/prisma-offices-repository.js';
+import { MAPEADOR_ESCRITORIO } from '../../dist/infrastructure/prisma/office-mapper.js';
+import { converterSessaoEmRegistroPrisma } from '../../dist/infrastructure/prisma/authentication-mapper.js';
 
-const backendDirectory = fileURLToPath(new URL('../../', import.meta.url));
-const workspace = dirname(backendDirectory.replace(/[\\/]$/, ''));
-const runId = randomUUID();
-const officeName = `RF004-006 browser ${runId}`;
-const adminName = 'Browser Login Verification';
-const email = `rf004-006-browser-${runId}@example.invalid`;
-const password = randomUUID() + randomUUID();
-const processLogs = [];
-let prisma, backend, frontend, chrome, browser, secondBrowser, profile, ownsRecords = false;
-const rateSecret = randomBytes(48).toString('base64url');
-const keys = new HmacRateLimitKeys(rateSecret);
-const rateHashes = ['onboarding-ip', 'login-ip', 'login-identity', 'refresh-ip'].map((scope) => keys.digest(scope, '127.0.0.1', email));
-let phase = 'setup';
-let accessToken, refreshToken;
-const intercepted = new Map();
+const DIRETORIO_BACKEND = fileURLToPath(new URL('../../', import.meta.url));
+const DIRETORIO_WORKSPACE = dirname(DIRETORIO_BACKEND.replace(/[\\/]$/, ''));
+const ID_EXECUCAO = randomUUID();
+const NOME_ESCRITORIO = `RF004-006 browser ${ID_EXECUCAO}`;
+const NOME_ADMINISTRADOR = 'Browser Login Verification';
+const EMAIL = `rf004-006-browser-${ID_EXECUCAO}@example.invalid`;
+const SENHA = randomUUID() + randomUUID();
+const LOGS_PROCESSOS = [];
+let prisma, backend, frontend, chrome, navegador, segundoNavegador, perfil, possuiRegistros = false;
+const SEGREDO_LIMITADOR = randomBytes(48).toString('base64url');
+const CHAVES = new ChavesLimiteRequisicoesHmac(SEGREDO_LIMITADOR);
+const HASHES_LIMITADOR = ['onboarding-ip', 'login-ip', 'login-identity', 'refresh-ip'].map((escopo) => CHAVES.gerarHashDaChave(escopo, '127.0.0.1', EMAIL));
+let etapa = 'setup';
+let tokenAcesso, tokenRenovacao;
+const INTERCEPTADOS = new Map();
+let registrosAnteriores;
 
-async function handlePaused(connection, params) {
-  try {
-    if (!params.responseStatusCode) {
-      const headers = Object.entries(params.request.headers).filter(([name]) => name.toLowerCase() !== 'authorization').map(([name, value]) => ({ name, value }));
-      if (connection.expiredAccessToken) {
-        headers.push({ name: 'Authorization', value: `Bearer ${connection.expiredAccessToken}` });
-        connection.expiredAccessToken = undefined;
-        await connection.send('Fetch.continueRequest', { requestId: params.requestId, headers });
-      } else await connection.send('Fetch.continueRequest', { requestId: params.requestId });
-      return;
-    }
-    let body = null;
-    if (params.responseStatusCode !== 204) {
-      const raw = await connection.send('Fetch.getResponseBody', { requestId: params.requestId });
-      body = JSON.parse(raw.base64Encoded ? Buffer.from(raw.body, 'base64').toString() : raw.body);
-    }
-    await connection.send('Fetch.continueResponse', { requestId: params.requestId });
-    intercepted.set(params.networkId, { status: params.responseStatusCode, body });
-  } catch { fail('browser_response_interception'); }
+async function lerRegistrosExistentes() {
+  const [escritorios, usuarios, vinculos, sessoes] = await Promise.all([
+    prisma.office.findMany({ orderBy: { id: 'asc' } }),
+    prisma.user.findMany({ orderBy: { id: 'asc' } }),
+    prisma.membership.findMany({ orderBy: { id: 'asc' } }),
+    prisma.session.findMany({ orderBy: { id: 'asc' } }),
+  ]);
+  return { escritorios, usuarios, vinculos, sessoes };
 }
 
-function report(phase, values = {}) { console.log(JSON.stringify({ phase, ok: true, ...values })); }
-function fail(phase) { console.error(JSON.stringify({ phase, ok: false })); process.exitCode = 1; }
-async function until(check, milliseconds = 20000) {
-  const deadline = Date.now() + milliseconds;
-  while (Date.now() < deadline) { const value = await check(); if (value) return value; await delay(100); }
+async function verificarLeituraExistente(registros) {
+  const escritorios = new RepositorioEscritoriosPrisma(prisma);
+  const autenticacao = new RepositorioAutenticacaoPrisma(prisma);
+  for (const registro of registros.escritorios) {
+    const escritorio = await escritorios.buscarEscritorioPorId(registro.id);
+    assert.ok(escritorio);
+    assert.deepEqual(MAPEADOR_ESCRITORIO.converterEscritorioEmRegistroPrisma(escritorio), registro);
+  }
+  for (const registro of registros.usuarios) {
+    const conta = await autenticacao.buscarUsuarioComVinculosPorEmail(registro.email);
+    assert.ok(conta);
+    assert.equal(conta.usuario.id, registro.id);
+    assert.equal(conta.usuario.nome, registro.name);
+    assert.equal(conta.usuario.hashSenha === registro.passwordHash, true);
+    assert.equal(conta.usuario.situacao, registro.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO');
+    const vinculos = registros.vinculos.filter((vinculo) => vinculo.userId === registro.id);
+    assert.equal(conta.vinculos.length, vinculos.length);
+    for (const vinculo of vinculos) assert.ok(conta.vinculos.some((atual) => atual.escritorio.id === vinculo.officeId && atual.papel === 'PROPRIETARIO'));
+  }
+  for (const registro of registros.sessoes) {
+    const encontrado = await autenticacao.buscarSessaoComUsuarioPorId(registro.id);
+    assert.ok(encontrado);
+    assert.deepEqual(converterSessaoEmRegistroPrisma(encontrado.sessao), registro);
+  }
+  relatarEtapaDaVerificacao('leitura_dados_existentes', Object.fromEntries(Object.entries(registros).map(([nome, linhas]) => [nome, linhas.length])));
+}
+
+async function tratarInterceptacaoDeRequisicao(conexao, parametros) {
+  try {
+    if (!parametros.responseStatusCode) {
+      const cabecalhos = Object.entries(parametros.request.headers).filter(([nome]) => nome.toLowerCase() !== 'authorization').map(([nome, valor]) => ({ name: nome, value: valor }));
+      if (conexao.tokenAcessoExpirado) {
+        cabecalhos.push({ name: 'Authorization', value: `Bearer ${conexao.tokenAcessoExpirado}` });
+        conexao.tokenAcessoExpirado = undefined;
+        await conexao.enviarComandoAoNavegador('Fetch.continueRequest', { requestId: parametros.requestId, headers: cabecalhos });
+      } else await conexao.enviarComandoAoNavegador('Fetch.continueRequest', { requestId: parametros.requestId });
+      return;
+    }
+    let corpo = null;
+    if (parametros.responseStatusCode !== 204) {
+      const bruto = await conexao.enviarComandoAoNavegador('Fetch.getResponseBody', { requestId: parametros.requestId });
+      corpo = JSON.parse(bruto.base64Encoded ? Buffer.from(bruto.body, 'base64').toString() : bruto.body);
+    }
+    await conexao.enviarComandoAoNavegador('Fetch.continueResponse', { requestId: parametros.requestId });
+    INTERCEPTADOS.set(parametros.networkId, { situacao: parametros.responseStatusCode, corpo: corpo });
+  } catch { relatarFalha('browser_response_interception'); }
+}
+
+function relatarEtapaDaVerificacao(etapa, valores = {}) { console.log(JSON.stringify({ etapa, ok: true, ...valores })); }
+function relatarFalha(etapa) { console.error(JSON.stringify({ etapa, ok: false })); process.exitCode = 1; }
+async function aguardarCondicao(consultarCondicao, milissegundos = 20000) {
+  const prazo = Date.now() + milissegundos;
+  while (Date.now() < prazo) { const valor = await consultarCondicao(); if (valor) return valor; await delay(100); }
   throw new Error('Verification deadline exceeded');
 }
-async function connect(url) {
+async function conectarAoNavegador(url) {
   const socket = new WebSocket(url);
-  await new Promise((resolve, reject) => {
-    socket.addEventListener('open', resolve, { once: true });
-    socket.addEventListener('error', () => reject(new Error('Browser unavailable')), { once: true });
+  await new Promise((resolver, rejeitar) => {
+    socket.addEventListener('open', resolver, { once: true });
+    socket.addEventListener('error', () => rejeitar(new Error('Browser unavailable')), { once: true });
   });
-  let next = 0;
-  const pending = new Map(), events = [];
-  socket.addEventListener('message', (event) => {
-    const message = JSON.parse(String(event.data));
-    if (!message.id) {
-      events.push(message);
-      if (message.method === 'Fetch.requestPaused') void handlePaused(connection, message.params);
+  let proximoIdComando = 0;
+  const comandosPendentes = new Map(), eventos = [];
+  socket.addEventListener('message', (evento) => {
+    const mensagem = JSON.parse(String(evento.data));
+    if (!mensagem.id) {
+      eventos.push(mensagem);
+      if (mensagem.method === 'Fetch.requestPaused') void tratarInterceptacaoDeRequisicao(conexao, mensagem.params);
       return;
     }
-    const task = pending.get(message.id);
-    if (task) {
-      clearTimeout(task.timer); pending.delete(message.id);
-      if (message.error) task.reject(new Error('Browser command failed')); else task.resolve(message.result);
+    const tarefa = comandosPendentes.get(mensagem.id);
+    if (tarefa) {
+      clearTimeout(tarefa.temporizador); comandosPendentes.delete(mensagem.id);
+      if (mensagem.error) tarefa.rejeitar(new Error('Browser command failed')); else tarefa.resolver(mensagem.result);
     }
   });
-  const connection = { socket, events, send(method, params = {}) {
-    return new Promise((resolve, reject) => {
-      const id = ++next;
-      const timer = setTimeout(() => { pending.delete(id); reject(new Error('Browser command timeout')); }, 10000);
-      pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params }));
+  const conexao = { socket, eventos, enviarComandoAoNavegador(metodo, parametros = {}) {
+    return new Promise((resolver, rejeitar) => {
+      const id = ++proximoIdComando;
+      const temporizador = setTimeout(() => { comandosPendentes.delete(id); rejeitar(new Error('Browser command timeout')); }, 10000);
+      comandosPendentes.set(id, { resolver, rejeitar, temporizador }); socket.send(JSON.stringify({ id, method: metodo, params: parametros }));
     });
   } };
-  return connection;
+  return conexao;
 }
-async function evaluate(expression) {
-  return evaluateOn(browser, expression);
+async function avaliarExpressaoNaAbaPrincipal(expressao) {
+  return avaliarExpressaoNaAba(navegador, expressao);
 }
-async function evaluateOn(connection, expression) {
-  const result = await connection.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-  if (result.exceptionDetails) throw new Error('Browser evaluation failed');
-  return result.result.value;
+async function avaliarExpressaoNaAba(conexao, expressao) {
+  const resultado = await conexao.enviarComandoAoNavegador('Runtime.evaluate', { expression: expressao, returnByValue: true, awaitPromise: true });
+  if (resultado.exceptionDetails) throw new Error('Browser evaluation failed');
+  return resultado.result.value;
 }
-async function click(selector) {
-  const point = await evaluate(`(() => { const element = document.querySelector(${JSON.stringify(selector)}); if (!element) return null; element.scrollIntoView({block:'center'}); const r = element.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; })()`);
-  assert.ok(point);
-  await browser.send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point });
-  await browser.send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point });
+async function clicarElemento(seletor) {
+  const ponto = await avaliarExpressaoNaAbaPrincipal(`(() => { const elemento = document.querySelector(${JSON.stringify(seletor)}); if (!elemento) return null; elemento.scrollIntoView({block:'center'}); const retangulo = elemento.getBoundingClientRect(); return {x:retangulo.x+retangulo.width/2,y:retangulo.y+retangulo.height/2}; })()`);
+  assert.ok(ponto);
+  await navegador.enviarComandoAoNavegador('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...ponto });
+  await navegador.enviarComandoAoNavegador('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...ponto });
 }
-async function fill(values) {
-  for (const [selector, text] of Object.entries(values)) {
-    await click(selector);
+async function preencherCamposDoFormulario(valores) {
+  for (const [seletor, texto] of Object.entries(valores)) {
+    await clicarElemento(seletor);
     // Reload can restore form values. Replace the field through native keyboard input.
-    await browser.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 });
-    await browser.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 });
-    await browser.send('Input.insertText', { text });
+    await navegador.enviarComandoAoNavegador('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 });
+    await navegador.enviarComandoAoNavegador('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 });
+    await navegador.enviarComandoAoNavegador('Input.insertText', { text: texto });
   }
 }
-async function networkResponse(path, since = 0) {
-  const request = await until(() => browser.events.slice(since).find((event) =>
-    event.method === 'Network.requestWillBeSent' && new URL(event.params.request.url).pathname === path));
-  if (path.startsWith('/api/v1/auth/')) {
-    return { ...await until(() => intercepted.get(request.params.requestId)), request: request.params.request };
+async function aguardarRespostaDeRede(caminho, desde = 0) {
+  const requisicao = await aguardarCondicao(() => navegador.eventos.slice(desde).find((evento) =>
+    evento.method === 'Network.requestWillBeSent' && new URL(evento.params.request.url).pathname === caminho));
+  if (caminho.startsWith('/api/v1/auth/')) {
+    return { ...await aguardarCondicao(() => INTERCEPTADOS.get(requisicao.params.requestId)), requisicao: requisicao.params.request };
   }
-  const response = await until(() => browser.events.find((event) =>
-    event.method === 'Network.responseReceived' && event.params.requestId === request.params.requestId));
-  await until(() => browser.events.some((event) => event.method === 'Network.loadingFinished' && event.params.requestId === request.params.requestId));
-  const raw = await browser.send('Network.getResponseBody', { requestId: request.params.requestId });
-  const body = JSON.parse(raw.base64Encoded ? Buffer.from(raw.body, 'base64').toString() : raw.body);
-  return { status: response.params.response.status, body, request: request.params.request };
+  const resposta = await aguardarCondicao(() => navegador.eventos.find((evento) =>
+    evento.method === 'Network.responseReceived' && evento.params.requestId === requisicao.params.requestId));
+  await aguardarCondicao(() => navegador.eventos.some((evento) => evento.method === 'Network.loadingFinished' && evento.params.requestId === requisicao.params.requestId));
+  const bruto = await navegador.enviarComandoAoNavegador('Network.getResponseBody', { requestId: requisicao.params.requestId });
+  const corpo = JSON.parse(bruto.base64Encoded ? Buffer.from(bruto.body, 'base64').toString() : bruto.body);
+  return { situacao: resposta.params.response.status, corpo: corpo, requisicao: requisicao.params.request };
 }
-function containsSensitiveField(value) {
-  return !!value && typeof value === 'object' && Object.entries(value).some(([key, item]) =>
-    /password|hash|refreshToken/i.test(key) || containsSensitiveField(item));
+function possuiCampoSensivel(valor) {
+  return !!valor && typeof valor === 'object' && Object.entries(valor).some(([chave, item]) =>
+    /password|senha|hash|refreshToken|tokenRenovacao/i.test(chave) || possuiCampoSensivel(item));
 }
 
 try {
-  const environment = loadEnvironment();
-  const hostname = environment.HOST === '0.0.0.0' ? '127.0.0.1' : environment.HOST === '::' ? '[::1]' : environment.HOST.includes(':') ? `[${environment.HOST}]` : environment.HOST;
-  const backendUrl = `http://${hostname}:${environment.PORT}`;
-  prisma = createPrismaClient(environment.DATABASE_URL);
+  const ambiente = carregarAmbiente();
+  const nomeHost = ambiente.HOST === '0.0.0.0' ? '127.0.0.1' : ambiente.HOST === '::' ? '[::1]' : ambiente.HOST.includes(':') ? `[${ambiente.HOST}]` : ambiente.HOST;
+  const urlBackend = `http://${nomeHost}:${ambiente.PORT}`;
+  prisma = criarClientePrisma(ambiente.DATABASE_URL);
   await prisma.$queryRaw`SELECT 1`;
-  assert.equal(await prisma.rateLimitBucket.count({ where: { keyHash: { in: rateHashes } } }), 0);
-  assert.equal(await prisma.user.count({ where: { email } }), 0);
-  assert.equal(await prisma.office.count({ where: { name: officeName } }), 0);
-  ownsRecords = true;
-  const bootstrap = "process.on('message',message=>{if(message==='stop'){process.emit('SIGTERM');process.disconnect();}});await import('./dist/server.js');process.send(process.exitCode===1?'failed':'ready');";
-  backend = spawn(process.execPath, ['--input-type=module', '-e', bootstrap], {
-    cwd: backendDirectory, env: { ...process.env, HOST: '127.0.0.1', TRUST_PROXY: '', RATE_LIMIT_HMAC_SECRET: rateSecret, RATE_LIMIT_CLEANUP_INTERVAL_MS: '3600000', AUTH_FRONTEND_ORIGIN: 'http://127.0.0.1:5173' }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  registrosAnteriores = await lerRegistrosExistentes();
+  await verificarLeituraExistente(registrosAnteriores);
+  assert.equal(await prisma.rateLimitBucket.count({ where: { keyHash: { in: HASHES_LIMITADOR } } }), 0);
+  assert.equal(await prisma.user.count({ where: { email: EMAIL } }), 0);
+  assert.equal(await prisma.office.count({ where: { name: NOME_ESCRITORIO } }), 0);
+  possuiRegistros = true;
+  const inicializacao = "process.on('message',mensagem=>{if(mensagem==='stop'){process.emit('SIGTERM');process.disconnect();}});await import('./dist/server.js');process.send(process.exitCode===1?'failed':'ready');";
+  backend = spawn(process.execPath, ['--input-type=module', '-e', inicializacao], {
+    cwd: DIRETORIO_BACKEND, env: { ...process.env, HOST: '127.0.0.1', TRUST_PROXY: '', RATE_LIMIT_HMAC_SECRET: SEGREDO_LIMITADOR, RATE_LIMIT_CLEANUP_INTERVAL_MS: '3600000', AUTH_FRONTEND_ORIGIN: 'http://127.0.0.1:5173' }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
-  backend.stdout.on('data', (chunk) => processLogs.push(String(chunk)));
-  backend.stderr.on('data', (chunk) => processLogs.push(String(chunk)));
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Backend startup deadline')), 15000);
-    backend.once('message', (message) => { clearTimeout(timer); message === 'ready' ? resolve() : reject(new Error('Backend startup failed')); });
-    backend.once('exit', () => { clearTimeout(timer); reject(new Error('Backend exited')); });
+  backend.stdout.on('data', (trecho) => LOGS_PROCESSOS.push(String(trecho)));
+  backend.stderr.on('data', (trecho) => LOGS_PROCESSOS.push(String(trecho)));
+  await new Promise((resolver, rejeitar) => {
+    const temporizador = setTimeout(() => rejeitar(new Error('Backend startup deadline')), 15000);
+    backend.once('message', (mensagem) => { clearTimeout(temporizador); mensagem === 'ready' ? resolver() : rejeitar(new Error('Backend startup failed')); });
+    backend.once('exit', () => { clearTimeout(temporizador); rejeitar(new Error('Backend exited')); });
   });
-  await until(async () => {
+  await aguardarCondicao(async () => {
     if (backend.exitCode !== null) throw new Error('Backend exited');
-    try { return (await fetch(`${backendUrl}/health`, { signal: AbortSignal.timeout(1000) })).status === 200; } catch { return false; }
+    try { return (await fetch(`${urlBackend}/health`, { signal: AbortSignal.timeout(1000) })).status === 200; } catch { return false; }
   });
-  assert.equal((await fetch(`${backendUrl}/ready`)).status, 200);
-  process.env.BACKEND_PROXY_TARGET = backendUrl;
-  process.chdir(join(workspace, 'frontend'));
+  assert.equal((await fetch(`${urlBackend}/ready`)).status, 200);
+  process.env.BACKEND_PROXY_TARGET = urlBackend;
+  process.chdir(join(DIRETORIO_WORKSPACE, 'frontend'));
   frontend = await createServer({
     server: { host: '127.0.0.1', port: 5173, strictPort: true }, logLevel: 'silent',
   });
   await frontend.listen();
-  const frontendUrl = `http://127.0.0.1:${frontend.httpServer.address().port}`;
-  assert.equal((await fetch(`${frontendUrl}/favicon.svg`)).status, 200);
-  assert.ok(existsSync(join(workspace, 'frontend', 'dist', 'favicon.svg')));
-  phase = 'browser_start';
-  const executable = process.env.CHROME_PATH ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-  assert.ok(existsSync(executable));
-  profile = mkdtempSync(join(tmpdir(), 'neodireito-rf003-browser-'));
-  mkdirSync(join(profile, 'Default'));
-  writeFileSync(join(profile, 'Default', 'Preferences'), JSON.stringify({ credentials_enable_service: false, profile: { password_manager_enabled: false } }));
-  chrome = spawn(executable, ['--headless=new', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+  const urlFrontend = `http://127.0.0.1:${frontend.httpServer.address().port}`;
+  assert.equal((await fetch(`${urlFrontend}/favicon.svg`)).status, 200);
+  assert.ok(existsSync(join(DIRETORIO_WORKSPACE, 'frontend', 'dist', 'favicon.svg')));
+  etapa = 'browser_start';
+  const executavel = process.env.CHROME_PATH ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+  assert.ok(existsSync(executavel));
+  perfil = mkdtempSync(join(tmpdir(), 'neodireito-rf003-browser-'));
+  mkdirSync(join(perfil, 'Default'));
+  writeFileSync(join(perfil, 'Default', 'Preferences'), JSON.stringify({ credentials_enable_service: false, profile: { password_manager_enabled: false } }));
+  chrome = spawn(executavel, ['--headless=new', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', `--user-data-dir=${perfil}`,
     '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-sync', '--disable-extensions', '--window-size=1280,1000', 'about:blank'],
   { windowsHide: true, stdio: 'ignore' });
-  await until(() => existsSync(join(profile, 'DevToolsActivePort')));
-  const port = Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]);
-  const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json());
-  browser = await connect(targets.find((target) => target.type === 'page').webSocketDebuggerUrl);
-  for (const method of ['Page.enable', 'Network.enable', 'Runtime.enable', 'Log.enable']) await browser.send(method);
-  await browser.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/v1/auth/*', requestStage: 'Response' }, { urlPattern: '*/api/v1/auth/me', requestStage: 'Request' }] });
+  await aguardarCondicao(() => existsSync(join(perfil, 'DevToolsActivePort')));
+  const porta = Number(readFileSync(join(perfil, 'DevToolsActivePort'), 'utf8').split('\n')[0]);
+  const alvos = await fetch(`http://127.0.0.1:${porta}/json/list`).then((resposta) => resposta.json());
+  navegador = await conectarAoNavegador(alvos.find((alvo) => alvo.type === 'page').webSocketDebuggerUrl);
+  for (const metodo of ['Page.enable', 'Network.enable', 'Runtime.enable', 'Log.enable']) await navegador.enviarComandoAoNavegador(metodo);
+  await navegador.enviarComandoAoNavegador('Fetch.enable', { patterns: [{ urlPattern: '*/api/v1/auth/*', requestStage: 'Response' }, { urlPattern: '*/api/v1/auth/me', requestStage: 'Request' }] });
 
-  phase = 'register_through_browser';
-  await browser.send('Page.navigate', { url: `${frontendUrl}/register` });
-  await until(() => evaluate("!!document.querySelector('#register-officeName')"));
-  await fill({ '#register-officeName': officeName, '#register-adminName': adminName, '#register-email': email.toUpperCase(), '#register-password': password, '#register-passwordConfirmation': password });
-  await click('button[type=submit]');
-  const registration = await networkResponse('/api/v1/onboarding');
-  assert.equal(registration.status, 201);
-  await until(() => evaluate("!!document.querySelector('a[href=\"/login\"]')"));
-  report(phase, { status: 201 });
+  etapa = 'register_through_browser';
+  await navegador.enviarComandoAoNavegador('Page.navigate', { url: `${urlFrontend}/register` });
+  await aguardarCondicao(() => avaliarExpressaoNaAbaPrincipal("!!document.querySelector('#register-nomeEscritorio')"));
+  await preencherCamposDoFormulario({ '#register-nomeEscritorio': NOME_ESCRITORIO, '#register-nomeAdministrador': NOME_ADMINISTRADOR, '#register-email': EMAIL.toUpperCase(), '#register-senha': SENHA, '#register-confirmacaoSenha': SENHA });
+  await clicarElemento('button[type=submit]');
+  const cadastro = await aguardarRespostaDeRede('/api/v1/onboarding');
+  assert.equal(cadastro.situacao, 201);
+  assert.deepEqual(Object.keys(JSON.parse(cadastro.requisicao.postData)).sort(), ['email', 'nomeAdministrador', 'nomeEscritorio', 'senha']);
+  assert.deepEqual(Object.keys(cadastro.corpo).sort(), ['escritorio', 'papel', 'usuario']);
+  assert.deepEqual(Object.keys(cadastro.corpo.escritorio).sort(), ['atualizadoEm', 'criadoEm', 'id', 'nome', 'situacao']);
+  assert.equal(cadastro.corpo.escritorio.situacao, 'ATIVO');
+  assert.equal(cadastro.corpo.papel, 'PROPRIETARIO');
+  assert.equal(possuiCampoSensivel(cadastro.corpo), false);
+  await aguardarCondicao(() => avaliarExpressaoNaAbaPrincipal("!!document.querySelector('a[href=\"/login\"]')"));
+  relatarEtapaDaVerificacao(etapa, { situacao: 201 });
 
-  phase = 'login_through_browser';
-  await click('a[href="/login"]');
-  await until(() => evaluate("!!document.querySelector('#login-email')"));
-  await fill({ '#login-email': email.toUpperCase(), '#login-password': password });
-  const beforeLogin = browser.events.length;
-  await click('button[type=submit]');
-  const login = await networkResponse('/api/v1/auth/login', beforeLogin);
-  assert.equal(login.status, 200);
-  assert.deepEqual(Object.keys(JSON.parse(login.request.postData)).sort(), ['email', 'password']);
-  assert.equal(containsSensitiveField(login.body), false);
-  accessToken = login.body.accessToken;
-  assert.equal(typeof accessToken, 'string');
-  const me = await networkResponse('/api/v1/auth/me', beforeLogin);
-  assert.equal(me.status, 200); assert.equal(me.body.office.role, 'OWNER');
-  assert.equal(me.body.user.id, registration.body.user.id); assert.equal(me.body.office.id, registration.body.office.id);
-  assert.equal(containsSensitiveField(me.body), false);
-  assert.equal(JSON.stringify(me.body).includes(accessToken), false);
-  await until(() => evaluate("!!document.querySelector('[role=status]')&&document.querySelector('#login-title').textContent==='Sessão autenticada'"));
-  const text = await evaluate('document.body.innerText');
-  assert.ok(text.includes(adminName) && text.includes(officeName) && text.includes('OWNER'));
-  assert.equal(text.includes(accessToken), false);
-  assert.equal(await evaluate('localStorage.length===0&&sessionStorage.length===0'), true);
-  const cookies = await browser.send('Network.getCookies', { urls: [`${frontendUrl}/api/v1/auth/me`] });
+  etapa = 'login_through_browser';
+  await clicarElemento('a[href="/login"]');
+  await aguardarCondicao(() => avaliarExpressaoNaAbaPrincipal("!!document.querySelector('#login-email')"));
+  await preencherCamposDoFormulario({ '#login-email': EMAIL.toUpperCase(), '#login-password': SENHA });
+  const antesLogin = navegador.eventos.length;
+  await clicarElemento('button[type=submit]');
+  const entrar = await aguardarRespostaDeRede('/api/v1/auth/login', antesLogin);
+  assert.equal(entrar.situacao, 200);
+  assert.deepEqual(Object.keys(entrar.corpo).sort(), ['escritorio', 'expiraEmSegundos', 'tokenAcesso', 'usuario']);
+  assert.deepEqual(Object.keys(JSON.parse(entrar.requisicao.postData)).sort(), ['email', 'senha']);
+  assert.equal(possuiCampoSensivel(entrar.corpo), false);
+  tokenAcesso = entrar.corpo.tokenAcesso;
+  assert.equal(typeof tokenAcesso, 'string');
+  const respostaIdentidade = await aguardarRespostaDeRede('/api/v1/auth/me', antesLogin);
+  assert.equal(respostaIdentidade.situacao, 200); assert.equal(respostaIdentidade.corpo.escritorio.papel, 'PROPRIETARIO');
+  assert.equal(respostaIdentidade.corpo.usuario.id, cadastro.corpo.usuario.id); assert.equal(respostaIdentidade.corpo.escritorio.id, cadastro.corpo.escritorio.id);
+  assert.equal(possuiCampoSensivel(respostaIdentidade.corpo), false);
+  assert.equal(JSON.stringify(respostaIdentidade.corpo).includes(tokenAcesso), false);
+  await aguardarCondicao(() => avaliarExpressaoNaAbaPrincipal("!!document.querySelector('[role=status]')&&document.querySelector('#login-title').textContent==='Sessão autenticada'"));
+  const texto = await avaliarExpressaoNaAbaPrincipal('document.body.innerText');
+  assert.ok(texto.includes(NOME_ADMINISTRADOR) && texto.includes(NOME_ESCRITORIO) && texto.includes('PROPRIETARIO'));
+  assert.equal(texto.includes(tokenAcesso), false);
+  assert.equal(await avaliarExpressaoNaAbaPrincipal('localStorage.length===0&&sessionStorage.length===0'), true);
+  const cookies = await navegador.enviarComandoAoNavegador('Network.getCookies', { urls: [`${urlFrontend}/api/v1/auth/me`] });
   const cookie = cookies.cookies.find((item) => item.name === 'refresh_token');
-  assert.ok(cookie); refreshToken = cookie.value;
+  assert.ok(cookie); tokenRenovacao = cookie.value;
   assert.equal(cookie.httpOnly, true); assert.equal(cookie.sameSite, 'Lax'); assert.equal(cookie.path, '/api/v1/auth');
-  assert.equal(cookie.secure, environment.NODE_ENV === 'production');
-  assert.equal(Buffer.from(refreshToken.split('.')[1], 'base64url').length, 32);
-  assert.equal(JSON.stringify(login.body).includes(refreshToken), false);
-  assert.equal(JSON.stringify(me.body).includes(refreshToken), false);
-  assert.equal((await evaluate('document.cookie')).includes(refreshToken), false);
-  report(phase, { login: 200, me: 200, owner: true, authenticatedArea: true, httpOnly: true, sameSite: 'Lax', secure: cookie.secure, browserStorageEmpty: true });
+  assert.equal(cookie.secure, ambiente.NODE_ENV === 'production');
+  assert.equal(Buffer.from(tokenRenovacao.split('.')[1], 'base64url').length, 32);
+  assert.equal(JSON.stringify(entrar.corpo).includes(tokenRenovacao), false);
+  assert.equal(JSON.stringify(respostaIdentidade.corpo).includes(tokenRenovacao), false);
+  assert.equal((await avaliarExpressaoNaAbaPrincipal('document.cookie')).includes(tokenRenovacao), false);
+  relatarEtapaDaVerificacao(etapa, { entrar: 200, me: 200, proprietario: true, areaAutenticada: true, httpOnly: true, sameSite: 'Lax', secure: cookie.secure, armazenamentoNavegadorVazio: true });
 
-  phase = 'real_session_persistence';
-  const records = await prisma.session.findMany({ where: { userId: registration.body.user.id } });
-  assert.equal(records.length, 1);
-  const session = records[0];
-  assert.equal(session.activeOfficeId, registration.body.office.id);
-  assert.equal(session.refreshTokenHash, createHash('sha256').update(refreshToken).digest('hex'));
-  assert.equal(session.expiresAt.getTime() - session.createdAt.getTime(), environment.AUTH_REFRESH_TTL_SECONDS * 1000);
-  assert.equal(session.revokedAt, null);
-  const user = await prisma.user.findUniqueOrThrow({ where: { email } });
-  const office = await prisma.office.findUniqueOrThrow({ where: { id: registration.body.office.id } });
-  const membership = await prisma.membership.findUniqueOrThrow({ where: { officeId_userId: { officeId: office.id, userId: user.id } } });
-  const stored = JSON.stringify({ session, user, office, membership });
-  for (const secret of [password, refreshToken, accessToken]) assert.equal(stored.includes(secret), false);
-  const secretColumns = await prisma.$queryRaw`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='sessions' AND column_name LIKE '%token%'`;
-  assert.deepEqual(secretColumns, [{ column_name: 'refresh_token_hash' }]);
-  report(phase, { sessions: 1, onlyRefreshHash: true, refreshLifetimeSeconds: environment.AUTH_REFRESH_TTL_SECONDS });
+  etapa = 'real_session_persistence';
+  const registros = await prisma.session.findMany({ where: { userId: cadastro.corpo.usuario.id } });
+  assert.equal(registros.length, 1);
+  const sessao = registros[0];
+  assert.equal(sessao.activeOfficeId, cadastro.corpo.escritorio.id);
+  assert.equal(sessao.refreshTokenHash, createHash('sha256').update(tokenRenovacao).digest('hex'));
+  assert.equal(sessao.expiresAt.getTime() - sessao.createdAt.getTime(), ambiente.AUTH_REFRESH_TTL_SECONDS * 1000);
+  assert.equal(sessao.revokedAt, null);
+  const usuario = await prisma.user.findUniqueOrThrow({ where: { email: EMAIL } });
+  const escritorio = await prisma.office.findUniqueOrThrow({ where: { id: cadastro.corpo.escritorio.id } });
+  const vinculo = await prisma.membership.findUniqueOrThrow({ where: { officeId_userId: { officeId: escritorio.id, userId: usuario.id } } });
+  assert.equal(usuario.email, EMAIL);
+  assert.equal(usuario.status, 'ACTIVE');
+  assert.equal(escritorio.status, 'ACTIVE');
+  assert.equal(vinculo.role, 'OWNER');
+  assert.ok(usuario.passwordHash.startsWith('$argon2id$'));
+  assert.equal(Object.keys(escritorio).some((campo) => /password|senha|hash/i.test(campo)), false);
+  assert.equal(Object.keys(vinculo).some((campo) => /password|senha|hash/i.test(campo)), false);
+  const armazenado = JSON.stringify({ sessao, usuario, escritorio, vinculo });
+  for (const segredo of [SENHA, tokenRenovacao, tokenAcesso]) assert.equal(armazenado.includes(segredo), false);
+  const colunasSegredos = await prisma.$queryRaw`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='sessions' AND column_name LIKE '%token%'`;
+  assert.deepEqual(colunasSegredos, [{ column_name: 'refresh_token_hash' }]);
+  relatarEtapaDaVerificacao(etapa, { sessoes: 1, somenteHashRenovacao: true, validadeRenovacaoSegundos: ambiente.AUTH_REFRESH_TTL_SECONDS });
 
-  phase = 'reload_restores_and_rotates';
-  const beforeReload = browser.events.length;
-  await browser.send('Page.reload');
-  await until(async () => {
-    try { return await evaluate("document.querySelector('#login-title')?.textContent==='Sessão autenticada'"); }
+  etapa = 'reload_restores_and_rotates';
+  const antesRecarga = navegador.eventos.length;
+  await navegador.enviarComandoAoNavegador('Page.reload');
+  await aguardarCondicao(async () => {
+    try { return await avaliarExpressaoNaAbaPrincipal("document.querySelector('#login-title')?.textContent==='Sessão autenticada'"); }
     catch { return false; } // Navigation can destroy the previous execution context.
   });
-  const renewed = await networkResponse('/api/v1/auth/refresh', beforeReload);
-  assert.equal(renewed.status, 200); assert.equal(containsSensitiveField(renewed.body), false);
-  const rotated = await prisma.session.findUniqueOrThrow({ where: { id: session.id } });
-  assert.equal(rotated.refreshTokenHash === session.refreshTokenHash, false);
-  assert.equal(rotated.expiresAt.getTime(), session.expiresAt.getTime());
-  assert.ok(rotated.lastUsedAt);assert.equal(rotated.updatedAt.getTime(), rotated.lastUsedAt.getTime());
-  assert.equal(await evaluate('(async()=>localStorage.length===0&&sessionStorage.length===0&&(await indexedDB.databases()).length===0)()'), true);
-  report(phase, { refresh: 200, authenticated: true, hashRotated: true, absoluteExpiryPreserved: true, allBrowserStorageEmpty: true });
+  const renovado = await aguardarRespostaDeRede('/api/v1/auth/refresh', antesRecarga);
+  assert.equal(renovado.situacao, 200); assert.equal(possuiCampoSensivel(renovado.corpo), false);
+  const rotacionado = await prisma.session.findUniqueOrThrow({ where: { id: sessao.id } });
+  assert.equal(rotacionado.refreshTokenHash === sessao.refreshTokenHash, false);
+  assert.equal(rotacionado.expiresAt.getTime(), sessao.expiresAt.getTime());
+  assert.ok(rotacionado.lastUsedAt);assert.equal(rotacionado.updatedAt.getTime(), rotacionado.lastUsedAt.getTime());
+  assert.equal(await avaliarExpressaoNaAbaPrincipal('(async()=>localStorage.length===0&&sessionStorage.length===0&&(await indexedDB.databases()).length===0)()'), true);
+  relatarEtapaDaVerificacao(etapa, { renovar: 200, autenticado: true, hashRotacionado: true, expiracaoAbsolutaPreservada: true, armazenamentosNavegadorVazios: true });
 
-  phase = 'expired_access_refresh_and_retry';
-  const timestamp = Math.floor(Date.now() / 1000);
+  etapa = 'expired_access_refresh_and_retry';
+  const instante = Math.floor(Date.now() / 1000);
   // Substitute only one outgoing Bearer with a genuinely signed expired JWT.
   // The frontend's production HTTP client must handle the real API 401 itself.
-  const expiredAccessToken = await new SignJWT({ sessionId: session.id, activeOfficeId: session.activeOfficeId, role: 'OWNER' })
-    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' }).setSubject(user.id)
-    .setIssuer(environment.AUTH_JWT_ISSUER).setAudience(environment.AUTH_JWT_AUDIENCE)
-    .setIssuedAt(timestamp - 901).setExpirationTime(timestamp - 1).sign(Buffer.from(environment.AUTH_JWT_SECRET, 'base64url'));
-  const beforeExpiration = browser.events.length;
-  browser.expiredAccessToken = expiredAccessToken;
-  const finalStatus = await evaluate("import('/src/authentication.ts').then(({authClient})=>authClient.request('/api/v1/auth/me')).then(response=>response.status)");
-  assert.equal(finalStatus, 200);
-  const calls = browser.events.slice(beforeExpiration).filter((event) => event.method === 'Network.requestWillBeSent' && new URL(event.params.request.url).pathname.startsWith('/api/v1/auth/'));
-  assert.deepEqual(calls.map((event) => new URL(event.params.request.url).pathname), ['/api/v1/auth/me', '/api/v1/auth/refresh', '/api/v1/auth/me']);
-  assert.deepEqual(calls.map((event) => intercepted.get(event.params.requestId)?.status), [401, 200, 200]);
-  report(phase, { expiredAccess: 401, refresh: 200, replay: 200, refreshRequests: 1, replays: 1 });
+  const tokenAcessoExpirado = await new SignJWT({ sessionId: sessao.id, activeOfficeId: sessao.activeOfficeId, role: 'OWNER' })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' }).setSubject(usuario.id)
+    .setIssuer(ambiente.AUTH_JWT_ISSUER).setAudience(ambiente.AUTH_JWT_AUDIENCE)
+    .setIssuedAt(instante - 901).setExpirationTime(instante - 1).sign(Buffer.from(ambiente.AUTH_JWT_SECRET, 'base64url'));
+  const antesExpiracao = navegador.eventos.length;
+  navegador.tokenAcessoExpirado = tokenAcessoExpirado;
+  const situacaoFinal = await avaliarExpressaoNaAbaPrincipal("import('/src/authentication.ts').then(({CLIENTE_AUTENTICACAO})=>CLIENTE_AUTENTICACAO.enviarRequisicaoAutenticada('/api/v1/auth/me')).then(resposta=>resposta.status)");
+  assert.equal(situacaoFinal, 200);
+  const chamadas = navegador.eventos.slice(antesExpiracao).filter((evento) => evento.method === 'Network.requestWillBeSent' && new URL(evento.params.request.url).pathname.startsWith('/api/v1/auth/'));
+  assert.deepEqual(chamadas.map((evento) => new URL(evento.params.request.url).pathname), ['/api/v1/auth/me', '/api/v1/auth/refresh', '/api/v1/auth/me']);
+  assert.deepEqual(chamadas.map((evento) => INTERCEPTADOS.get(evento.params.requestId)?.situacao), [401, 200, 200]);
+  relatarEtapaDaVerificacao(etapa, { acessoExpirado: 401, renovar: 200, repeticao: 200, requisicoesRenovacao: 1, repeticoes: 1 });
 
-  phase = 'two_real_tabs';
-  const target = await browser.send('Target.createTarget', { url: 'about:blank' });
-  const allTargets = await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json());
-  secondBrowser = await connect(allTargets.find((item) => item.id === target.targetId).webSocketDebuggerUrl);
-  for (const method of ['Page.enable', 'Network.enable', 'Runtime.enable', 'Log.enable']) await secondBrowser.send(method);
-  await secondBrowser.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/v1/auth/*', requestStage: 'Response' }, { urlPattern: '*/api/v1/auth/me', requestStage: 'Request' }] });
-  await secondBrowser.send('Page.navigate', { url: `${frontendUrl}/app` });
-  const authenticated = "document.querySelector('#login-title')?.textContent==='Sessão autenticada'";
-  await until(() => evaluateOn(secondBrowser, authenticated));
-  const requests = (connection, from = 0) => connection.events.slice(from).filter((event) => event.method === 'Network.requestWillBeSent');
-  assert.equal(requests(secondBrowser).filter((event) => new URL(event.params.request.url).pathname === '/api/v1/auth/refresh').length, 0);
-  assert.equal(await evaluateOn(secondBrowser, "import('/src/authentication.ts').then(({authClient})=>authClient.getSnapshot().identity.user.id)"), user.id);
-  const beforeTabs = [browser.events.length, secondBrowser.events.length];
-  const priorRotation = await prisma.session.findUniqueOrThrow({ where: { id: session.id } });
-  browser.expiredAccessToken = expiredAccessToken; secondBrowser.expiredAccessToken = expiredAccessToken;
-  const statuses = await Promise.all([browser, secondBrowser].map((connection) => evaluateOn(connection,
-    "import('/src/authentication.ts').then(({authClient})=>authClient.request('/api/v1/auth/me')).then(response=>response.status)")));
-  assert.deepEqual(statuses, [200, 200]);
-  const tabRequests = [browser, secondBrowser].flatMap((connection, index) => requests(connection, beforeTabs[index]));
-  const refreshRequests = tabRequests.filter((event) => new URL(event.params.request.url).pathname === '/api/v1/auth/refresh');
-  assert.equal(refreshRequests.length, 1); assert.equal(intercepted.get(refreshRequests[0].params.requestId)?.status, 200);
-  const afterRotation = await prisma.session.findUniqueOrThrow({ where: { id: session.id } });
-  assert.notEqual(afterRotation.refreshTokenHash, priorRotation.refreshTokenHash); assert.equal(afterRotation.revokedAt, null);
-  assert.equal(await prisma.session.count({ where: { userId: user.id } }), 1);
-  for (const connection of [browser, secondBrowser]) assert.equal(await evaluateOn(connection,
+  etapa = 'two_real_tabs';
+  const alvo = await navegador.enviarComandoAoNavegador('Target.createTarget', { url: 'about:blank' });
+  const todosAlvos = await fetch(`http://127.0.0.1:${porta}/json/list`).then((resposta) => resposta.json());
+  segundoNavegador = await conectarAoNavegador(todosAlvos.find((item) => item.id === alvo.targetId).webSocketDebuggerUrl);
+  for (const metodo of ['Page.enable', 'Network.enable', 'Runtime.enable', 'Log.enable']) await segundoNavegador.enviarComandoAoNavegador(metodo);
+  await segundoNavegador.enviarComandoAoNavegador('Fetch.enable', { patterns: [{ urlPattern: '*/api/v1/auth/*', requestStage: 'Response' }, { urlPattern: '*/api/v1/auth/me', requestStage: 'Request' }] });
+  await segundoNavegador.enviarComandoAoNavegador('Page.navigate', { url: `${urlFrontend}/app` });
+  const autenticado = "document.querySelector('#login-title')?.textContent==='Sessão autenticada'";
+  await aguardarCondicao(() => avaliarExpressaoNaAba(segundoNavegador, autenticado));
+  const requisicoes = (conexao, desde = 0) => conexao.eventos.slice(desde).filter((evento) => evento.method === 'Network.requestWillBeSent');
+  assert.equal(requisicoes(segundoNavegador).filter((evento) => new URL(evento.params.request.url).pathname === '/api/v1/auth/refresh').length, 0);
+  assert.equal(await avaliarExpressaoNaAba(segundoNavegador, "import('/src/authentication.ts').then(({CLIENTE_AUTENTICACAO})=>CLIENTE_AUTENTICACAO.obterEstadoDaAutenticacao().identidade.usuario.id)"), usuario.id);
+  const antesAbas = [navegador.eventos.length, segundoNavegador.eventos.length];
+  const rotacaoAnterior = await prisma.session.findUniqueOrThrow({ where: { id: sessao.id } });
+  navegador.tokenAcessoExpirado = tokenAcessoExpirado; segundoNavegador.tokenAcessoExpirado = tokenAcessoExpirado;
+  const situacoes = await Promise.all([navegador, segundoNavegador].map((conexao) => avaliarExpressaoNaAba(conexao,
+    "import('/src/authentication.ts').then(({CLIENTE_AUTENTICACAO})=>CLIENTE_AUTENTICACAO.enviarRequisicaoAutenticada('/api/v1/auth/me')).then(resposta=>resposta.status)")));
+  assert.deepEqual(situacoes, [200, 200]);
+  const requisicoesAbas = [navegador, segundoNavegador].flatMap((conexao, indice) => requisicoes(conexao, antesAbas[indice]));
+  const requisicoesRenovacao = requisicoesAbas.filter((evento) => new URL(evento.params.request.url).pathname === '/api/v1/auth/refresh');
+  assert.equal(requisicoesRenovacao.length, 1); assert.equal(INTERCEPTADOS.get(requisicoesRenovacao[0].params.requestId)?.situacao, 200);
+  const aposRotacao = await prisma.session.findUniqueOrThrow({ where: { id: sessao.id } });
+  assert.notEqual(aposRotacao.refreshTokenHash, rotacaoAnterior.refreshTokenHash); assert.equal(aposRotacao.revokedAt, null);
+  assert.equal(await prisma.session.count({ where: { userId: usuario.id } }), 1);
+  for (const conexao of [navegador, segundoNavegador]) assert.equal(await avaliarExpressaoNaAba(conexao,
     '(async()=>localStorage.length===0&&sessionStorage.length===0&&(await indexedDB.databases()).length===0)()'), true);
-  report(phase, { tabs: 2, secondTabRefreshes: 0, simultaneous401: 2, refreshRequests: 1, databaseHashRotated: true, sessionActive: true, browserStorageEmpty: true });
+  relatarEtapaDaVerificacao(etapa, { abas: 2, renovacoesSegundaAba: 0, erros401Simultaneos: 2, requisicoesRenovacao: 1, hashBancoRotacionado: true, sessaoAtiva: true, armazenamentoNavegadorVazio: true });
 
   // Both tabs observe definitive refresh failure; do not let a peer's current access token hide the test.
-  phase = 'reuse_revokes_session';
-  await browser.send('Network.setCookie', { name: 'refresh_token', value: refreshToken, url: frontendUrl, path: '/api/v1/auth', httpOnly: true, sameSite: 'Lax', secure: cookie.secure });
-  const invalidated = await evaluate("import('/src/authentication.ts').then(({authClient})=>authClient.refresh())");
-  assert.equal(invalidated, false);
-  await until(() => evaluateOn(secondBrowser, "location.pathname==='/login'&&!!document.querySelector('#login-email')"));
-  assert.ok((await prisma.session.findUniqueOrThrow({ where: { id: session.id } })).revokedAt);
-  report(phase, { status: 401, persistedRevocation: true, bothTabsUnauthenticated: true });
+  etapa = 'reuse_revokes_session';
+  await navegador.enviarComandoAoNavegador('Network.setCookie', { name: 'refresh_token', value: tokenRenovacao, url: urlFrontend, path: '/api/v1/auth', httpOnly: true, sameSite: 'Lax', secure: cookie.secure });
+  const invalidada = await avaliarExpressaoNaAbaPrincipal("import('/src/authentication.ts').then(({CLIENTE_AUTENTICACAO})=>CLIENTE_AUTENTICACAO.renovarSessao())");
+  assert.equal(invalidada, false);
+  await aguardarCondicao(() => avaliarExpressaoNaAba(segundoNavegador, "location.pathname==='/login'&&!!document.querySelector('#login-email')"));
+  assert.ok((await prisma.session.findUniqueOrThrow({ where: { id: sessao.id } })).revokedAt);
+  relatarEtapaDaVerificacao(etapa, { situacao: 401, revogacaoPersistida: true, ambasAbasDesautenticadas: true });
 
-  await until(() => evaluate("!!document.querySelector('#login-email')&&location.pathname==='/login'"));
+  await aguardarCondicao(() => avaliarExpressaoNaAbaPrincipal("!!document.querySelector('#login-email')&&location.pathname==='/login'"));
 
-  phase = 'second_login_and_logout';
-  await fill({ '#login-email': email, '#login-password': password });
-  const beforeSecondLogin = browser.events.length;
-  await click('button[type=submit]');
-  assert.equal((await networkResponse('/api/v1/auth/login', beforeSecondLogin)).status, 200);
-  await until(() => evaluate("document.querySelector('#login-title')?.textContent==='Sessão autenticada'"));
-  await until(() => evaluateOn(secondBrowser, authenticated));
+  etapa = 'second_login_and_logout';
+  await preencherCamposDoFormulario({ '#login-email': EMAIL, '#login-password': SENHA });
+  const antesSegundoLogin = navegador.eventos.length;
+  await clicarElemento('button[type=submit]');
+  assert.equal((await aguardarRespostaDeRede('/api/v1/auth/login', antesSegundoLogin)).situacao, 200);
+  await aguardarCondicao(() => avaliarExpressaoNaAbaPrincipal("document.querySelector('#login-title')?.textContent==='Sessão autenticada'"));
+  await aguardarCondicao(() => avaliarExpressaoNaAba(segundoNavegador, autenticado));
   // Leave an authenticated document in browser history to exercise actual Back.
-  await click('a[href="/"]');
-  await until(() => evaluate("location.pathname==='/'&&!!document.querySelector('a[href=\"/login\"]')"));
-  await click('a[href="/login"]');
-  await until(() => evaluate("document.querySelector('#login-title')?.textContent==='Sessão autenticada'"));
-  const beforeLogout = browser.events.length;
-  await click('button[type=button]');
-  assert.equal((await networkResponse('/api/v1/auth/logout', beforeLogout)).status, 204);
-  await until(() => evaluateOn(secondBrowser, "location.pathname==='/login'&&!!document.querySelector('#login-email')"));
-  assert.equal((await browser.send('Network.getCookies', { urls: [`${frontendUrl}/api/v1/auth/me`] })).cookies.some((item) => item.name === 'refresh_token'), false);
-  const sessions = await prisma.session.findMany({ where: { userId: user.id } });
-  assert.equal(sessions.length, 2);assert.equal(sessions.every((row) => row.revokedAt !== null), true);
-  await browser.send('Page.reload');
-  await until(() => evaluate("document.readyState==='complete'&&!!document.querySelector('#login-email')&&location.pathname==='/login'"));
-  assert.equal(await evaluate("import('/src/authentication.ts').then(({authClient})=>authClient.getSnapshot().status==='unauthenticated'&&authClient.getSnapshot().identity===null)"), true);
-  const history = await browser.send('Page.getNavigationHistory');
-  const previousProtected = history.entries.slice(0, history.currentIndex).reverse().find((entry) => new URL(entry.url).pathname === '/app');
-  assert.ok(previousProtected);
-  await browser.send('Page.navigateToHistoryEntry', { entryId: previousProtected.id });
-  await until(async () => {
-    try { return await evaluate("location.pathname==='/login'&&!!document.querySelector('#login-email')&&!document.body.innerText.includes('Sessão autenticada')"); }
+  await clicarElemento('a[href="/"]');
+  await aguardarCondicao(() => avaliarExpressaoNaAbaPrincipal("location.pathname==='/'&&!!document.querySelector('a[href=\"/login\"]')"));
+  await clicarElemento('a[href="/login"]');
+  await aguardarCondicao(() => avaliarExpressaoNaAbaPrincipal("document.querySelector('#login-title')?.textContent==='Sessão autenticada'"));
+  const antesSaida = navegador.eventos.length;
+  await clicarElemento('button[type=button]');
+  assert.equal((await aguardarRespostaDeRede('/api/v1/auth/logout', antesSaida)).situacao, 204);
+  await aguardarCondicao(() => avaliarExpressaoNaAba(segundoNavegador, "location.pathname==='/login'&&!!document.querySelector('#login-email')"));
+  assert.equal((await navegador.enviarComandoAoNavegador('Network.getCookies', { urls: [`${urlFrontend}/api/v1/auth/me`] })).cookies.some((item) => item.name === 'refresh_token'), false);
+  const sessoes = await prisma.session.findMany({ where: { userId: usuario.id } });
+  assert.equal(sessoes.length, 2);assert.equal(sessoes.every((linha) => linha.revokedAt !== null), true);
+  await navegador.enviarComandoAoNavegador('Page.reload');
+  await aguardarCondicao(() => avaliarExpressaoNaAbaPrincipal("document.readyState==='complete'&&!!document.querySelector('#login-email')&&location.pathname==='/login'"));
+  assert.equal(await avaliarExpressaoNaAbaPrincipal("import('/src/authentication.ts').then(({CLIENTE_AUTENTICACAO})=>CLIENTE_AUTENTICACAO.obterEstadoDaAutenticacao().situacao==='naoAutenticado'&&CLIENTE_AUTENTICACAO.obterEstadoDaAutenticacao().identidade===null)"), true);
+  const historico = await navegador.enviarComandoAoNavegador('Page.getNavigationHistory');
+  const protegidaAnterior = historico.entries.slice(0, historico.currentIndex).reverse().find((entrada) => new URL(entrada.url).pathname === '/app');
+  assert.ok(protegidaAnterior);
+  await navegador.enviarComandoAoNavegador('Page.navigateToHistoryEntry', { entryId: protegidaAnterior.id });
+  await aguardarCondicao(async () => {
+    try { return await avaliarExpressaoNaAbaPrincipal("location.pathname==='/login'&&!!document.querySelector('#login-email')&&!document.body.innerText.includes('Sessão autenticada')"); }
     catch { return false; }
   });
-  report(phase, { logout: 204, bothTabsShowLogin: true, loginPropagated: true, cookieRemoved: true, persistedRevocation: true, reloadShowsLogin: true, backShowsLogin: true, memoryCleared: true });
+  relatarEtapaDaVerificacao(etapa, { sair: 204, ambasAbasExibemLogin: true, loginPropagado: true, cookieRemovido: true, revogacaoPersistida: true, recargaExibeLogin: true, voltarExibeLogin: true, memoriaLimpa: true });
 
-  phase = 'real_atomic_rotation';
-  const repository = new PrismaAuthenticationRepository(prisma);
-  const digest = () => createHash('sha256').update(randomUUID()).digest('hex');
-  const currentHash = digest(), nextHashes = [digest(), digest()];
-  const concurrent = Session.create({ userId: user.id, activeOfficeId: office.id, refreshTokenHash: currentHash, expiresAt: new Date(Date.now() + 60000) });
-  await repository.createSession(concurrent);
-  const rotations = await Promise.all(nextHashes.map((nextHash) => repository.rotateSession({ id: concurrent.id, currentHash, nextHash, now: new Date() })));
-  assert.equal(rotations.filter(Boolean).length, 1);
-  const storedRotation = await prisma.session.findUniqueOrThrow({ where: { id: concurrent.id } });
-  assert.equal(storedRotation.refreshTokenHash === nextHashes[rotations.indexOf(true)], true);
-  await repository.revokeSession(concurrent.id, new Date());
-  assert.ok((await prisma.session.findUniqueOrThrow({ where: { id: concurrent.id } })).revokedAt);
-  report(phase, { competingUpdates: 2, acceptedUpdates: 1, persistedRevocation: true });
-  phase = 'secret_redaction';
-  const allEvents = [...browser.events, ...secondBrowser.events];
-  const logs = processLogs.join('\n') + JSON.stringify(allEvents.filter((event) => ['Runtime.consoleAPICalled', 'Runtime.exceptionThrown', 'Log.entryAdded'].includes(event.method)));
-  const issuedAccessTokens = [...intercepted.values()].map((response) => response.body?.accessToken).filter(Boolean);
-  for (const secret of [password, refreshToken, accessToken, user.passwordHash, session.refreshTokenHash, rotated.refreshTokenHash, ...issuedAccessTokens]) assert.equal(logs.includes(secret), false);
-  assert.equal(allEvents.some((event) => event.method === 'Runtime.exceptionThrown'), false);
-  const faviconResponses = allEvents.filter((event) => event.method === 'Network.responseReceived' && new URL(event.params.response.url).pathname.startsWith('/favicon.'));
-  assert.ok(faviconResponses.some((event) => event.params.response.status === 200));
-  assert.equal(faviconResponses.some((event) => event.params.response.status === 404), false);
-  report(phase, { secretsInLogs: false, favicon: 200, faviconInBuild: true, favicon404: false });
+  etapa = 'real_atomic_rotation';
+  const repositorio = new RepositorioAutenticacaoPrisma(prisma);
+  const gerarHashDeRenovacaoTemporario = () => createHash('sha256').update(randomUUID()).digest('hex');
+  const hashAtual = gerarHashDeRenovacaoTemporario(), proximosHashes = [gerarHashDeRenovacaoTemporario(), gerarHashDeRenovacaoTemporario()];
+  const concorrente = Sessao.criar({ idUsuario: usuario.id, idEscritorioAtivo: escritorio.id, hashTokenRenovacao: hashAtual, expiraEm: new Date(Date.now() + 60000) });
+  await repositorio.salvarSessao(concorrente);
+  const rotacoes = await Promise.all(proximosHashes.map((proximoHash) => repositorio.substituirHashDeRenovacao({ id: concorrente.id, hashAtual, proximoHash, agora: new Date() })));
+  assert.equal(rotacoes.filter(Boolean).length, 1);
+  const rotacaoArmazenada = await prisma.session.findUniqueOrThrow({ where: { id: concorrente.id } });
+  assert.equal(rotacaoArmazenada.refreshTokenHash === proximosHashes[rotacoes.indexOf(true)], true);
+  await repositorio.revogarSessao(concorrente.id, new Date());
+  assert.ok((await prisma.session.findUniqueOrThrow({ where: { id: concorrente.id } })).revokedAt);
+  relatarEtapaDaVerificacao(etapa, { atualizacoesConcorrentes: 2, atualizacoesAceitas: 1, revogacaoPersistida: true });
+  etapa = 'secret_redaction';
+  const todosEventos = [...navegador.eventos, ...segundoNavegador.eventos];
+  const logs = LOGS_PROCESSOS.join('\n') + JSON.stringify(todosEventos.filter((evento) => ['Runtime.consoleAPICalled', 'Runtime.exceptionThrown', 'Log.entryAdded'].includes(evento.method)));
+  const tokensAcessoEmitidos = [...INTERCEPTADOS.values()].map((resposta) => resposta.corpo?.tokenAcesso).filter(Boolean);
+  for (const segredo of [SENHA, tokenRenovacao, tokenAcesso, usuario.passwordHash, sessao.refreshTokenHash, rotacionado.refreshTokenHash, ...tokensAcessoEmitidos]) assert.equal(logs.includes(segredo), false);
+  assert.equal(todosEventos.some((evento) => evento.method === 'Runtime.exceptionThrown'), false);
+  const respostasFavicon = todosEventos.filter((evento) => evento.method === 'Network.responseReceived' && new URL(evento.params.response.url).pathname.startsWith('/favicon.'));
+  assert.ok(respostasFavicon.some((evento) => evento.params.response.status === 200));
+  assert.equal(respostasFavicon.some((evento) => evento.params.response.status === 404), false);
+  relatarEtapaDaVerificacao(etapa, { segredosNosLogs: false, favicon: 200, faviconNoBuild: true, favicon404: false });
 } catch {
-  fail(phase);
-  if (browser && phase === 'invalid_password_submit') {
+  relatarFalha(etapa);
+  if (navegador && etapa === 'invalid_password_submit') {
     try {
-      report('form_diagnostic', await evaluate(`({emailMatches:document.querySelector('#login-email')?.value===${JSON.stringify(email)}, passwordLength:document.querySelector('#login-password')?.value.length, alerts:document.querySelectorAll('[role=alert]').length})`));
-      const responses = browser.events.filter((event) => event.method === 'Network.responseReceived' && new URL(event.params.response.url).pathname.startsWith('/api/'));
-      report('network_diagnostic', { responses: responses.map((event) => ({ path: new URL(event.params.response.url).pathname, status: event.params.response.status })) });
+      relatarEtapaDaVerificacao('form_diagnostic', await avaliarExpressaoNaAbaPrincipal(`({emailCorresponde:document.querySelector('#login-email')?.value===${JSON.stringify(EMAIL)}, tamanhoSenha:document.querySelector('#login-password')?.value.length, alertas:document.querySelectorAll('[role=alert]').length})`));
+      const respostas = navegador.eventos.filter((evento) => evento.method === 'Network.responseReceived' && new URL(evento.params.response.url).pathname.startsWith('/api/'));
+      relatarEtapaDaVerificacao('network_diagnostic', { respostas: respostas.map((evento) => ({ caminho: new URL(evento.params.response.url).pathname, situacao: evento.params.response.status })) });
     } catch { /* Report only sanitized diagnostics. */ }
   }
 }
 finally {
   if (prisma) {
     try {
-      if (ownsRecords) {
-        const users = await prisma.user.findMany({ where: { email }, select: { id: true } });
-        const offices = await prisma.office.findMany({ where: { name: officeName }, select: { id: true } });
-        const userIds = users.map((row) => row.id), officeIds = offices.map((row) => row.id);
-        const removed = await prisma.$transaction(async (tx) => {
-          const buckets = await tx.rateLimitBucket.deleteMany({ where: { keyHash: { in: rateHashes } } });
-          const sessions = await tx.session.deleteMany({ where: { userId: { in: userIds }, activeOfficeId: { in: officeIds } } });
-          const memberships = await tx.membership.deleteMany({ where: { userId: { in: userIds }, officeId: { in: officeIds } } });
-          const users = await tx.user.deleteMany({ where: { id: { in: userIds }, email } });
-          const offices = await tx.office.deleteMany({ where: { id: { in: officeIds }, name: officeName } });
-          return { buckets: buckets.count, sessions: sessions.count, memberships: memberships.count, users: users.count, offices: offices.count };
+      if (possuiRegistros) {
+        const usuarios = await prisma.user.findMany({ where: { email: EMAIL }, select: { id: true } });
+        const escritorios = await prisma.office.findMany({ where: { name: NOME_ESCRITORIO }, select: { id: true } });
+        const idsUsuarios = usuarios.map((linha) => linha.id), idsEscritorios = escritorios.map((linha) => linha.id);
+        const removidos = await prisma.$transaction(async (transacao) => {
+          const contadores = await transacao.rateLimitBucket.deleteMany({ where: { keyHash: { in: HASHES_LIMITADOR } } });
+          const sessoes = await transacao.session.deleteMany({ where: { userId: { in: idsUsuarios }, activeOfficeId: { in: idsEscritorios } } });
+          const vinculos = await transacao.membership.deleteMany({ where: { userId: { in: idsUsuarios }, officeId: { in: idsEscritorios } } });
+          const usuarios = await transacao.user.deleteMany({ where: { id: { in: idsUsuarios }, email: EMAIL } });
+          const escritorios = await transacao.office.deleteMany({ where: { id: { in: idsEscritorios }, name: NOME_ESCRITORIO } });
+          return { contadores: contadores.count, sessoes: sessoes.count, vinculos: vinculos.count, usuarios: usuarios.count, escritorios: escritorios.count };
         });
-        const remaining = await prisma.session.count({ where: { userId: { in: userIds } } })
-          + await prisma.membership.count({ where: { userId: { in: userIds } } })
-          + await prisma.user.count({ where: { email } }) + await prisma.office.count({ where: { name: officeName } })
-          + await prisma.rateLimitBucket.count({ where: { keyHash: { in: rateHashes } } });
-        assert.equal(remaining, 0); report('temporary_records_cleanup', { removed, remaining });
+        const restantes = await prisma.session.count({ where: { userId: { in: idsUsuarios } } })
+          + await prisma.membership.count({ where: { userId: { in: idsUsuarios } } })
+          + await prisma.user.count({ where: { email: EMAIL } }) + await prisma.office.count({ where: { name: NOME_ESCRITORIO } })
+          + await prisma.rateLimitBucket.count({ where: { keyHash: { in: HASHES_LIMITADOR } } });
+        assert.equal(restantes, 0); relatarEtapaDaVerificacao('temporary_records_cleanup', { removidos, restantes });
+        if (registrosAnteriores) {
+          // Comparação somente em memória; nenhum dado anterior é gravado ou exposto.
+          assert.equal(JSON.stringify(await lerRegistrosExistentes()) === JSON.stringify(registrosAnteriores), true);
+          relatarEtapaDaVerificacao('dados_anteriores_preservados', { semAlteracoes: true });
+        }
       }
-    } catch { fail('temporary_records_cleanup'); }
-    finally { try { await prisma.$disconnect(); } catch { fail('disconnect'); } }
+    } catch { relatarFalha('temporary_records_cleanup'); }
+    finally { try { await prisma.$disconnect(); } catch { relatarFalha('disconnect'); } }
   }
-  if (browser) { try { await browser.send('Browser.close'); } catch { /* Chrome can close the socket before replying. */ } browser.socket.close(); }
-  secondBrowser?.socket.close();
-  if (chrome) { try { await until(() => chrome.exitCode !== null, 10000); } catch { chrome.kill(); fail('browser_close'); } }
-  if (frontend) { try { await frontend.close(); } catch { fail('frontend_close'); } }
+  if (navegador) { try { await navegador.enviarComandoAoNavegador('Browser.close'); } catch { /* Chrome can close the socket before replying. */ } navegador.socket.close(); }
+  segundoNavegador?.socket.close();
+  if (chrome) { try { await aguardarCondicao(() => chrome.exitCode !== null, 10000); } catch { chrome.kill(); relatarFalha('browser_close'); } }
+  if (frontend) { try { await frontend.close(); } catch { relatarFalha('frontend_close'); } }
   if (backend && backend.exitCode === null) {
-    try { backend.send('stop'); await until(() => backend.exitCode !== null, 10000); assert.equal(backend.exitCode, 0); }
-    catch { backend.kill(); fail('backend_close'); }
+    try { backend.send('stop'); await aguardarCondicao(() => backend.exitCode !== null, 10000); assert.equal(backend.exitCode, 0); }
+    catch { backend.kill(); relatarFalha('backend_close'); }
   }
-  if (profile) {
+  if (perfil) {
     try {
-      const resolved = realpathSync(profile), parent = realpathSync(tmpdir());
-      assert.ok(resolved.toLowerCase().startsWith((parent + sep).toLowerCase()));
-      assert.ok(resolved.split(sep).at(-1).startsWith('neodireito-rf003-browser-'));
-      rmSync(resolved, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
-    } catch { fail('profile_cleanup'); }
+      const resolvido = realpathSync(perfil), diretorioPai = realpathSync(tmpdir());
+      assert.ok(resolvido.toLowerCase().startsWith((diretorioPai + sep).toLowerCase()));
+      assert.ok(resolvido.split(sep).at(-1).startsWith('neodireito-rf003-browser-'));
+      rmSync(resolvido, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
+    } catch { relatarFalha('profile_cleanup'); }
   }
-  report('verification_resources_closed');
+  relatarEtapaDaVerificacao('verification_resources_closed');
 }

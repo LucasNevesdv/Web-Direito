@@ -1,175 +1,175 @@
 import type { FastifyInstance } from 'fastify';
-import type { RateLimiter } from '../application/security/rate-limiter.js';
-import { rateLimitHook } from './rate-limit-hook.js';
+import type { LimitadorRequisicoes } from '../application/security/rate-limiter.js';
+import { criarTratadorDeLimiteDeRequisicoes } from './rate-limit-hook.js';
 import { z } from 'zod';
-import { EmailAlreadyRegisteredError } from '../application/onboarding/email-already-registered-error.js';
-import { InvalidRegistrationError } from '../application/onboarding/invalid-registration-error.js';
-import type { RegisterOfficeWithOwner } from '../application/onboarding/register-office-with-owner.js';
+import { ErroEmailJaCadastrado } from '../application/onboarding/email-already-registered-error.js';
+import { ErroCadastroInvalido } from '../application/onboarding/invalid-registration-error.js';
+import type { CadastroDeEscritorioComProprietario } from '../application/onboarding/register-office-with-owner.js';
 
-const nameSchema = z.string().trim().refine((value) => {
-  const length = Array.from(value).length;
-  return length >= 2 && length <= 120;
+const ESQUEMA_NOME = z.string().trim().refine((valor) => {
+  const tamanho = Array.from(valor).length;
+  return tamanho >= 2 && tamanho <= 120;
 });
 
-const registrationSchema = z.object({
-  officeName: nameSchema,
-  adminName: nameSchema,
+const ESQUEMA_CADASTRO = z.object({
+  nomeEscritorio: ESQUEMA_NOME,
+  nomeAdministrador: ESQUEMA_NOME,
   email: z.string().trim().toLowerCase().max(254).email(),
-  password: z.string().refine((value) => {
-    const length = Array.from(value).length;
-    return length >= 12 && length <= 128;
+  senha: z.string().refine((valor) => {
+    const tamanho = Array.from(valor).length;
+    return tamanho >= 12 && tamanho <= 128;
   }),
 }).strict();
 
-const fieldMessages = {
-  officeName: 'Informe um nome de escritório entre 2 e 120 caracteres.',
-  adminName: 'Informe um nome de responsável entre 2 e 120 caracteres.',
+const MENSAGENS_CAMPOS = {
+  nomeEscritorio: 'Informe um nome de escritório entre 2 e 120 caracteres.',
+  nomeAdministrador: 'Informe um nome de responsável entre 2 e 120 caracteres.',
   email: 'Informe um e-mail válido.',
-  password: 'Informe uma senha entre 12 e 128 caracteres.',
+  senha: 'Informe uma senha entre 12 e 128 caracteres.',
 } as const;
 
-type RegistrationField = keyof typeof fieldMessages;
+type CampoCadastro = keyof typeof MENSAGENS_CAMPOS;
 
-function isRegistrationField(value: unknown): value is RegistrationField {
-  return typeof value === 'string'
-    && Object.prototype.hasOwnProperty.call(fieldMessages, value);
+function estaEntreCamposDoCadastro(valor: unknown): valor is CampoCadastro {
+  return typeof valor === 'string'
+    && Object.prototype.hasOwnProperty.call(MENSAGENS_CAMPOS, valor);
 }
 
-function invalidBody(fields?: Partial<Record<RegistrationField, string>>) {
+function criarRespostaDeCadastroInvalido(campos?: Partial<Record<CampoCadastro, string>>) {
   return {
-    error: 'VALIDATION_ERROR',
-    message: 'Confira os dados do cadastro.',
-    ...(fields && Object.keys(fields).length > 0 ? { fields } : {}),
+    erro: 'ERRO_VALIDACAO',
+    mensagem: 'Confira os dados do cadastro.',
+    ...(campos && Object.keys(campos).length > 0 ? { campos } : {}),
   };
 }
 
-const publicResponseSchema = {
+const ESQUEMA_RESPOSTA_PUBLICA = {
   type: 'object',
   additionalProperties: false,
-  required: ['office', 'user', 'role'],
+  required: ['escritorio', 'usuario', 'papel'],
   properties: {
-    office: {
+    escritorio: {
       type: 'object',
       additionalProperties: false,
-      required: ['id', 'name', 'status', 'createdAt', 'updatedAt'],
+      required: ['id', 'nome', 'situacao', 'criadoEm', 'atualizadoEm'],
       properties: {
         id: { type: 'string', format: 'uuid' },
-        name: { type: 'string' },
-        status: { type: 'string', enum: ['ACTIVE', 'INACTIVE'] },
-        createdAt: { type: 'string', format: 'date-time' },
-        updatedAt: { type: 'string', format: 'date-time' },
+        nome: { type: 'string' },
+        situacao: { type: 'string', enum: ['ATIVO', 'INATIVO'] },
+        criadoEm: { type: 'string', format: 'date-time' },
+        atualizadoEm: { type: 'string', format: 'date-time' },
       },
     },
-    user: {
+    usuario: {
       type: 'object',
       additionalProperties: false,
-      required: ['id', 'name', 'email'],
+      required: ['id', 'nome', 'email'],
       properties: {
         id: { type: 'string', format: 'uuid' },
-        name: { type: 'string' },
+        nome: { type: 'string' },
         email: { type: 'string' },
       },
     },
-    role: { type: 'string', enum: ['OWNER'] },
+    papel: { type: 'string', enum: ['PROPRIETARIO'] },
   },
 } as const;
 
-const errorResponseSchema = {
+const ESQUEMA_RESPOSTA_ERRO = {
   type: 'object',
   additionalProperties: false,
-  required: ['error', 'message'],
+  required: ['erro', 'mensagem'],
   properties: {
-    error: { type: 'string' },
-    message: { type: 'string' },
-    fields: {
+    erro: { type: 'string' },
+    mensagem: { type: 'string' },
+    campos: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        officeName: { type: 'string' },
-        adminName: { type: 'string' },
+        nomeEscritorio: { type: 'string' },
+        nomeAdministrador: { type: 'string' },
         email: { type: 'string' },
-        password: { type: 'string' },
+        senha: { type: 'string' },
       },
     },
   },
 } as const;
 
-export function registerOnboardingRoute(
-  app: FastifyInstance,
-  registration: Pick<RegisterOfficeWithOwner, 'execute'>,
-  limiter: RateLimiter,
+export function registrarRotaCadastro(
+  aplicacao: FastifyInstance,
+  cadastro: Pick<CadastroDeEscritorioComProprietario, 'cadastrarEscritorioComProprietario'>,
+  limitador: LimitadorRequisicoes,
 ): void {
-  app.register(async (onboarding) => {
-    onboarding.setErrorHandler((error, _request, reply) => {
-      if (error instanceof EmailAlreadyRegisteredError) {
-        return reply.status(409).send({
-          error: 'EMAIL_ALREADY_REGISTERED',
-          message: 'Este e-mail já está cadastrado.',
+  aplicacao.register(async (cadastroInicial) => {
+    cadastroInicial.setErrorHandler((erro, _requisicao, respostaHttp) => {
+      if (erro instanceof ErroEmailJaCadastrado) {
+        return respostaHttp.status(409).send({
+          erro: 'EMAIL_JA_CADASTRADO',
+          mensagem: 'Este e-mail já está cadastrado.',
         });
       }
 
-      if (error instanceof InvalidRegistrationError) {
-        const fields = isRegistrationField(error.field)
-          ? { [error.field]: fieldMessages[error.field] }
+      if (erro instanceof ErroCadastroInvalido) {
+        const campos = estaEntreCamposDoCadastro(erro.campo)
+          ? { [erro.campo]: MENSAGENS_CAMPOS[erro.campo] }
           : undefined;
-        return reply.status(400).send(invalidBody(fields));
+        return respostaHttp.status(400).send(criarRespostaDeCadastroInvalido(campos));
       }
 
       // Parser errors can include request fragments. Never send their messages.
-      const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
-        ? error.statusCode
+      const statusCode = typeof erro === 'object' && erro !== null && 'statusCode' in erro
+        ? erro.statusCode
         : undefined;
       if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500) {
-        return reply.status(400).send(invalidBody());
+        return respostaHttp.status(400).send(criarRespostaDeCadastroInvalido());
       }
 
-      return reply.status(500).send({
-        error: 'INTERNAL_ERROR',
-        message: 'Não foi possível concluir o cadastro. Tente novamente.',
+      return respostaHttp.status(500).send({
+        erro: 'ERRO_INTERNO',
+        mensagem: 'Não foi possível concluir o cadastro. Tente novamente.',
       });
     });
 
-    onboarding.post('/api/v1/onboarding', {
-      onRequest: rateLimitHook(limiter, 'onboarding-ip'),
+    cadastroInicial.post('/api/v1/onboarding', {
+      onRequest: criarTratadorDeLimiteDeRequisicoes(limitador, 'onboarding-ip'),
       bodyLimit: 16 * 1024,
       schema: {
         response: {
-          201: publicResponseSchema,
-          400: errorResponseSchema,
-          409: errorResponseSchema,
-          500: errorResponseSchema,
+          201: ESQUEMA_RESPOSTA_PUBLICA,
+          400: ESQUEMA_RESPOSTA_ERRO,
+          409: ESQUEMA_RESPOSTA_ERRO,
+          500: ESQUEMA_RESPOSTA_ERRO,
         },
       },
-    }, async (request, reply) => {
-      const parsed = registrationSchema.safeParse(request.body);
+    }, async (requisicao, respostaHttp) => {
+      const interpretado = ESQUEMA_CADASTRO.safeParse(requisicao.body);
 
-      if (!parsed.success) {
-        const fields: Partial<Record<RegistrationField, string>> = {};
-        for (const issue of parsed.error.issues) {
-          const field = issue.path[0];
-          if (isRegistrationField(field)) {
-            fields[field] = fieldMessages[field];
+      if (!interpretado.success) {
+        const campos: Partial<Record<CampoCadastro, string>> = {};
+        for (const problema of interpretado.error.issues) {
+          const campo = problema.path[0];
+          if (estaEntreCamposDoCadastro(campo)) {
+            campos[campo] = MENSAGENS_CAMPOS[campo];
           }
         }
-        return reply.status(400).send(invalidBody(fields));
+        return respostaHttp.status(400).send(criarRespostaDeCadastroInvalido(campos));
       }
 
-      const result = await registration.execute(parsed.data);
+      const resultado = await cadastro.cadastrarEscritorioComProprietario(interpretado.data);
 
-      return reply.status(201).send({
-        office: {
-          id: result.office.id,
-          name: result.office.name,
-          status: result.office.status,
-          createdAt: result.office.createdAt,
-          updatedAt: result.office.updatedAt,
+      return respostaHttp.status(201).send({
+        escritorio: {
+          id: resultado.escritorio.id,
+          nome: resultado.escritorio.nome,
+          situacao: resultado.escritorio.situacao,
+          criadoEm: resultado.escritorio.criadoEm,
+          atualizadoEm: resultado.escritorio.atualizadoEm,
         },
-        user: {
-          id: result.user.id,
-          name: result.user.name,
-          email: result.user.email,
+        usuario: {
+          id: resultado.usuario.id,
+          nome: resultado.usuario.nome,
+          email: resultado.usuario.email,
         },
-        role: result.role,
+        papel: resultado.papel,
       });
     });
   });

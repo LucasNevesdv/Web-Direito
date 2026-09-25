@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Office } from '../../src/domain/offices/office.js';
-import { InvalidOfficeError } from '../../src/domain/offices/invalid-office-error.js';
-import { officeMapper } from '../../src/infrastructure/prisma/office-mapper.js';
+import { Escritorio } from '../../src/domain/offices/office.js';
+import { ErroEscritorioInvalido } from '../../src/domain/offices/invalid-office-error.js';
+import { MAPEADOR_ESCRITORIO } from '../../src/infrastructure/prisma/office-mapper.js';
 
-describe('Office persistence mapping', () => {
-  it('restores an inactive office without regenerating its identity, state or dates', () => {
-    const record = {
+describe("mapeamento de persistência do escritório", () => {
+  it("restaura escritório inativo sem regenerar identidade, estado ou datas", () => {
+    const registro = {
       id: '1e5ec6ab-cb01-4a65-ae67-b9ab6dfbe9ee',
       name: 'Escritório persistido',
       status: 'INACTIVE' as const,
@@ -13,21 +13,21 @@ describe('Office persistence mapping', () => {
       updatedAt: new Date('2026-02-01T11:00:00.456Z'),
     };
 
-    const office = officeMapper.toDomain(record);
+    const escritorio = MAPEADOR_ESCRITORIO.converterRegistroPrismaEmEscritorio(registro);
 
-    expect(office).toBeInstanceOf(Office);
-    expect(officeMapper.toPersistence(office)).toEqual(record);
-    record.createdAt.setFullYear(2000);
-    expect(office.createdAt.toISOString()).toBe('2026-01-01T10:00:00.123Z');
+    expect(escritorio).toBeInstanceOf(Escritorio);
+    expect(MAPEADOR_ESCRITORIO.converterEscritorioEmRegistroPrisma(escritorio)).toEqual(registro);
+    registro.createdAt.setFullYear(2000);
+    expect(escritorio.criadoEm.toISOString()).toBe('2026-01-01T10:00:00.123Z');
   });
 
-  it('rejects corrupted persisted state through domain validation', () => {
-    expect(() => officeMapper.toDomain({
+  it("rejeita estado persistido corrompido pela validação do domínio", () => {
+    expect(() => MAPEADOR_ESCRITORIO.converterRegistroPrismaEmEscritorio({
       id: '1e5ec6ab-cb01-4a65-ae67-b9ab6dfbe9ee',
       name: '',
       status: 'ACTIVE',
       createdAt: new Date(),
       updatedAt: new Date(),
-    })).toThrow(InvalidOfficeError);
+    })).toThrow(ErroEscritorioInvalido);
   });
 });

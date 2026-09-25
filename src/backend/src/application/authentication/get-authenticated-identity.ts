@@ -1,22 +1,22 @@
-import { publicIdentity, type AccessTokens, type AuthenticationRepository } from './authentication-contracts.js';
-import { InvalidAccessTokenError } from './authentication-errors.js';
+import { extrairIdentidadePublicaDoVinculo, type TokensAcesso, type RepositorioAutenticacao } from './authentication-contracts.js';
+import { ErroTokenAcessoInvalido } from './authentication-errors.js';
 
-export class GetAuthenticatedIdentity {
+export class ConsultaDeIdentidadeAutenticada {
   constructor(
-    private readonly repository: AuthenticationRepository,
-    private readonly tokens: AccessTokens,
-    private readonly clock: () => Date = () => new Date(),
+    private readonly repositorioAutenticacao: RepositorioAutenticacao,
+    private readonly tokensAcesso: TokensAcesso,
+    private readonly relogio: () => Date = () => new Date(),
   ) {}
 
-  async execute(accessToken: string) {
-    const claims = await this.tokens.verify(accessToken);
-    const record = await this.repository.findSession(claims.sessionId);
-    if (!record || !record.session.isActive(this.clock()) || record.account.user.status !== 'ACTIVE'
-      || record.session.userId !== claims.userId || record.account.user.id !== claims.userId
-      || record.session.activeOfficeId !== claims.activeOfficeId) throw new InvalidAccessTokenError();
-    const membership = record.account.memberships.find(({ office, role }) =>
-      office.id === claims.activeOfficeId && office.status === 'ACTIVE' && role === claims.role);
-    if (!membership) throw new InvalidAccessTokenError();
-    return publicIdentity(record.account, membership.office.id);
+  async consultarIdentidadeAutenticada(tokenAcesso: string) {
+    const dadosToken = await this.tokensAcesso.validarTokenDeAcesso(tokenAcesso);
+    const sessaoComUsuario = await this.repositorioAutenticacao.buscarSessaoComUsuarioPorId(dadosToken.idSessao);
+    if (!sessaoComUsuario || !sessaoComUsuario.sessao.estaAtiva(this.relogio()) || sessaoComUsuario.usuarioComVinculos.usuario.situacao !== 'ATIVO'
+      || sessaoComUsuario.sessao.idUsuario !== dadosToken.idUsuario || sessaoComUsuario.usuarioComVinculos.usuario.id !== dadosToken.idUsuario
+      || sessaoComUsuario.sessao.idEscritorioAtivo !== dadosToken.idEscritorioAtivo) throw new ErroTokenAcessoInvalido();
+    const vinculoAutorizado = sessaoComUsuario.usuarioComVinculos.vinculos.find(({ escritorio, papel }) =>
+      escritorio.id === dadosToken.idEscritorioAtivo && escritorio.situacao === 'ATIVO' && papel === dadosToken.papel);
+    if (!vinculoAutorizado) throw new ErroTokenAcessoInvalido();
+    return extrairIdentidadePublicaDoVinculo(sessaoComUsuario.usuarioComVinculos, vinculoAutorizado.escritorio.id);
   }
 }

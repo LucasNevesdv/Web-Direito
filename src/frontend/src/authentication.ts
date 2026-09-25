@@ -1,8 +1,8 @@
-import { AuthClient } from './auth-client';
-import { createBrowserSessionCoordinator } from './infrastructure/browser-session-coordinator';
-import { navigate } from './routing';
+import { ClienteAutenticacao } from './auth-client';
+import { criarCoordenadorSessaoNavegador } from './infrastructure/browser-session-coordinator';
+import { navegar } from './routing';
 
-const transport: typeof fetch = (path, init) => fetch(path, {
-  ...init, signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000),
+const enviarRequisicaoComPrazo: typeof fetch = (caminho, opcoes) => fetch(caminho, {
+  ...opcoes, signal: opcoes?.signal ? AbortSignal.any([opcoes.signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000),
 });
-export const authClient = new AuthClient(transport, () => navigate('/login'), createBrowserSessionCoordinator());
+export const CLIENTE_AUTENTICACAO = new ClienteAutenticacao(enviarRequisicaoComPrazo, () => navegar('/login'), criarCoordenadorSessaoNavegador());

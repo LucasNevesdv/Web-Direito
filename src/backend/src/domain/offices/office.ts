@@ -1,91 +1,91 @@
 import { randomUUID } from 'node:crypto';
-import { InvalidOfficeError } from './invalid-office-error.js';
+import { ErroEscritorioInvalido } from './invalid-office-error.js';
 
-export type OfficeStatus = 'ACTIVE' | 'INACTIVE';
+export type SituacaoEscritorio = 'ATIVO' | 'INATIVO';
 
-interface OfficeState {
+interface EstadoEscritorio {
   id: string;
-  name: string;
-  status: OfficeStatus;
-  createdAt: Date;
-  updatedAt: Date;
+  nome: string;
+  situacao: SituacaoEscritorio;
+  criadoEm: Date;
+  atualizadoEm: Date;
 }
 
-const UUID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+const PADRAO_UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
 
-export class Office {
+export class Escritorio {
   readonly #id: string;
-  readonly #name: string;
-  readonly #status: OfficeStatus;
-  readonly #createdAt: number;
-  readonly #updatedAt: number;
+  readonly #nome: string;
+  readonly #situacao: SituacaoEscritorio;
+  readonly #criadoEm: number;
+  readonly #atualizadoEm: number;
 
-  private constructor(state: OfficeState) {
-    if (typeof state.id !== 'string' || !UUID_PATTERN.test(state.id)) {
-      throw new InvalidOfficeError('id');
+  private constructor(estado: EstadoEscritorio) {
+    if (typeof estado.id !== 'string' || !PADRAO_UUID.test(estado.id)) {
+      throw new ErroEscritorioInvalido('id');
     }
-    if (typeof state.name !== 'string') {
-      throw new InvalidOfficeError('name');
+    if (typeof estado.nome !== 'string') {
+      throw new ErroEscritorioInvalido('nome');
     }
-    const name = state.name.trim();
+    const nome = estado.nome.trim();
     // PostgreSQL varchar limits characters rather than UTF-16 code units.
-    const nameLength = Array.from(name).length;
-    if (nameLength < 2 || nameLength > 120) {
-      throw new InvalidOfficeError('name');
+    const tamanhoNome = Array.from(nome).length;
+    if (tamanhoNome < 2 || tamanhoNome > 120) {
+      throw new ErroEscritorioInvalido('nome');
     }
-    if (state.status !== 'ACTIVE' && state.status !== 'INACTIVE') {
-      throw new InvalidOfficeError('status');
+    if (estado.situacao !== 'ATIVO' && estado.situacao !== 'INATIVO') {
+      throw new ErroEscritorioInvalido('situacao');
     }
-    if (!(state.createdAt instanceof Date) || !Number.isFinite(state.createdAt.getTime())) {
-      throw new InvalidOfficeError('createdAt');
+    if (!(estado.criadoEm instanceof Date) || !Number.isFinite(estado.criadoEm.getTime())) {
+      throw new ErroEscritorioInvalido('criadoEm');
     }
     if (
-      !(state.updatedAt instanceof Date) ||
-      !Number.isFinite(state.updatedAt.getTime()) ||
-      state.updatedAt.getTime() < state.createdAt.getTime()
+      !(estado.atualizadoEm instanceof Date) ||
+      !Number.isFinite(estado.atualizadoEm.getTime()) ||
+      estado.atualizadoEm.getTime() < estado.criadoEm.getTime()
     ) {
-      throw new InvalidOfficeError('updatedAt');
+      throw new ErroEscritorioInvalido('atualizadoEm');
     }
 
-    this.#id = state.id.toLowerCase();
-    this.#name = name;
-    this.#status = state.status;
-    this.#createdAt = state.createdAt.getTime();
-    this.#updatedAt = state.updatedAt.getTime();
+    this.#id = estado.id.toLowerCase();
+    this.#nome = nome;
+    this.#situacao = estado.situacao;
+    this.#criadoEm = estado.criadoEm.getTime();
+    this.#atualizadoEm = estado.atualizadoEm.getTime();
   }
 
-  static create(input: { name: string; id?: string }): Office {
-    const now = new Date();
-    return new Office({
-      id: input.id === undefined ? randomUUID() : input.id,
-      name: input.name,
-      status: 'ACTIVE',
-      createdAt: now,
-      updatedAt: now,
+  static criar(entrada: { nome: string; id?: string }): Escritorio {
+    const agora = new Date();
+    return new Escritorio({
+      id: entrada.id === undefined ? randomUUID() : entrada.id,
+      nome: entrada.nome,
+      situacao: 'ATIVO',
+      criadoEm: agora,
+      atualizadoEm: agora,
     });
   }
 
-  static restore(state: OfficeState): Office {
-    return new Office(state);
+  static restaurar(estado: EstadoEscritorio): Escritorio {
+    return new Escritorio(estado);
   }
 
   get id(): string {
     return this.#id;
   }
 
-  get name(): string {
-    return this.#name;
+  get nome(): string {
+    return this.#nome;
   }
 
-  get status(): OfficeStatus {
-    return this.#status;
+  get situacao(): SituacaoEscritorio {
+    return this.#situacao;
   }
 
-  get createdAt(): Date {
-    return new Date(this.#createdAt);
+  get criadoEm(): Date {
+    return new Date(this.#criadoEm);
   }
 
-  get updatedAt(): Date {
-    return new Date(this.#updatedAt);
+  get atualizadoEm(): Date {
+    return new Date(this.#atualizadoEm);
   }
 }

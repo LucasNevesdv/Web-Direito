@@ -1,58 +1,58 @@
-import { buildApp } from './app.js';
-import { createAuthentication } from './authentication.js';
-import { RegisterOfficeWithOwner } from './application/onboarding/register-office-with-owner.js';
-import { createPrismaClient, createPrismaHealthChecker } from './database.js';
-import { EnvironmentError, loadEnvironment } from './environment.js';
-import { PrismaOfficeRegistrationRepository } from './infrastructure/prisma/prisma-office-registration-repository.js';
-import { Argon2PasswordHasher } from './infrastructure/security/argon2-password-hasher.js';
-import { createShutdown } from './shutdown.js';
-import { createRateLimiting } from './rate-limiting.js';
+import { criarAplicacao } from './app.js';
+import { comporServicosDeAutenticacao } from './authentication.js';
+import { CadastroDeEscritorioComProprietario } from './application/onboarding/register-office-with-owner.js';
+import { criarClientePrisma, criarVerificadorSaudePrisma } from './database.js';
+import { ErroAmbiente, carregarAmbiente } from './environment.js';
+import { RepositorioCadastroEscritorioPrisma } from './infrastructure/prisma/prisma-office-registration-repository.js';
+import { ProtecaoDeSenhasArgon2 } from './infrastructure/security/argon2-password-hasher.js';
+import { criarEncerramento } from './shutdown.js';
+import { comporLimitacaoDeRequisicoes } from './rate-limiting.js';
 
-let prisma: ReturnType<typeof createPrismaClient> | undefined;
-let app: ReturnType<typeof buildApp> | undefined;
-let cleanup: { stop(): Promise<void> } | undefined;
+let prisma: ReturnType<typeof criarClientePrisma> | undefined;
+let aplicacao: ReturnType<typeof criarAplicacao> | undefined;
+let limpezaDeLimites: { parar(): Promise<void> } | undefined;
 
-const shutdown = createShutdown(
-  { close: async () => { await app?.close(); } },
+const encerrarRecursos = criarEncerramento(
+  { close: async () => { await aplicacao?.close(); } },
   { $disconnect: async () => { await prisma?.$disconnect(); } },
-  { stop: async () => { await cleanup?.stop(); } },
+  { parar: async () => { await limpezaDeLimites?.parar(); } },
 );
 
-function handleSignal(): void {
-  void shutdown().catch(() => {
+function tratarSinalDeEncerramento(): void {
+  void encerrarRecursos().catch(() => {
     console.error('Backend shutdown failed.');
     process.exitCode = 1;
   });
 }
 
-process.on('SIGINT', handleSignal);
-process.on('SIGTERM', handleSignal);
+process.on('SIGINT', tratarSinalDeEncerramento);
+process.on('SIGTERM', tratarSinalDeEncerramento);
 
 try {
-  const environment = loadEnvironment();
-  prisma = createPrismaClient(environment.DATABASE_URL);
-  const passwords = new Argon2PasswordHasher();
-  const registration = new RegisterOfficeWithOwner(
-    new PrismaOfficeRegistrationRepository(prisma),
-    passwords,
+  const ambiente = carregarAmbiente();
+  prisma = criarClientePrisma(ambiente.DATABASE_URL);
+  const protecaoDeSenhas = new ProtecaoDeSenhasArgon2();
+  const cadastro = new CadastroDeEscritorioComProprietario(
+    new RepositorioCadastroEscritorioPrisma(prisma),
+    protecaoDeSenhas,
   );
-  const authentication = await createAuthentication(prisma, environment, passwords);
-  const rateLimiting = createRateLimiting(prisma, environment);
-  app = buildApp(createPrismaHealthChecker(prisma), registration, authentication, { limiter: rateLimiting.limiter, trustProxy: environment.TRUST_PROXY });
-  await app.listen({
-    host: environment.HOST,
-    port: environment.PORT,
+  const autenticacao = await comporServicosDeAutenticacao(prisma, ambiente, protecaoDeSenhas);
+  const limitacaoRequisicoes = comporLimitacaoDeRequisicoes(prisma, ambiente);
+  aplicacao = criarAplicacao(criarVerificadorSaudePrisma(prisma), cadastro, autenticacao, { limitador: limitacaoRequisicoes.limitador, proxiesConfiaveis: ambiente.TRUST_PROXY });
+  await aplicacao.listen({
+    host: ambiente.HOST,
+    port: ambiente.PORT,
   });
-  cleanup = rateLimiting.startCleanup();
-} catch (error) {
+  limpezaDeLimites = limitacaoRequisicoes.iniciarLimpeza();
+} catch (erro) {
   process.exitCode = 1;
   console.error(
-    error instanceof EnvironmentError
-      ? error.message
+    erro instanceof ErroAmbiente
+      ? erro.message
       : 'Backend startup failed.',
   );
   try {
-    await shutdown();
+    await encerrarRecursos();
   } catch {
     console.error('Backend cleanup failed.');
   }
