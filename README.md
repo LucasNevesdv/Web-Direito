@@ -1,4 +1,4 @@
-[README (1).md](https://github.com/user-attachments/files/32830786/README.1.md)
+[README (1).md](https://github.com/user-attachments/files/32830786/README.md)
 # Gestão Jurídica — plataforma para pequenos escritórios de advocacia
 
 Projeto acadêmico da disciplina **Empreendedorismo em Sistemas de Informação**, desenvolvido no semestre **2026/2**, sob orientação do professor **Johnatan Oliveira**.
@@ -149,7 +149,3 @@ Antes do envio da primeira entrega, o grupo deverá:
 - Preparar o documento obrigatório da Entrega 1, incluindo as evidências e decisões do grupo.
 
 Este README apresenta a visão geral do projeto e não substitui o documento obrigatório da primeira entrega, que deverá ser organizado em `docs/entrega-01/` ou estrutura equivalente.
-
-## Uso de inteligência artificial
-
-O ChatGPT foi utilizado como apoio à organização e à redação inicial deste README, com base no tema e no enunciado fornecidos. O conteúdo deverá ser revisado pelos integrantes. Não foram geradas entrevistas, respostas de participantes ou resultados de validação.
