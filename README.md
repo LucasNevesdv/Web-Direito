@@ -4,8 +4,8 @@
 Projeto acadêmico da disciplina **Empreendedorismo em Sistemas de Informação**, desenvolvido no semestre **2026/2**, sob orientação do professor **Johnatan Oliveira**.
 
 **Etapa atual:** Entrega 1 — Descoberta do problema e da oportunidade.  
-**Nome do projeto:** provisório.  
-**Repositório:** a informar após a criação no GitHub.
+**Nome do projeto:** Web-Direito.  
+**Repositório:** https://github.com/LucasNevesdv/Web-Direito
 
 ## Integrantes
 
@@ -14,8 +14,6 @@ Projeto acadêmico da disciplina **Empreendedorismo em Sistemas de Informação*
 - Lucas Marcelino Neves
 - Matheus Pimenta
 - Diovani Da Cruz Mangia
-
-Os nomes completos deverão ser acrescentados pelo grupo antes da entrega.
 
 ## Apresentação
 
