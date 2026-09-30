@@ -1,4 +1,5 @@
-export type EscopoLimiteRequisicoes = 'onboarding-ip' | 'login-ip' | 'login-identity' | 'refresh-ip';
+export type EscopoLimiteRequisicoes = 'onboarding-ip' | 'login-ip' | 'login-identity' | 'refresh-ip'
+  | 'recovery-ip' | 'recovery-email' | 'reset-ip' | 'reset-token' | 'password-change-ip' | 'password-change-user';
 export interface DecisaoLimiteRequisicoes { podeProsseguir: boolean; tentarAposSegundos: number }
 export interface PoliticaLimiteRequisicoes { limite: number; janelaSegundos: number }
 export interface ArmazenamentoLimiteRequisicoes {
@@ -14,10 +15,12 @@ export interface LimitadorRequisicoes {
 
 export class LimitadorRequisicoesCompartilhado implements LimitadorRequisicoes {
   constructor(private readonly armazenamento: ArmazenamentoLimiteRequisicoes, private readonly chaves: ChavesLimiteRequisicoes,
-    private readonly politicasPorEscopo: Record<EscopoLimiteRequisicoes, PoliticaLimiteRequisicoes>) {}
+    private readonly politicasPorEscopo: Partial<Record<EscopoLimiteRequisicoes, PoliticaLimiteRequisicoes>>) {}
 
   registrarTentativaDeRequisicao(escopo: EscopoLimiteRequisicoes, ip: string, email?: string): Promise<DecisaoLimiteRequisicoes> {
-    return this.armazenamento.incrementarContadorDaJanela(escopo, this.chaves.gerarHashDaChave(escopo, ip, email), this.politicasPorEscopo[escopo]);
+    const politica = this.politicasPorEscopo[escopo];
+    if (!politica) return Promise.reject(new Error('Rate limiter unavailable'));
+    return this.armazenamento.incrementarContadorDaJanela(escopo, this.chaves.gerarHashDaChave(escopo, ip, email), politica);
   }
 }
 

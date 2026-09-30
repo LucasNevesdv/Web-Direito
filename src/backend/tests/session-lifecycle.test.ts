@@ -33,9 +33,9 @@ describe("renovação e encerramento da sessão", () => {
     expect(resposta.statusCode).toBe(200);
     const token = resposta.cookies[0].value;
     expect(token === cenario.resultado.tokenRenovacao).toBe(false);
-    const armazenado = cenario.sessoes.get(cenario.sessao.id)!.obterCopiaDoEstado();
+    const armazenado = cenario.sessoes.get(cenario.sessao.id)!.obterEstadoAtualDaSessao();
     expect(armazenado.hashTokenRenovacao === createHash('sha256').update(token).digest('hex')).toBe(true);
-    expect(armazenado.hashTokenRenovacao === cenario.sessao.obterCopiaDoEstado().hashTokenRenovacao).toBe(false);
+    expect(armazenado.hashTokenRenovacao === cenario.sessao.obterEstadoAtualDaSessao().hashTokenRenovacao).toBe(false);
     expect(armazenado.ultimoUsoEm).toBeInstanceOf(Date);
     expect(armazenado.atualizadoEm).toEqual(armazenado.ultimoUsoEm);
     expect(armazenado.expiraEm).toEqual(cenario.sessao.expiraEm);
@@ -52,7 +52,7 @@ describe("renovação e encerramento da sessão", () => {
   it.each(['missing-cookie', 'malformed', 'legacy', 'oversized', 'missing-session', 'expired', 'revoked', 'inactive-user', 'inactive-office', 'missing-membership', 'wrong-office', 'wrong-user', 'wrong-hash'] as const)("rejeita %s com a mesma resposta 401 sanitizada e limpa o cookie", async (condicao) => {
     const cenario = await prepararCenario();
     let token = cenario.resultado.tokenRenovacao;
-    const estado = cenario.sessao.obterCopiaDoEstado();
+    const estado = cenario.sessao.obterEstadoAtualDaSessao();
     if (condicao === 'missing-cookie') token = '';
     if (condicao === 'malformed') token = 'internal-secret-invalid';
     if (condicao === 'legacy') token = 'a'.repeat(43);
@@ -74,14 +74,14 @@ describe("renovação e encerramento da sessão", () => {
     expect(resposta.json()).toEqual({ erro: 'NAO_AUTORIZADO', mensagem: 'Entre novamente para continuar.' });
     expect(String(resposta.headers['set-cookie'])).toContain('refresh_token=;');
     expect(cenario.repositorio.substituirHashDeRenovacao).not.toHaveBeenCalled();
-    if (condicao === 'wrong-hash') expect(cenario.sessoes.get(estado.id)!.obterCopiaDoEstado().revogadaEm).toBeInstanceOf(Date);
+    if (condicao === 'wrong-hash') expect(cenario.sessoes.get(estado.id)!.obterEstadoAtualDaSessao().revogadaEm).toBeInstanceOf(Date);
   });
 
   it("revoga toda a sessão após reutilização e rejeita token substituto e /me", async () => {
     const cenario = await prepararCenario();
     const rotacionado = await cenario.enviarPost('refresh');
     expect((await cenario.enviarPost('refresh')).statusCode).toBe(401);
-    expect(cenario.sessoes.get(cenario.sessao.id)!.obterCopiaDoEstado().revogadaEm).toBeInstanceOf(Date);
+    expect(cenario.sessoes.get(cenario.sessao.id)!.obterEstadoAtualDaSessao().revogadaEm).toBeInstanceOf(Date);
     expect((await cenario.enviarPost('refresh', rotacionado.cookies[0].value)).statusCode).toBe(401);
     await expect(cenario.consultaIdentidade.consultarIdentidadeAutenticada(rotacionado.json().tokenAcesso)).rejects.toBeInstanceOf(ErroTokenAcessoInvalido);
   });
@@ -89,8 +89,8 @@ describe("renovação e encerramento da sessão", () => {
   it("permite somente um consumo concorrente e revoga a sessão após consumo duplicado", async () => {
     const cenario = await prepararCenario();
     const respostas = await Promise.all([cenario.enviarPost('refresh'), cenario.enviarPost('refresh')]);
-    expect(respostas.map((retangulo) => retangulo.statusCode).sort()).toEqual([200, 401]);
-    expect(cenario.sessoes.get(cenario.sessao.id)!.obterCopiaDoEstado().revogadaEm).toBeInstanceOf(Date);
+    expect(respostas.map((respostaHttp) => respostaHttp.statusCode).sort()).toEqual([200, 401]);
+    expect(cenario.sessoes.get(cenario.sessao.id)!.obterEstadoAtualDaSessao().revogadaEm).toBeInstanceOf(Date);
   });
 
   it("não estende o prazo absoluto perto da expiração", async () => {
@@ -107,10 +107,10 @@ describe("renovação e encerramento da sessão", () => {
     const cenario = await prepararCenario(seguro);
     const resposta = await cenario.enviarPost('logout');
     expect(resposta.statusCode).toBe(204); expect(resposta.body).toBe('');
-    const revogadaEm = cenario.sessoes.get(cenario.sessao.id)!.obterCopiaDoEstado().revogadaEm;
+    const revogadaEm = cenario.sessoes.get(cenario.sessao.id)!.obterEstadoAtualDaSessao().revogadaEm;
     expect(revogadaEm).toBeInstanceOf(Date);
     expect((await cenario.enviarPost('logout')).statusCode).toBe(204);
-    expect(cenario.sessoes.get(cenario.sessao.id)!.obterCopiaDoEstado().revogadaEm).toEqual(revogadaEm);
+    expect(cenario.sessoes.get(cenario.sessao.id)!.obterEstadoAtualDaSessao().revogadaEm).toEqual(revogadaEm);
     const cookie = String(resposta.headers['set-cookie']);
     for (const atributo of ['refresh_token=;', 'Expires=Thu, 01 Jan 1970', 'HttpOnly', 'Path=/api/v1/auth', 'SameSite=Lax']) expect(cookie).toContain(atributo);
     expect(cookie.includes('Secure')).toBe(seguro);
@@ -121,7 +121,7 @@ describe("renovação e encerramento da sessão", () => {
     const cenario = await prepararCenario();
     let token = entrada;
     if (entrada === 'expired') {
-      cenario.sessoes.set(cenario.sessao.id, Sessao.restaurar({ ...cenario.sessao.obterCopiaDoEstado(), criadoEm: new Date(0), expiraEm: new Date(1) }));
+      cenario.sessoes.set(cenario.sessao.id, Sessao.restaurar({ ...cenario.sessao.obterEstadoAtualDaSessao(), criadoEm: new Date(0), expiraEm: new Date(1) }));
       token = cenario.resultado.tokenRenovacao;
     }
     if (entrada === 'unknown') token = cenario.tokensRenovacao.gerarTokenDeRenovacao().token;
@@ -166,7 +166,7 @@ describe("renovação e encerramento da sessão", () => {
     const resposta = await cenario.enviarPost('refresh');
     expect(resposta.statusCode).toBe(500);expect(resposta.body).not.toContain('private-signing-detail');
     expect(cenario.repositorio.substituirHashDeRenovacao).not.toHaveBeenCalled();
-    expect(cenario.sessoes.get(cenario.sessao.id)!.obterCopiaDoEstado().hashTokenRenovacao).toBe(cenario.sessao.obterCopiaDoEstado().hashTokenRenovacao);
+    expect(cenario.sessoes.get(cenario.sessao.id)!.obterEstadoAtualDaSessao().hashTokenRenovacao).toBe(cenario.sessao.obterEstadoAtualDaSessao().hashTokenRenovacao);
   });
 
   it("informa falha de revogação persistente e ainda limpa o cookie", async () => {
@@ -175,13 +175,13 @@ describe("renovação e encerramento da sessão", () => {
     const resposta = await cenario.enviarPost('logout');
     expect(resposta.statusCode).toBe(500);expect(resposta.body).not.toContain('private-database-detail');
     expect(String(resposta.headers['set-cookie'])).toContain('refresh_token=;');
-    expect(cenario.sessoes.get(cenario.sessao.id)!.obterCopiaDoEstado().revogadaEm).toBeNull();
+    expect(cenario.sessoes.get(cenario.sessao.id)!.obterEstadoAtualDaSessao().revogadaEm).toBeNull();
   });
 
   it("limita Max-Age ao tempo restante da sessão", async () => {
     const cenario = await prepararCenario();
     const expiraEm = new Date(Date.now() + 60000);
-    cenario.sessoes.set(cenario.sessao.id, Sessao.restaurar({ ...cenario.sessao.obterCopiaDoEstado(), expiraEm }));
+    cenario.sessoes.set(cenario.sessao.id, Sessao.restaurar({ ...cenario.sessao.obterEstadoAtualDaSessao(), expiraEm }));
     const resposta = await cenario.enviarPost('refresh');
     expect(resposta.statusCode).toBe(200);
     const maxAge = Number(String(resposta.headers['set-cookie']).match(/Max-Age=(\d+)/)![1]);
@@ -193,6 +193,6 @@ describe("renovação e encerramento da sessão", () => {
     const cenario = await prepararCenario();
     const resposta = await cenario.aplicacao.inject({ method: 'POST', url: '/api/v1/auth/logout', headers: { origin: ORIGEM, cookie: `refresh_token=${cenario.resultado.tokenRenovacao}; unrelated=${'x'.repeat(4100)}` } });
     expect(resposta.statusCode).toBe(204);
-    expect(cenario.sessoes.get(cenario.sessao.id)!.obterCopiaDoEstado().revogadaEm).toBeInstanceOf(Date);
+    expect(cenario.sessoes.get(cenario.sessao.id)!.obterEstadoAtualDaSessao().revogadaEm).toBeInstanceOf(Date);
   });
 });

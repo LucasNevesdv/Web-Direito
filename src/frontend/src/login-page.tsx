@@ -1,8 +1,14 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { ErroLogin } from './auth-client';
 import { useAutenticacao } from './auth-context';
 
+const observarMensagemDeLogin = (atualizar: () => void) => {
+  window.addEventListener('popstate', atualizar);
+  return () => window.removeEventListener('popstate', atualizar);
+};
+
 export function PaginaLogin() {
+  const parametrosDaPagina = useSyncExternalStore(observarMensagemDeLogin, () => window.location.search);
   const [email, definirEmail] = useState('');
   const [senha, definirSenha] = useState('');
   const [errosDeValidacao, definirErrosDeValidacao] = useState<{ email?: string; senha?: string }>({});
@@ -53,18 +59,21 @@ export function PaginaLogin() {
       <section className="w-full max-w-lg" aria-labelledby="login-title">
         <a href="/" className="text-sm font-semibold uppercase tracking-[0.3em] text-cyan-300 focus-visible:outline focus-visible:outline-cyan-300">Legal System</a>
         <h1 id="login-title" className="mt-6 text-3xl font-bold">{identidade ? 'Sessão autenticada' : 'Entre no seu escritório'}</h1>
+        {parametrosDaPagina === '?senha=alterada' && <p role="status" className="mt-5 text-cyan-300">Senha alterada. Entre novamente com sua nova senha.</p>}
         {identidade ? (
           <div role="status" className="mt-8 space-y-4 rounded-xl border border-cyan-300/30 bg-slate-900 p-6">
             <h2 className="text-2xl text-cyan-300">Olá, {identidade.usuario.nome}</h2>
             <p>Escritório: <strong>{identidade.escritorio.nome}</strong></p>
             <p>Papel: <strong>{identidade.escritorio.papel}</strong></p>
             <p className="text-sm leading-6 text-slate-300">Esta é uma área autenticada provisória.</p>
+            <a href="/seguranca" className="block text-cyan-300 underline">Segurança e alteração de senha</a>
             <button type="button" onClick={() => {
               void cliente.encerrarSessao().catch(() => definirMensagem('Não foi possível encerrar a sessão no servidor. Tente novamente.'));
             }} className="rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950">Sair</button>
           </div>
         ) : (
           <form noValidate onSubmit={tratarSolicitacaoDeLogin} aria-busy={estaAutenticando} className="mt-8">
+            <a href="/recuperar-senha" className="mb-5 block text-cyan-300 underline">Esqueci minha senha</a>
             <fieldset disabled={estaAutenticando} className="space-y-5 rounded-xl border border-slate-800 bg-slate-900/70 p-6">
               <legend className="sr-only">Dados de acesso</legend>
               <div>

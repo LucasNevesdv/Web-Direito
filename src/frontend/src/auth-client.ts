@@ -203,5 +203,31 @@ export class ClienteAutenticacao {
     })();
     return this.promessaDeEncerramento;
   }
+
+  confirmarRevogacaoPorTrocaDeSenha(): void {
+    ++this.versaoDaIdentidade;
+    this.coordenador?.propagarInvalidacaoDaSessao('sair');
+    this.limparCredenciaisLocais();
+    this.aoExigirNovoLogin();
+  }
+
+  async trocarSenha(caminho: '/api/v1/auth/alterar-senha' | '/api/v1/auth/redefinir-senha', dados: object): Promise<Response> {
+    await this.promessaDeEncerramento;
+    await this.promessaRenovacao;
+    // Renovar, se necessário, antes de adquirir o mesmo lock usado pelo refresh.
+    if (caminho === '/api/v1/auth/alterar-senha') {
+      const identidade = await this.enviarRequisicaoAutenticada('/api/v1/auth/me');
+      if (!identidade.ok) return identidade;
+    }
+    return this.executarOperacaoExclusiva(async (sinal) => {
+      await this.coordenador?.sincronizarSessaoEntreAbas();
+      const cabecalhos: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (caminho === '/api/v1/auth/alterar-senha' && this.tokenAcessoEmMemoria) cabecalhos.Authorization = `Bearer ${this.tokenAcessoEmMemoria}`;
+      const resposta = await this.enviarRequisicaoHttp(caminho, { method: 'POST', credentials: 'include',
+        headers: cabecalhos, body: JSON.stringify(dados), signal: sinal });
+      if (resposta.ok) this.confirmarRevogacaoPorTrocaDeSenha();
+      return resposta;
+    });
+  }
 }
 

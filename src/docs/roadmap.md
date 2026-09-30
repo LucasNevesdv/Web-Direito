@@ -67,7 +67,7 @@ completo persistido. A limpeza confirmou ausência de registros temporários.
 Também foram verificados `/register` e o envio pelo proxy Vite usando o backend
 compilado.
 
-Verificação de e-mail, recuperação de senha, convites, gerenciamento de
+Verificação de e-mail, convites, gerenciamento de
 membros, autenticação em dois fatores e proteção avançada contra abuso do endpoint
 público permanecem pendentes. Manutenção e inativação de escritórios também não
 foram implementadas. A conclusão de RF-001 e RF-002 não conclui toda a área de
@@ -162,8 +162,62 @@ proteção avançada e limpeza histórica de sessões continuam fora desta melho
 
 ## Etapas restantes do MVP
 
+### Senhas — RF-007 e RF-008 concluídos
+
+Recuperação por e-mail e alteração autenticada implementadas com contratos da
+aplicação, domínio, mapper e repositório Prisma, telas e limites compartilhados.
+Migration nova `20260930120000_create_password_recoveries` aplicada localmente;
+seis migrations sincronizadas, sem modificar as cinco anteriores.
+
+Verificação de 30/09/2026: Prisma format/validate/generate aprovados, lint,
+typecheck, build e **458 testes** (383 backend e 75 frontend) aprovados.
+Foram adicionados 43 testes aos 415 anteriores. A verificação explícita
+`verify:password-security` passou com Chrome real, SMTP de captura e PostgreSQL:
+cadastro, solicitação 202, redefinição 200, senha antiga recusada, nova aceita,
+link utilizado/expirado recusado, alteração autenticada e logout em duas abas.
+Não houve persistência de segredos no armazenamento do navegador; token ficou
+fora das URLs HTTP, logs e registros do banco (somente seu hash foi persistido).
+
+Duas instâncias confirmaram limites por IP, e-mail, hash de token e usuário.
+Transações reais confirmaram rollback após escrita de senha e consumo de token,
+uma única redefinição concorrente e bloqueio de login com hash antigo. A rotina
+de limpeza foi executada sobre tabela temporária da própria conexão: lotes
+500/1/0, preservando o registro ainda válido. A regressão real RF-003 a RF-006
+também passou, incluindo uma única renovação para duas abas e revogação por
+reutilização. Registros/mensagens temporários removidos, dados anteriores
+preservados e somente processos iniciados pela verificação encerrados.
+
+O teste real identificou e levou à correção da atualização da mensagem de
+sucesso no login quando apenas a query mudava. Troca de senha agora compartilha
+o lock de refresh para preservar a limpeza do cookie.
+
+### Processamento durável de recuperação — concluído
+
+A limitação da fila em memória foi resolvida com `recovery_email_jobs`.
+Migration `20260930160000_create_recovery_email_jobs` aplicada; sete migrations
+sincronizadas, preservando as seis anteriores. Reserva atômica com lease,
+tentativas limitadas/backoff, cancelamento efetivo do envio, resultados
+condicionados à reserva e limpeza em lotes implementados.
+
+Verificação complementar: **476 testes** (401 backend e 75 frontend), mantendo
+os 458 anteriores e adicionando 18. Prisma format/validate/generate, migration
+status, lint, typecheck, build e auditoria de diff aprovados. Chrome, frontend,
+duas instâncias do backend, PostgreSQL e SMTP reais confirmaram persistência
+antes do 202, reinício abrupto, recuperação pela nova instância, falha 451 com
+retentativa e novo hash, reserva exclusiva, retomada de lease e rejeição do
+resultado antigo. Rollback e limpeza 500/1/0 foram comprovados no banco.
+Redefinição e alteração autenticada preservam logout em duas abas.
+Dados anteriores preservados; registros, mensagens e processos de teste limpos.
+
+**Limitações:** aceite externo seguido de falha antes da confirmação local pode
+produzir e-mail adicional; somente o token mais recente vale. SMTP real local
+verificado; Resend integrado pelo SDK oficial e contrato HTTP testado, mas
+entrega externa não executada, sem credenciais/domínio verificado e destinatário
+autorizado confirmados. Isso não equivale a uma verificação de entregabilidade
+em produção. Navegador real validado somente no Chrome. RF-009 não foi iniciado.
+
 A etapa 1 mantém as operações posteriores ao cadastro em andamento; RF-001 e
-RF-002 estão concluídos no recorte acima. A etapa 2 tem RF-003 a RF-006 concluídos;
+RF-002 estão concluídos no recorte acima. A etapa 2 tem RF-003 a RF-008 concluídos;
 permissões dos demais módulos e controles adicionais continuam planejados.
 Segurança, isolamento e registro das operações relevantes devem acompanhar cada
 módulo desde o início; a etapa 9 consolida e verifica esses controles, sem adiar
@@ -172,14 +226,14 @@ sua aplicação.
 | Ordem | Etapa e requisitos | Critérios para concluir |
 | --- | --- | --- |
 | 1 | Escritórios e usuários — **Cadastro RF-001 e RF-002 concluído; evolução pendente** | Concluir decisões de P-001 e implementar manutenção de escritórios, convites e gerenciamento de membros sob autorização. Preservar unicidade, histórico aplicável e consistência dos vínculos; o cadastro inicial atômico já está entregue. |
-| 2 | Autenticação e autorização — RF-003 a RF-006 concluídos; evolução de permissões pendente | Preservar login, `/me`, rotação, coordenação entre abas e logout; definir P-002/P-003 e implementar verificação de e-mail, recuperação de senha, dois fatores e permissões. Testar operações autorizadas e isolamento antes de liberar os demais módulos. Evoluir proteção contra abuso além dos limites compartilhados atuais. |
-| 3 | Clientes — RF-007 | Definir P-004 e a política aplicável de P-008; validar cadastro, consulta, edição e inativação sem perda de histórico ou vínculos, respeitando permissões. |
-| 4 | Casos e processos — RF-008, RF-009 | Definir P-005; validar cadastro e atualização manual, estados e vínculos aprovados com clientes; comprovar consistência e isolamento. Captura automática permanece fora desta etapa. |
-| 5 | Tarefas e prazos — RF-010, RF-011 | Resolver as definições aplicáveis de P-006 e P-008; validar responsáveis, acompanhamento e alterações de datas ou estados, mantendo autoria e histórico. Não presumir regras jurídicas de cálculo. |
-| 6 | Documentos e anotações — RF-012, RF-013 | Definir P-007 e as permissões e retenção aplicáveis; validar inclusão, consulta e alterações autorizadas; impedir acesso direto não autorizado a arquivos e anotações. |
-| 7 | Agenda — RF-014 | Resolver as definições de agenda em P-006; validar compromissos e apresentação coerente de tarefas e prazos, com datas e permissões corretas. |
-| 8 | Dashboard — RF-015 | Definir P-009; conferir resumos e contagens contra os dados de origem e testar que filtros e agregações não revelam dados sem autorização. |
-| 9 | Auditoria, segurança e aceitação do MVP — RF-016 e RNF-001 a RNF-010 | Concluir P-008 e a revisão dos controles transversais; validar rastreabilidade após alterações e exclusões, acesso à auditoria, sanitização e isolamento; definir e verificar metas operacionais e restauração de dados e documentos antes da liberação. |
+| 2 | Autenticação e autorização — RF-003 a RF-008 concluídos; evolução de permissões pendente | Preservar login, `/me`, rotação, coordenação entre abas e logout; definir P-002/P-003 e implementar verificação de e-mail, dois fatores e permissões. RF-007/RF-008 entregam recuperação e alteração de senha. Testar operações autorizadas e isolamento antes de liberar os demais módulos. Evoluir proteção contra abuso além dos limites compartilhados atuais. |
+| 3 | Clientes — RF-009 | Definir P-004 e a política aplicável de P-008; validar cadastro, consulta, edição e inativação sem perda de histórico ou vínculos, respeitando permissões. |
+| 4 | Casos e processos — RF-010, RF-011 | Definir P-005; validar cadastro e atualização manual, estados e vínculos aprovados com clientes; comprovar consistência e isolamento. Captura automática permanece fora desta etapa. |
+| 5 | Tarefas e prazos — RF-012, RF-013 | Resolver as definições aplicáveis de P-006 e P-008; validar responsáveis, acompanhamento e alterações de datas ou estados, mantendo autoria e histórico. Não presumir regras jurídicas de cálculo. |
+| 6 | Documentos e anotações — RF-014, RF-015 | Definir P-007 e as permissões e retenção aplicáveis; validar inclusão, consulta e alterações autorizadas; impedir acesso direto não autorizado a arquivos e anotações. |
+| 7 | Agenda — RF-016 | Resolver as definições de agenda em P-006; validar compromissos e apresentação coerente de tarefas e prazos, com datas e permissões corretas. |
+| 8 | Dashboard — RF-017 | Definir P-009; conferir resumos e contagens contra os dados de origem e testar que filtros e agregações não revelam dados sem autorização. |
+| 9 | Auditoria, segurança e aceitação do MVP — RF-018 e RNF-001 a RNF-010 | Concluir P-008 e a revisão dos controles transversais; validar rastreabilidade após alterações e exclusões, acesso à auditoria, sanitização e isolamento; definir e verificar metas operacionais e restauração de dados e documentos antes da liberação. |
 
 ## Critérios comuns de entrega
 
@@ -201,11 +255,70 @@ abaixo são referências iniciais de aceitação, a detalhar antes de cada etapa
 
 | Ordem | Funcionalidade | Critérios para concluir |
 | --- | --- | --- |
-| 1 | Captura automática em tribunais — RF-017 | Definir tribunais, fontes e dados abrangidos; validar captura, associação ao processo correto e tratamento de falhas e duplicidades. |
-| 2 | WhatsApp — RF-018 | Aprovar fluxos, contas, permissões e fornecedor; validar comunicação e seu vínculo com o contexto autorizado do escritório. |
-| 3 | Assinatura eletrônica — RF-019 | Definir o fluxo e fornecedor; validar envio, acompanhamento e associação do resultado ao documento correto. |
-| 4 | Pix e boleto — RF-020 | Definir provedor e regras de cobrança; validar emissão e acompanhamento, evitando duplicação de efeitos em retornos repetidos. |
-| 5 | Portal do cliente — RF-021 | Aprovar informações e ações disponíveis; validar autenticação e acesso restrito aos dados autorizados de cada cliente. |
-| 6 | Inteligência artificial — RF-022 | Aprovar casos de uso, critérios de qualidade, revisão e tratamento de dados; avaliar resultados com exemplos representativos antes da liberação. |
-| 7 | Aplicativo mobile — RF-023 | Definir plataformas e escopo; validar os fluxos selecionados, autenticação e isolamento no aplicativo. |
-| 8 | Financeiro avançado — RF-024 | Aprovar operações, relatórios e regras; validar cálculos e rastreabilidade dos registros conforme o escopo definido. |
+| 1 | Captura automática em tribunais — RF-019 | Definir tribunais, fontes e dados abrangidos; validar captura, associação ao processo correto e tratamento de falhas e duplicidades. |
+| 2 | WhatsApp — RF-020 | Aprovar fluxos, contas, permissões e fornecedor; validar comunicação e seu vínculo com o contexto autorizado do escritório. |
+| 3 | Assinatura eletrônica — RF-021 | Definir o fluxo e fornecedor; validar envio, acompanhamento e associação do resultado ao documento correto. |
+| 4 | Pix e boleto — RF-022 | Definir provedor e regras de cobrança; validar emissão e acompanhamento, evitando duplicação de efeitos em retornos repetidos. |
+| 5 | Portal do cliente — RF-023 | Aprovar informações e ações disponíveis; validar autenticação e acesso restrito aos dados autorizados de cada cliente. |
+| 6 | Inteligência artificial — RF-024 | Aprovar casos de uso, critérios de qualidade, revisão e tratamento de dados; avaliar resultados com exemplos representativos antes da liberação. |
+| 7 | Aplicativo mobile — RF-025 | Definir plataformas e escopo; validar os fluxos selecionados, autenticação e isolamento no aplicativo. |
+| 8 | Financeiro avançado — RF-026 | Aprovar operações, relatórios e regras; validar cálculos e rastreabilidade dos registros conforme o escopo definido. |
+
+## Arquivos da entrega RF-007/RF-008
+
+Caminhos relativos à raiz Git. Foram criados 23 arquivos e alterados 29 nesta entrega; nenhum removido. Nove outros arquivos já modificados pela revisão anterior foram preservados sem novas edições. `nomenclature.md` tinha alterações anteriores e recebeu também os termos desta entrega.
+
+| Situação | Caminho |
+| --- | --- |
+| Criado | `src/backend/prisma/migrations/20260930120000_create_password_recoveries/migration.sql` |
+| Criado | `src/backend/src/application/passwords/change-password.ts` |
+| Criado | `src/backend/src/application/passwords/password-contracts.ts` |
+| Criado | `src/backend/src/application/passwords/password-errors.ts` |
+| Criado | `src/backend/src/application/passwords/request-password-recovery.ts` |
+| Criado | `src/backend/src/application/security/password-policy.ts` |
+| Criado | `src/backend/src/domain/password-recovery/password-recovery.ts` |
+| Criado | `src/backend/src/infrastructure/email/resend-email.ts` |
+| Criado | `src/backend/src/infrastructure/email/smtp-email.ts` |
+| Criado | `src/backend/src/infrastructure/password-services.ts` |
+| Criado | `src/backend/src/infrastructure/prisma/password-recovery-mapper.ts` |
+| Criado | `src/backend/src/infrastructure/prisma/prisma-password-repository.ts` |
+| Criado | `src/backend/src/infrastructure/security/crypto-password-recovery.ts` |
+| Criado | `src/backend/src/infrastructure/security/password-recovery-worker.ts` |
+| Criado | `src/backend/src/presentation/password-routes.ts` |
+| Criado | `src/backend/tests/infrastructure/password-email.test.ts` |
+| Criado | `src/backend/tests/integration/password-security.check.mjs` |
+| Criado | `src/backend/tests/password-routes.test.ts` |
+| Criado | `src/backend/tests/passwords.test.ts` |
+| Criado | `src/backend/tests/support/password-fixture.ts` |
+| Criado | `src/frontend/src/password-pages.test.tsx` |
+| Criado | `src/frontend/src/password-pages.tsx` |
+| Criado | `src/frontend/src/password-session.test.ts` |
+| Alterado | `src/README.md` |
+| Alterado | `src/backend/.env.example` |
+| Alterado | `src/backend/package.json` |
+| Alterado | `src/backend/prisma/schema.prisma` |
+| Alterado | `src/backend/src/app.ts` |
+| Alterado | `src/backend/src/application/authentication/authenticate-user.ts` |
+| Alterado | `src/backend/src/application/authentication/authentication-contracts.ts` |
+| Alterado | `src/backend/src/application/onboarding/register-office-with-owner.ts` |
+| Alterado | `src/backend/src/application/security/rate-limiter.ts` |
+| Alterado | `src/backend/src/environment.ts` |
+| Alterado | `src/backend/src/infrastructure/prisma/prisma-authentication-repository.ts` |
+| Alterado | `src/backend/src/infrastructure/security/hmac-rate-limit-keys.ts` |
+| Alterado | `src/backend/src/rate-limiting.ts` |
+| Alterado | `src/backend/src/server.ts` |
+| Alterado | `src/backend/tests/environment.test.ts` |
+| Alterado | `src/backend/tests/integration/authentication-browser.check.mjs` |
+| Alterado | `src/backend/tests/rate-limiting.test.ts` |
+| Alterado | `src/backend/tests/server.test.ts` |
+| Alterado | `src/backend/tests/support/rate-limiter-fixture.ts` |
+| Alterado | `src/docs/architecture.md` |
+| Alterado | `src/docs/business-rules.md` |
+| Alterado | `src/docs/nomenclature.md` |
+| Alterado | `src/docs/requirements.md` |
+| Alterado | `src/docs/roadmap.md` |
+| Alterado | `src/frontend/src/app.tsx` |
+| Alterado | `src/frontend/src/auth-client.ts` |
+| Alterado | `src/frontend/src/login-page.test.tsx` |
+| Alterado | `src/frontend/src/login-page.tsx` |
+| Alterado | `src/pnpm-lock.yaml` |

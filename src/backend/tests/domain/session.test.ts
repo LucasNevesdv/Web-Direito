@@ -8,7 +8,7 @@ describe("Sessao", () => {
   it("define UUID e datas, protege o estado e não serializa o hash implicitamente", () => {
     const sessao = criarSessaoDeTeste();
     expect(sessao.id).toMatch(/^[a-f\d-]{36}$/);
-    const estado = sessao.obterCopiaDoEstado();
+    const estado = sessao.obterEstadoAtualDaSessao();
     estado.expiraEm.setTime(0);
     expect(sessao.expiraEm.getTime()).toBe(10000);
     expect(JSON.stringify(sessao)).toBe('{}');
@@ -21,6 +21,6 @@ describe("Sessao", () => {
     ['expiraEm', new Date(1000)], ['atualizadoEm', new Date(0)],
     ['revogadaEm', new Date(0)], ['ultimoUsoEm', new Date(0)],
   ])("rejeita %s inválido", (campo, valor) => {
-    expect(() => Sessao.restaurar({ ...criarSessaoDeTeste().obterCopiaDoEstado(), [campo]: valor })).toThrow(ErroSessaoInvalida);
+    expect(() => Sessao.restaurar({ ...criarSessaoDeTeste().obterEstadoAtualDaSessao(), [campo]: valor })).toThrow(ErroSessaoInvalida);
   });
 });

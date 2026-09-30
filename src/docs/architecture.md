@@ -120,12 +120,100 @@ nesta entrega. Nenhum algoritmo próprio é empregado.
 
 RF-002 foi atendido como condição técnica da atomicidade de RF-001: cadastro
 inicial do usuário e de seu vínculo. O login foi entregue em RF-003. Permanecem pendentes verificação de
-e-mail, recuperação de senha, convites, gerenciamento de membros, autenticação
+e-mail, convites, gerenciamento de membros, autenticação
 em dois fatores e proteção avançada contra abuso do endpoint público. Não foram
 implementados auditoria de negócio, permissões customizáveis ou isolamento de
 consultas dos demais módulos entre escritórios nesta entrega.
 
 ## Autenticação e sessão — RF-003 a RF-006
+
+### Recuperação e alteração de senha — RF-007/RF-008
+
+`RecuperacaoDeSenha` define validade e estado sem Prisma. A aplicação contém
+`RepositorioSenhas`, `RepositorioTrabalhosRecuperacao`, `EnvioEmail` e
+`TokensRecuperacao`, além dos casos `SolicitacaoRecuperacaoDeSenha`,
+`EnvioRecuperacaoDeSenha`, `RedefinicaoDeSenha` e
+`AlteracaoDeSenhaAutenticada`. `infrastructure/password-services.ts` compõe
+Prisma, geração criptográfica, processamento e adaptadores SMTP/Resend.
+
+A migration `20260930120000_create_password_recoveries` adiciona
+`password_recoveries`, com hash único, índices por usuário/expiração e índice
+único parcial para uma recuperação pendente por usuário. Migrations anteriores
+e nomes físicos existentes permanecem preservados.
+
+As operações bloqueiam a linha do usuário (`FOR UPDATE`) em transação curta,
+com statement timeout de 5 segundos, espera de pool de 5 segundos e transação
+de até 10 segundos. A comparação Argon2id e a geração de hash acontecem antes
+da transação; o hash anterior é reconfirmado sob bloqueio. Emissão invalida
+tokens anteriores; consumo condicional, troca de hash, invalidação e revogação
+de sessões são atômicos. Login reconfirma o hash sob o mesmo bloqueio. Nenhum
+e-mail é enviado dentro da transação. Refresh mantém sua detecção de reutilização.
+
+O HTTP 202 aguarda o commit do trabalho elegível no PostgreSQL, sem aguardar
+o provedor. Usuário ausente/inativo mantém a mesma confirmação e não gera
+trabalho. Erro de persistência retorna 503 sanitizado. Corpo, status e rate
+limits continuam genéricos; a consulta e as escritas no banco não têm tempos
+idênticos, portanto não se promete tempo constante.
+
+A migration adicional `20260930160000_create_recovery_email_jobs` cria
+`recovery_email_jobs` e `recovery_email_status`. Estados semânticos PENDENTE,
+EM_PROCESSAMENTO, ENVIADO e FALHA_DEFINITIVA correspondem a PENDING, PROCESSING,
+SENT e FAILED. O registro contém usuário/recuperação, tentativas, próxima
+execução, identificador/início/fim da reserva, envio, criação/atualização e
+código de erro permitido. Não contém token puro, link ou payload de e-mail.
+Índices atendem trabalhos disponíveis, leases vencidos e retenção.
+
+A reserva usa CTE com `FOR UPDATE SKIP LOCKED` e UPDATE atômico; o relógio do
+PostgreSQL define o lease. Cada instância processa um trabalho por vez. Após
+60 segundos (padrão), uma reserva abandonada pode ser retomada com novo UUID.
+Preparação e falha bloqueiam usuário e trabalho, nessa ordem; resultados são
+condicionados à reserva ainda válida. Nenhum envio externo mantém transação
+aberta. O envio recebe cancelamento antes do vencimento, com margem de cinco
+segundos; SMTP destrói o socket e Resend cancela o HTTP. O processador para de
+reservar ao encerrar e aguarda até 30 segundos antes de cancelar; reservas
+interrompidas continuam recuperáveis. Chamadas de parada compartilham Promise.
+
+Cada tentativa gera 32 bytes aleatórios, persiste somente SHA-256 e validade
+de 30 minutos e monta conteúdo em memória. Retentativa substitui o hash; falha
+invalida a recuperação. Recuperações consumidas não são reativadas e troca de
+senha cancela trabalhos pendentes/em processamento na mesma transação.
+Se o provedor aceitar e o processo cair antes da confirmação no banco, pode
+haver outro e-mail: só o token mais recente permanece válido. Não há promessa
+de entrega exatamente uma vez nem reutilização de chave de idempotência para
+conteúdos diferentes.
+
+O padrão permite cinco tentativas, backoff de 30 segundos multiplicado por
+dois a cada falha, limitado a 3.600 segundos. Reservas abandonadas também contam
+para limitar reinícios sucessivos. SMTP 4xx/rede e HTTP 5xx/408/409/429 são
+transitórios; SMTP 5xx e demais HTTP 4xx são definitivos. Esgotamento termina o
+trabalho e invalida o token. Política e polling estão em `EMAIL_FILA_*`, com
+validação de limites e valores ilustrativos no `backend/.env.example`.
+
+A limpeza remove até 500 trabalhos ENVIADO/FALHA_DEFINITIVA com mais de sete
+dias; preserva pendentes e reservas ativas. Recuperações expiradas vinculadas
+a trabalho ativo são preservadas até sua resolução. Ambas as rotinas usam
+`FOR UPDATE SKIP LOCKED` e `RATE_LIMIT_CLEANUP_INTERVAL_MS`. Logs estruturados
+contêm somente componente/evento (início, envio, retentativa, falha, limpeza e
+encerramento), sem destinatário, segredo ou conteúdo.
+
+`/health` permanece independente e `/ready` exige PostgreSQL. Indisponibilidade
+temporária de SMTP/Resend mantém trabalhos para nova tentativa e não derruba a
+API; logs do processador indicam as falhas. Configuração inválida de e-mail
+impede a inicialização. Nodemailer mantém limites DNS/conexão/greeting de
+cinco segundos e limite total de envio de dez segundos; socket cancelável
+impede que apenas a espera HTTP termine. Resend usa SDK oficial com transporte
+especializado, cancelamento em dez segundos e erros sanitizados, sem logs
+brutos do SDK. Entrega externa não foi confirmada.
+
+Referências oficiais: [reserva PostgreSQL](https://www.postgresql.org/docs/current/sql-select.html#SQL-FOR-UPDATE-SHARE),
+[transporte SMTP](https://nodemailer.com/smtp) e
+[erros Resend](https://resend.com/docs/api-reference/errors).
+
+O frontend retira o fragmento antes da montagem, mantém o token em memória e
+não persiste segredos. Trocas de senha usam o mesmo Web Lock da renovação,
+impedindo refresh simultâneo de reinstalar o cookie após a limpeza. Sucesso
+propaga logout e retorna ao login com mensagem; outras sessões são negadas
+pelo banco no próximo acesso protegido.
 
 `application/authentication/` contém `AutenticacaoDeUsuario`, `ConsultaDeIdentidadeAutenticada`, `RenovacaoDeSessao` e `EncerramentoDeSessao`
 e contratos específicos para consultas de autenticação, sessões e tokens. Não

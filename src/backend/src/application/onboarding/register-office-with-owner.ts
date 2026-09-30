@@ -4,6 +4,7 @@ import { Escritorio, type SituacaoEscritorio } from '../../domain/offices/office
 import { ErroUsuarioInvalido } from '../../domain/users/invalid-user-error.js';
 import { Usuario } from '../../domain/users/user.js';
 import type { ProtecaoDeSenhas } from '../security/password-hasher.js';
+import { senhaAtendePolitica } from '../security/password-policy.js';
 import { ErroEmailJaCadastrado } from './email-already-registered-error.js';
 import { ErroCadastroInvalido } from './invalid-registration-error.js';
 import type { RepositorioCadastroEscritorio } from './office-registration-repository.js';
@@ -54,11 +55,7 @@ export class CadastroDeEscritorioComProprietario {
       throw erro;
     }
 
-    if (typeof dadosDoCadastro.senha !== 'string') {
-      throw new ErroCadastroInvalido('senha');
-    }
-    const tamanhoSenha = Array.from(dadosDoCadastro.senha).length;
-    if (tamanhoSenha < 12 || tamanhoSenha > 128) {
+    if (!senhaAtendePolitica(dadosDoCadastro.senha)) {
       throw new ErroCadastroInvalido('senha');
     }
     if (await this.repositorioCadastro.possuiUsuarioComEmail(email)) {

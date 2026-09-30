@@ -39,7 +39,7 @@ export class AutenticacaoDeUsuario {
     const tokenAcesso = await this.tokensAcesso.criarTokenDeAcesso({
       idUsuario: usuarioComVinculos.usuario.id, idEscritorioAtivo: vinculoAtivo.escritorio.id, idSessao: sessao.id, papel: vinculoAtivo.papel,
     });
-    await this.repositorioAutenticacao.salvarSessao(sessao);
+    await this.repositorioAutenticacao.salvarSessao(sessao, usuarioComVinculos.usuario.hashSenha);
     return {
       resposta: { ...extrairIdentidadePublicaDoVinculo(usuarioComVinculos, vinculoAtivo.escritorio.id), tokenAcesso, expiraEmSegundos: this.opcoes.validadeAcessoSegundos },
       tokenRenovacao: tokenDeRenovacao.token,

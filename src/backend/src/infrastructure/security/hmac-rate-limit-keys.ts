@@ -20,6 +20,10 @@ export class ChavesLimiteRequisicoesHmac implements ChavesLimiteRequisicoes {
       }
     }
     const emailNormalizado = typeof email === 'string' && email.length <= 1024 ? email.trim().toLowerCase().slice(0, 254) : '';
+    if (['recovery-email', 'reset-token', 'password-change-user'].includes(escopo)) {
+      if (!email || email.length > 1024) throw new Error('Missing rate limit identity');
+      return createHmac('sha256', this.chave).update(JSON.stringify([escopo, escopo === 'recovery-email' ? emailNormalizado : email])).digest('hex');
+    }
     return createHmac('sha256', this.chave).update(JSON.stringify([escopo, ipNormalizado, escopo === 'login-identity' ? emailNormalizado : null])).digest('hex');
   }
 }

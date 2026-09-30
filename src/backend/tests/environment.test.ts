@@ -9,6 +9,13 @@ import {
 } from '../src/environment.js';
 
 const PADROES_AUTENTICACAO = {
+  EMAIL_FILA_INTERVALO_MS: 1000, EMAIL_FILA_LEASE_SEGUNDOS: 60, EMAIL_FILA_MAX_TENTATIVAS: 5,
+  EMAIL_FILA_ATRASO_INICIAL_SEGUNDOS: 30, EMAIL_FILA_ATRASO_MAXIMO_SEGUNDOS: 3600,
+  EMAIL_FILA_RETENCAO_DIAS: 7, EMAIL_FILA_ENCERRAMENTO_MS: 30000,
+  PROVEDOR_EMAIL: 'smtp', URL_FRONTEND: 'http://localhost:5173', EMAIL_REMETENTE: 'Web Direito <nao-responda@webdireito.local>',
+  SMTP_HOST: 'localhost', SMTP_PORT: 1025, SMTP_SEGURO: false,
+  RECUPERACAO_LIMITE_IP: 5, RECUPERACAO_JANELA_IP_SEGUNDOS: 900, RECUPERACAO_LIMITE_EMAIL: 3, RECUPERACAO_JANELA_EMAIL_SEGUNDOS: 3600,
+  REDEFINICAO_LIMITE: 5, REDEFINICAO_JANELA_SEGUNDOS: 900, ALTERACAO_SENHA_LIMITE: 5, ALTERACAO_SENHA_JANELA_SEGUNDOS: 900,
   RATE_LIMIT_ONBOARDING_MAX: 10, RATE_LIMIT_ONBOARDING_WINDOW_SECONDS: 900,
   RATE_LIMIT_LOGIN_IP_MAX: 30, RATE_LIMIT_LOGIN_IDENTITY_MAX: 5, RATE_LIMIT_LOGIN_WINDOW_SECONDS: 900,
   RATE_LIMIT_REFRESH_MAX: 30, RATE_LIMIT_REFRESH_WINDOW_SECONDS: 60,
@@ -42,7 +49,7 @@ describe("configuração de ambiente", () => {
   });
   it("exige origem HTTPS explícita do frontend em produção", () => {
     expect(() => validarAmbiente({ ...AMBIENTE_VALIDO, NODE_ENV: 'production' })).toThrow('AUTH_FRONTEND_ORIGIN');
-    expect(validarAmbiente({ ...AMBIENTE_VALIDO, NODE_ENV: 'production', AUTH_FRONTEND_ORIGIN: 'https://app.example.test' }).AUTH_FRONTEND_ORIGIN).toBe('https://app.example.test');
+    expect(validarAmbiente({ ...AMBIENTE_VALIDO, NODE_ENV: 'production', AUTH_FRONTEND_ORIGIN: 'https://app.example.test', URL_FRONTEND: 'https://app.example.test', EMAIL_REMETENTE: 'Web Direito <contato@example.test>' }).AUTH_FRONTEND_ORIGIN).toBe('https://app.example.test');
   });
   it("rejeita DATABASE_URL ausente sem revelar valores", () => {
     expect(() =>

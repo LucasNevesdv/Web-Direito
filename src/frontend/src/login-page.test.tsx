@@ -25,6 +25,12 @@ beforeEach(async () => {
 afterEach(() => { cleanup();vi.restoreAllMocks();vi.unstubAllGlobals(); });
 
 describe("página de login", () => {
+  it('atualiza a confirmação quando a query muda depois do redirecionamento ao login', async () => {
+    renderizarLogin();
+    window.history.replaceState({}, '', '/login?senha=alterada');
+    fireEvent.popState(window);
+    expect(await screen.findByText('Senha alterada. Entre novamente com sua nova senha.')).toBeTruthy();
+  });
   it("exibe /login e um link funcional para cadastro", () => {
     render(<Aplicacao cliente={cliente} />);
     expect(screen.getByRole('heading', { name: 'Entre no seu escritório' })).toBeTruthy();

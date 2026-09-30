@@ -1,4 +1,5 @@
 import { PaginaCadastro } from './register-page';
+import { PaginaSenhas } from './password-pages';
 import { PaginaLogin } from './login-page';
 import { useEffect, useSyncExternalStore } from 'react';
 import { ProvedorAutenticacao, useAutenticacao } from './auth-context';
@@ -20,8 +21,11 @@ function Rotas() {
   const caminho = useSyncExternalStore(observarCaminho, () => window.location.pathname);
   useEffect(() => {
     if (caminho === '/login' && situacao === 'autenticado') navegar('/app');
-    if (caminho !== '/' && caminho !== '/register' && caminho !== '/login' && situacao === 'naoAutenticado') navegar('/login');
+    if (!['/', '/register', '/login', '/recuperar-senha', '/redefinir-senha'].includes(caminho) && situacao === 'naoAutenticado') navegar('/login');
   }, [caminho, situacao]);
+  if (caminho === '/recuperar-senha') return <PaginaSenhas finalidade="recuperar" />;
+  if (caminho === '/redefinir-senha') return <PaginaSenhas finalidade="redefinir" />;
+  if (caminho === '/seguranca' && situacao === 'autenticado') return <PaginaSenhas finalidade="alterar" />;
   if (caminho !== '/' && caminho !== '/register') {
     if (situacao === 'carregando') return <main className="min-h-screen bg-slate-950 p-12 text-slate-100"><p role="status">Restaurando sessão…</p></main>;
     return <PaginaLogin />;

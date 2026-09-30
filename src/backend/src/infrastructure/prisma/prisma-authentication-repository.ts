@@ -1,4 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { ErroCredenciaisInvalidas } from '../../application/authentication/authentication-errors.js';
+import { bloquearUsuarioParaTrocaDeSenha } from './prisma-password-repository.js';
 import type { UsuarioComVinculos, RepositorioAutenticacao } from '../../application/authentication/authentication-contracts.js';
 import { Sessao } from '../../domain/sessions/session.js';
 import { converterRegistroPrismaEmUsuario, converterRegistroPrismaEmSessao, converterSessaoEmRegistroPrisma } from './authentication-mapper.js';
@@ -23,8 +25,14 @@ export class RepositorioAutenticacaoPrisma implements RepositorioAutenticacao {
     return registroUsuario ? converterRegistroPrismaEmUsuarioComVinculos(registroUsuario) : null;
   }
 
-  async salvarSessao(sessao: Sessao): Promise<void> {
-    await this.prisma.session.create({ data: converterSessaoEmRegistroPrisma(sessao), select: { id: true } });
+  async salvarSessao(sessao: Sessao, hashSenhaEsperado: string): Promise<void> {
+    await this.prisma.$transaction(async (transacao) => {
+      await bloquearUsuarioParaTrocaDeSenha(transacao, sessao.idUsuario);
+      if (!await transacao.user.findFirst({ where: { id: sessao.idUsuario, passwordHash: hashSenhaEsperado, status: 'ACTIVE' } })) {
+        throw new ErroCredenciaisInvalidas();
+      }
+      await transacao.session.create({ data: converterSessaoEmRegistroPrisma(sessao), select: { id: true } });
+    }, { maxWait: 5000, timeout: 10000 });
   }
 
   async buscarSessaoComUsuarioPorId(id: string) {

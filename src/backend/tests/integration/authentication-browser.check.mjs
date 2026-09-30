@@ -407,7 +407,7 @@ try {
   const gerarHashDeRenovacaoTemporario = () => createHash('sha256').update(randomUUID()).digest('hex');
   const hashAtual = gerarHashDeRenovacaoTemporario(), proximosHashes = [gerarHashDeRenovacaoTemporario(), gerarHashDeRenovacaoTemporario()];
   const concorrente = Sessao.criar({ idUsuario: usuario.id, idEscritorioAtivo: escritorio.id, hashTokenRenovacao: hashAtual, expiraEm: new Date(Date.now() + 60000) });
-  await repositorio.salvarSessao(concorrente);
+  await repositorio.salvarSessao(concorrente, usuario.passwordHash);
   const rotacoes = await Promise.all(proximosHashes.map((proximoHash) => repositorio.substituirHashDeRenovacao({ id: concorrente.id, hashAtual, proximoHash, agora: new Date() })));
   assert.equal(rotacoes.filter(Boolean).length, 1);
   const rotacaoArmazenada = await prisma.session.findUniqueOrThrow({ where: { id: concorrente.id } });

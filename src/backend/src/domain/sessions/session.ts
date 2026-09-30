@@ -62,5 +62,5 @@ export class Sessao {
   get idEscritorioAtivo(): string { return this.#estado.idEscritorioAtivo; }
   get expiraEm(): Date { return new Date(this.#estado.expiraEm); }
   estaAtiva(agora: Date): boolean { return this.#estado.revogadaEm === null && this.#estado.expiraEm > agora; }
-  obterCopiaDoEstado(): EstadoSessao { return structuredClone(this.#estado); }
+  obterEstadoAtualDaSessao(): EstadoSessao { return structuredClone(this.#estado); }
 }

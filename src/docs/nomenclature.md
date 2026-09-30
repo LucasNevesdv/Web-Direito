@@ -1,13 +1,21 @@
 # Nomenclatura em português brasileiro
 
-Esta refatoração altera nomes próprios, sem adicionar funcionalidades ou iniciar
-RF-007. Tipos, classes e interfaces usam PascalCase; funções, métodos, variáveis
+A refatoração original alterou nomes próprios sem adicionar funcionalidades.
+RF-007/RF-008 foram implementados em entrega posterior. Tipos, classes e interfaces usam PascalCase; funções, métodos, variáveis
 e propriedades usam camelCase; constantes globais usam UPPER_SNAKE_CASE.
 Identificadores não têm acentos. Textos para pessoas mantêm os acentos.
 
+Na entrega de senhas, `RecuperacaoDeSenha`, `RepositorioSenhas`, `EnvioEmail`,
+`SolicitacaoRecuperacaoDeSenha`, `RedefinicaoDeSenha` e
+`AlteracaoDeSenhaAutenticada` nomeiam responsabilidades de domínio/aplicação.
+`PasswordRecovery`, `tokenHash` e campos físicos em inglês pertencem à fronteira
+Prisma/PostgreSQL; `from`, `to`, `subject`, `html`, `text`, `fetchRequest` e
+opções SMTP pertencem aos SDKs. Os novos contratos JSON usam `senhaAtual`,
+`novaSenha` e `confirmacaoNovaSenha`; `email` e `token` são termos técnicos.
+
 Os nomes descrevem a responsabilidade, não uma tradução literal. Classes e tipos
 são substantivos. Ações começam com verbo no infinitivo e indicam o objeto;
-predicados e booleanos expressam estado ou condição (`estaEncerrado`,
+predicados e booleanos expressam estado ou condição (`estaCoordenacaoEncerrada`,
 `podeProsseguir`, `foiHashSubstituido`). Coleções usam plural. Handlers indicam o
 evento; callbacks indicam quando são chamados, como `aoExigirNovoLogin` e
 `aoExpirarSessao`. Métodos como `Escritorio.criar` e `Sessao.restaurar` mantêm a
@@ -38,13 +46,13 @@ substantivos em PascalCase, e hooks preservam o prefixo obrigatório `use`.
 | paraConta | converterRegistroPrismaEmUsuarioComVinculos | Converte um registro Prisma de usuário com memberships e escritórios em usuário do domínio com vínculos; não recebe uma resposta HTTP. |
 | ContaAutenticacao | UsuarioComVinculos | Representa o usuário carregado do banco e seus vínculos, antes da autenticação. |
 | paraDominio / paraPersistencia no mapper de escritório | converterRegistroPrismaEmEscritorio / converterEscritorioEmRegistroPrisma | Explicita origem e destino. |
-| Sessao.paraPersistencia | Sessao.obterCopiaDoEstado | Devolve uma cópia defensiva do estado do domínio, sem campos Prisma. |
+| Sessao.paraPersistencia | Sessao.obterEstadoAtualDaSessao | Devolve uma cópia defensiva do estado atual da instância de sessão, sem consultar o banco nem expor referências mutáveis internas. |
 | hash / verificar na proteção de senhas | gerarHashDaSenha / compararSenhaComHash | Distingue geração e comparação. |
 | assinar / verificar no serviço de tokens | criarTokenDeAcesso / validarTokenDeAcesso | Identifica o token e a operação. |
 | rotacionarSessao | substituirHashDeRenovacao | Substitui atomicamente o hash da mesma sessão; não cria outra sessão. |
 | verificar / consumir nos limites | registrarTentativaDeRequisicao / incrementarContadorDaJanela | A consulta consome uma tentativa, portanto não é uma verificação sem efeitos. |
 | renovar (variável do login) | tokenDeRenovacao | Guarda o token gerado, não uma função. |
-| pendente / recebidas no coordenador | sincronizacoesPendentes / idsDeMensagensRecebidas | Identifica as coleções e seus conteúdos. |
+| pendente / recebidas no coordenador | sincronizacoesPendentes / identificadoresDasMensagensRecebidas | Identifica as coleções e seus conteúdos, sem abreviar identificadores. |
 | geracao / versaoToken no cliente | versaoDaIdentidade / versaoDoTokenDeAcesso | Distingue troca de identidade e renovação de token. |
 | publicar / invalidar no coordenador | compartilharCredenciaisDaSessao / propagarInvalidacaoDaSessao | Explicita os efeitos entre abas. |
 
@@ -54,6 +62,12 @@ Repositórios usam operações específicas: `salvarEscritorio`,
 scripts de verificação acompanham os mesmos contratos. Nomes locais como
 `resposta`, `campo` e `resultado` são mantidos quando a operação imediatamente
 anterior e o escopo curto tornam seu significado inequívoco.
+
+`estaCoordenacaoEncerrada` indica que o coordenador de abas encerrou seus
+recursos; não indica revogação ou expiração da sessão. `estaLimpezaEncerrada`
+indica o encerramento da limpeza periódica de limites. A requisição de
+sincronização usa a variável local `identificadorDaRequisicao`; os campos
+serializados do protocolo entre abas permanecem inalterados.
 
 O domínio usa `ATIVO`, `INATIVO` e `PROPRIETARIO`. Não foram acrescentados papéis,
 estados ou regras. Mappers e repositórios convertem esses valores para os enums

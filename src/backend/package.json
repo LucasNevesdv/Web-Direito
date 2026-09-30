@@ -14,7 +14,8 @@
     "verify:onboarding": "tsx tests/integration/onboarding.check.ts",
     "configure:auth": "node scripts/configure-auth.mjs",
     "verify:auth-browser": "node tests/integration/authentication-browser.check.mjs",
-    "verify:rate-limit": "node tests/integration/distributed-rate-limit.check.mjs"
+    "verify:rate-limit": "node tests/integration/distributed-rate-limit.check.mjs",
+    "verify:password-security": "node tests/integration/password-security.check.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11",
@@ -23,11 +24,16 @@
     "dotenv": "^16.6.1",
     "fastify": "^5.0.0",
     "jose": "6",
+    "nodemailer": "^10.0.13",
+    "resend": "^6.31.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/nodemailer": "^8.0.2",
+    "mailparser": "^3.9.32",
     "prisma": "^6.16.2",
+    "smtp-server": "^3.19.16",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"

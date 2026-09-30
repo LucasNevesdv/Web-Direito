@@ -19,22 +19,24 @@ aprovados permanecem explicitamente pendentes.
 | RF-004 | **Concluído — emissão e gerenciamento de tokens.** JWT de até 15 minutos, refresh identificável com segredo de 256 bits, somente SHA-256 no banco, rotação atômica e revogação por reutilização. A autorização das operações dos demais módulos e a matriz de permissões permanecem pendentes como evolução de segurança. |
 | RF-005 | **Concluído — renovação de sessão.** POST `/api/v1/auth/refresh` usa apenas cookie HttpOnly, reconfirma sessão/identidade/vínculo, rotaciona o refresh e preserva a expiração absoluta de sete dias. Frontend restaura após recarga, coordena renovação entre abas por Web Locks/BroadcastChannel e repete cada requisição com 401 uma única vez. Expiração e falha definitiva se propagam; fallback seguro está documentado na arquitetura. |
 | RF-006 | **Concluído — logout.** POST `/api/v1/auth/logout` revoga a sessão, limpa o cookie e retorna 204 de forma idempotente. Botão Sair limpa memória e identidade nas abas conectadas e volta ao login; guard impede exibir conteúdo protegido pelo botão Voltar. |
-| RF-007 | Cadastrar, consultar, atualizar e inativar clientes do escritório, preservando seus vínculos e histórico. Campos e tratamento de duplicidades: pendentes. |
-| RF-008 | Cadastrar, consultar e atualizar casos e seus vínculos com clientes do mesmo escritório. Estados e cardinalidade dos relacionamentos: pendentes. |
-| RF-009 | Registrar e acompanhar processos com informações inseridas manualmente, associados ao contexto do escritório. Identificadores, estados e relação entre caso e processo: pendentes; captura automática não pertence ao MVP. |
-| RF-010 | Criar, atribuir e acompanhar tarefas, registrando alterações de responsável, estado e prazo quando houver. Estados e regras de conclusão: pendentes. |
-| RF-011 | Registrar e consultar prazos, com data, responsável e contexto de negócio; manter histórico de alterações. Horários, fusos e regras de tratamento de datas: pendentes, sem assumir cálculo jurídico automático. |
-| RF-012 | Incluir, consultar e obter documentos vinculados ao contexto de negócio autorizado. Restringir acesso ao conteúdo; armazenamento, formatos, limites e versionamento: pendentes. |
-| RF-013 | Registrar e consultar anotações no contexto de casos ou processos, aplicando controle de acesso também às alterações. Granularidade da visibilidade: pendente. |
-| RF-014 | Registrar e consultar compromissos na agenda e apresentar tarefas e prazos autorizados com suas datas. Regras de exibição, recorrência e eventuais lembretes: pendentes. |
-| RF-015 | Exibir dashboard com resumo de casos, processos, tarefas e prazos acessíveis ao usuário. Indicadores, filtros e períodos: pendentes; valores devem corresponder aos registros de origem. |
-| RF-016 | Registrar e permitir consulta autorizada da auditoria de operações relevantes, incluindo alterações, inativações e exclusões. Preservar autoria, escritório, recurso, ação e momento; eventos adicionais, retenção e acesso à auditoria: pendentes. |
+| RF-007 | **Implementado — recuperação de senha por e-mail.** Solicitação pública com HTTP 202 genérico após commit do trabalho elegível no PostgreSQL, envio assíncrono SMTP/Resend com lease entre instâncias, retomada após reinício e tentativas limitadas, token aleatório de 256 bits com SHA-256 no banco, uso único e validade de 30 minutos. Redefinição transacional revoga todas as sessões. Fluxo real validado no Chrome com SMTP local, reinício abrupto, duas instâncias e retentativa após falha; entrega externa Resend não verificada. |
+| RF-008 | **Implementado — alteração de senha autenticada.** Exige sessão ativa e senha atual, mesma política do cadastro, confirmação e senha diferente. Atualização, invalidação de recuperações e revogação de todas as sessões são atômicas; remove cookie, limpa memória e desconecta abas. |
+| RF-009 | Cadastrar, consultar, atualizar e inativar clientes do escritório, preservando seus vínculos e histórico. Campos e tratamento de duplicidades: pendentes. |
+| RF-010 | Cadastrar, consultar e atualizar casos e seus vínculos com clientes do mesmo escritório. Estados e cardinalidade dos relacionamentos: pendentes. |
+| RF-011 | Registrar e acompanhar processos com informações inseridas manualmente, associados ao contexto do escritório. Identificadores, estados e relação entre caso e processo: pendentes; captura automática não pertence ao MVP. |
+| RF-012 | Criar, atribuir e acompanhar tarefas, registrando alterações de responsável, estado e prazo quando houver. Estados e regras de conclusão: pendentes. |
+| RF-013 | Registrar e consultar prazos, com data, responsável e contexto de negócio; manter histórico de alterações. Horários, fusos e regras de tratamento de datas: pendentes, sem assumir cálculo jurídico automático. |
+| RF-014 | Incluir, consultar e obter documentos vinculados ao contexto de negócio autorizado. Restringir acesso ao conteúdo; armazenamento, formatos, limites e versionamento: pendentes. |
+| RF-015 | Registrar e consultar anotações no contexto de casos ou processos, aplicando controle de acesso também às alterações. Granularidade da visibilidade: pendente. |
+| RF-016 | Registrar e consultar compromissos na agenda e apresentar tarefas e prazos autorizados com suas datas. Regras de exibição, recorrência e eventuais lembretes: pendentes. |
+| RF-017 | Exibir dashboard com resumo de casos, processos, tarefas e prazos acessíveis ao usuário. Indicadores, filtros e períodos: pendentes; valores devem corresponder aos registros de origem. |
+| RF-018 | Registrar e permitir consulta autorizada da auditoria de operações relevantes, incluindo alterações, inativações e exclusões. Preservar autoria, escritório, recurso, ação e momento; eventos adicionais, retenção e acesso à auditoria: pendentes. |
 
 ## Requisitos não funcionais
 
-A numeração foi ajustada na entrega de RF-003: RF-005 e RF-006 identificam
-renovação e logout conforme o escopo atual. Os antigos RF-005 a RF-022 passaram
-a RF-007 a RF-024, preservando seu conteúdo e as referências nos demais documentos.
+A numeração reserva RF-003 a RF-008 para autenticação, sessão e senhas.
+Nesta entrega, os antigos RF-007 a RF-024 passaram a RF-009 a RF-026,
+preservando o escopo dos módulos e as referências de planejamento.
 
 Isolamento, segurança, auditoria e preservação de histórico são requisitos do
 produto. Os critérios abaixo orientam sua aceitação; metas operacionais e
@@ -43,7 +45,7 @@ escolhas de solução não informadas estão marcadas como pendentes.
 | ID | Critério de aceitação |
 | --- | --- |
 | RNF-001 | **Isolamento:** leituras, buscas, agregações, gravações e acesso a arquivos devem verificar escritório e autorização no backend. Testes com dois escritórios devem provar ausência de leitura ou alteração cruzada, inclusive por IDs fornecidos diretamente pelo cliente. |
-| RNF-002 | **Segurança de acesso:** Argon2id, sessão absoluta de até 7 dias, JWT de até 15 minutos, rotação e logout. Cadastro/login/refresh têm limites atômicos compartilhados no PostgreSQL, incluindo IP + e-mail normalizado no login; chaves HMAC, políticas configuráveis, 429/Retry-After, falha fechada com 503 e limpeza concorrente de expirados. Proxy confiável somente por lista explícita. Falhas de credenciais/renovação são genéricas. POST com Origin autorizado, SameSite=Lax, produção HTTPS e Secure. Verificação de e-mail, recuperação de senha e dois fatores permanecem pendentes. |
+| RNF-002 | **Segurança de acesso:** Argon2id, sessão absoluta de até 7 dias, JWT de até 15 minutos, rotação e logout. Cadastro/login/refresh têm limites atômicos compartilhados no PostgreSQL, incluindo IP + e-mail normalizado no login; chaves HMAC, políticas configuráveis, 429/Retry-After, falha fechada com 503 e limpeza concorrente de expirados. Proxy confiável somente por lista explícita. Falhas de credenciais/renovação são genéricas. POST com Origin autorizado, SameSite=Lax, produção HTTPS e Secure. Recuperação e alteração de senha estão implementadas em RF-007/RF-008; verificação de e-mail e dois fatores permanecem pendentes. |
 | RNF-003 | **Segredos e erros:** credenciais fora do versionamento; senha, hashes e refresh token nunca aparecem no JSON. Access token é retornado somente no login/refresh e mantido apenas em memória. Refresh token é entregue somente em cookie HttpOnly. Nenhum token em localStorage/sessionStorage/IndexedDB. Logs e auditoria não incluem senha, hashes, tokens completos, cookies ou URLs com credenciais. |
 | RNF-004 | **Desempenho:** limitar o volume retornado nas listagens e medir tempo de resposta e erros dos fluxos principais com carga representativa. Metas de percentil 95, volume de dados e concorrência são pendentes e devem ser definidas antes da aceitação de desempenho do MVP. |
 | RNF-005 | **Disponibilidade:** distinguir serviço ativo de banco disponível por `/health` e `/ready`, com limites finitos de conexão e consulta. Meta de disponibilidade, janela de medição e procedimento de recuperação: pendentes; a infraestrutura atual não representa, por si só, garantia de alta disponibilidade. |
@@ -100,14 +102,14 @@ Não são critérios de conclusão do MVP.
 
 | ID | Escopo futuro | Definições necessárias antes da implementação |
 | --- | --- | --- |
-| RF-017 | Captura automática de informações em tribunais. | Tribunais abrangidos, fontes autorizadas, informações capturadas e atualização. |
-| RF-018 | Integração com WhatsApp. | Fluxos de comunicação, contas, permissões e fornecedor. |
-| RF-019 | Assinatura eletrônica de documentos. | Fluxos, fornecedor, acompanhamento e armazenamento dos resultados. |
-| RF-020 | Cobranças por Pix e boleto. | Provedor, criação e acompanhamento de cobranças e tratamento dos retornos. |
-| RF-021 | Portal do cliente. | Identificação do cliente, informações visíveis e ações permitidas. |
-| RF-022 | Recursos de inteligência artificial. | Casos de uso, tratamento dos dados, revisão dos resultados e critérios de qualidade. |
-| RF-023 | Aplicativo mobile. | Plataformas, funcionalidades e requisitos de segurança. |
-| RF-024 | Financeiro avançado. | Operações, relatórios e regras financeiras desejadas. |
+| RF-019 | Captura automática de informações em tribunais. | Tribunais abrangidos, fontes autorizadas, informações capturadas e atualização. |
+| RF-020 | Integração com WhatsApp. | Fluxos de comunicação, contas, permissões e fornecedor. |
+| RF-021 | Assinatura eletrônica de documentos. | Fluxos, fornecedor, acompanhamento e armazenamento dos resultados. |
+| RF-022 | Cobranças por Pix e boleto. | Provedor, criação e acompanhamento de cobranças e tratamento dos retornos. |
+| RF-023 | Portal do cliente. | Identificação do cliente, informações visíveis e ações permitidas. |
+| RF-024 | Recursos de inteligência artificial. | Casos de uso, tratamento dos dados, revisão dos resultados e critérios de qualidade. |
+| RF-025 | Aplicativo mobile. | Plataformas, funcionalidades e requisitos de segurança. |
+| RF-026 | Financeiro avançado. | Operações, relatórios e regras financeiras desejadas. |
 
 ## Pendências para detalhamento
 
@@ -115,4 +117,4 @@ As políticas de produto P-001 a P-010 estão centralizadas em
 [business-rules.md](business-rules.md). Cada etapa deve resolver as pendências
 que afetam seus critérios de aceitação antes de ser considerada concluída.
 Também faltam metas mensuráveis de desempenho, disponibilidade, recuperação e
-sucesso do produto. Não foram definidos preços, fornecedores ou regras jurídicas.
+sucesso do produto. Não foram definidos preços ou regras jurídicas; o provedor Resend foi escolhido somente para os e-mails de recuperação.

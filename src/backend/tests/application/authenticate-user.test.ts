@@ -12,7 +12,7 @@ describe("AutenticacaoDeUsuario", () => {
     expect(cenario.repositorio.buscarUsuarioComVinculosPorEmail).toHaveBeenCalledWith('user@example.test');
     expect(cenario.protecaoDeSenhas.compararSenhaComHash).toHaveBeenCalledTimes(1);
     expect(cenario.sessoes.size).toBe(1);
-    const estado = [...cenario.sessoes.values()][0].obterCopiaDoEstado();
+    const estado = [...cenario.sessoes.values()][0].obterEstadoAtualDaSessao();
     expect(estado.idUsuario).toBe(cenario.usuarioComVinculos.usuario.id);
     expect(estado.idEscritorioAtivo).toBe(cenario.usuarioComVinculos.vinculos[0].escritorio.id);
     expect(estado.hashTokenRenovacao === createHash('sha256').update(resultado.tokenRenovacao).digest('hex')).toBe(true);
@@ -95,7 +95,7 @@ describe("ConsultaDeIdentidadeAutenticada", () => {
     const cenario = await criarCenarioAutenticacao();
     const resultado = await cenario.autenticacaoUsuario.autenticarUsuario({ email: cenario.usuarioComVinculos.usuario.email, senha: SENHA_TESTE });
     const sessao = [...cenario.sessoes.values()][0];
-    const estado = sessao.obterCopiaDoEstado();
+    const estado = sessao.obterEstadoAtualDaSessao();
     if (condicao === 'missing') cenario.sessoes.clear();
     if (condicao === 'revoked') cenario.sessoes.set(sessao.id, Sessao.restaurar({ ...estado, revogadaEm: new Date() }));
     if (condicao === 'expired') cenario.sessoes.set(sessao.id, Sessao.restaurar({ ...estado, criadoEm: new Date(0), expiraEm: new Date(1) }));

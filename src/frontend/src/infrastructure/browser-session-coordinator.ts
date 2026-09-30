@@ -36,10 +36,10 @@ function validarCredenciaisCompartilhadas(tokenAcesso: string, identidadeRecebid
 export class CoordenadorSessaoNavegador implements CoordenadorSessao {
   private readonly idAba = crypto.randomUUID();
   private sessaoCompartilhada: SessaoCompartilhada | null = null;
-  private estaEncerrado = false;
+  private estaCoordenacaoEncerrada = false;
   private readonly observadoresDaSessao = new Set<(sessaoCompartilhada: SessaoCompartilhada) => void>();
   private readonly sincronizacoesPendentes = new Map<string, () => void>();
-  private readonly idsDeMensagensRecebidas = new Set<string>();
+  private readonly identificadoresDasMensagensRecebidas = new Set<string>();
   private readonly controladoresDeCancelamento = new Set<AbortController>();
   private temporizadorDeExpiracao?: ReturnType<typeof setTimeout>;
   private aoExpirarSessao?: () => void;
@@ -56,13 +56,13 @@ export class CoordenadorSessaoNavegador implements CoordenadorSessao {
 
   private agendarNotificacaoDeExpiracao() {
     clearTimeout(this.temporizadorDeExpiracao);
-    if (this.sessaoCompartilhada?.credenciais && !this.estaEncerrado) {
+    if (this.sessaoCompartilhada?.credenciais && !this.estaCoordenacaoEncerrada) {
       this.temporizadorDeExpiracao = setTimeout(() => this.aoExpirarSessao?.(), Math.max(0, this.sessaoCompartilhada.credenciais.expiraEm - Date.now()));
     }
   }
 
   private enviarMensagemEntreAbas(tipo: MensagemDeSincronizacaoDeSessao['tipo'], idCorrelacao: string | null = null) {
-    if (this.estaEncerrado) return;
+    if (this.estaCoordenacaoEncerrada) return;
     const sessaoASincronizar = tipo === "requisicao" ? null : this.sessaoCompartilhada;
     const mensagem: MensagemDeSincronizacaoDeSessao = { versao: 1, idAba: this.idAba, id: crypto.randomUUID(), tipo,
       instante: Date.now(), idCorrelacao, idSessao: sessaoASincronizar?.idSessao ?? null, estado: sessaoASincronizar };
@@ -71,13 +71,13 @@ export class CoordenadorSessaoNavegador implements CoordenadorSessao {
   }
 
   private tratarMensagemDeOutraAba(mensagemRecebida: unknown) {
-    if (this.estaEncerrado) return;
+    if (this.estaCoordenacaoEncerrada) return;
     try {
       const mensagem = mensagemRecebida as MensagemDeSincronizacaoDeSessao;
       if (!mensagem || mensagem.versao !== 1 || !PADRAO_UUID.test(mensagem.idAba) || !PADRAO_UUID.test(mensagem.id) || mensagem.idAba === this.idAba ||
-        !Number.isFinite(mensagem.instante) || Math.abs(Date.now() - mensagem.instante) > 15000 || this.idsDeMensagensRecebidas.has(mensagem.id)) return;
-      this.idsDeMensagensRecebidas.add(mensagem.id);
-      if (this.idsDeMensagensRecebidas.size > 256) this.idsDeMensagensRecebidas.delete(this.idsDeMensagensRecebidas.values().next().value!);
+        !Number.isFinite(mensagem.instante) || Math.abs(Date.now() - mensagem.instante) > 15000 || this.identificadoresDasMensagensRecebidas.has(mensagem.id)) return;
+      this.identificadoresDasMensagensRecebidas.add(mensagem.id);
+      if (this.identificadoresDasMensagensRecebidas.size > 256) this.identificadoresDasMensagensRecebidas.delete(this.identificadoresDasMensagensRecebidas.values().next().value!);
       if (mensagem.tipo === "requisicao") { if (this.sessaoCompartilhada) this.enviarMensagemEntreAbas("resposta", mensagem.id); return; }
       if (mensagem.tipo !== "estado" && mensagem.tipo !== "resposta") return;
       if (mensagem.tipo === "resposta" && (!mensagem.idCorrelacao || !this.sincronizacoesPendentes.has(mensagem.idCorrelacao))) return;
@@ -108,18 +108,18 @@ export class CoordenadorSessaoNavegador implements CoordenadorSessao {
   }
 
   async sincronizarSessaoEntreAbas(): Promise<void> {
-    if (this.estaEncerrado) throw new Error('Coordination closed');
+    if (this.estaCoordenacaoEncerrada) throw new Error('Coordination closed');
     if (!this.recursosDeCoordenacao.canal) return;
     // Replies are collected for a bounded interval, including multiple peers.
     await new Promise<void>((resolver) => {
-      const id = this.enviarMensagemEntreAbas("requisicao")!;
-      const temporizador = setTimeout(() => { this.sincronizacoesPendentes.delete(id); resolver(); }, this.recursosDeCoordenacao.tempoDeSincronizacaoMs ?? 250);
-      this.sincronizacoesPendentes.set(id, () => { clearTimeout(temporizador); resolver(); });
+      const identificadorDaRequisicao = this.enviarMensagemEntreAbas("requisicao")!;
+      const temporizador = setTimeout(() => { this.sincronizacoesPendentes.delete(identificadorDaRequisicao); resolver(); }, this.recursosDeCoordenacao.tempoDeSincronizacaoMs ?? 250);
+      this.sincronizacoesPendentes.set(identificadorDaRequisicao, () => { clearTimeout(temporizador); resolver(); });
     });
   }
 
   async executarOperacaoExclusiva<T>(aoObterExclusividade: (sinal?: AbortSignal) => Promise<T>): Promise<T> {
-    if (this.estaEncerrado) throw new Error('Coordination closed');
+    if (this.estaCoordenacaoEncerrada) throw new Error('Coordination closed');
     const controlador = new AbortController();
     this.controladoresDeCancelamento.add(controlador);
     const temporizador = setTimeout(() => controlador.abort(), this.recursosDeCoordenacao.tempoLimiteMs ?? 20000);
@@ -135,7 +135,7 @@ export class CoordenadorSessaoNavegador implements CoordenadorSessao {
   }
 
   compartilharCredenciaisDaSessao(tokenAcesso: string, identidade: IdentidadeAutenticada, motivo: 'entrar' | 'renovar') {
-    if (this.estaEncerrado) return;
+    if (this.estaCoordenacaoEncerrada) return;
     const credenciaisValidadas = validarCredenciaisCompartilhadas(tokenAcesso, identidade);
     this.sessaoCompartilhada = { id: crypto.randomUUID(), instante: Math.max(Date.now(), (this.sessaoCompartilhada?.instante ?? 0) + 1), motivo, ...credenciaisValidadas };
     this.agendarNotificacaoDeExpiracao();
@@ -143,7 +143,7 @@ export class CoordenadorSessaoNavegador implements CoordenadorSessao {
   }
 
   propagarInvalidacaoDaSessao(motivo: 'sair' | 'invalido') {
-    if (this.estaEncerrado) return;
+    if (this.estaCoordenacaoEncerrada) return;
     this.sessaoCompartilhada = { id: crypto.randomUUID(), instante: Math.max(Date.now(), (this.sessaoCompartilhada?.instante ?? 0) + 1),
       idSessao: this.sessaoCompartilhada?.idSessao ?? null, motivo, credenciais: null };
     clearTimeout(this.temporizadorDeExpiracao);
@@ -151,7 +151,7 @@ export class CoordenadorSessaoNavegador implements CoordenadorSessao {
   }
 
   encerrarCoordenacao() {
-    this.estaEncerrado = true;
+    this.estaCoordenacaoEncerrada = true;
     clearTimeout(this.temporizadorDeExpiracao);
     this.controladoresDeCancelamento.forEach((controlador) => controlador.abort());
     this.sincronizacoesPendentes.forEach((aoConcluirSincronizacao) => aoConcluirSincronizacao());

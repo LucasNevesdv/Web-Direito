@@ -4,6 +4,54 @@ SaaS jurídico Legal System, com cadastro inicial de escritório e primeiro
 administrador, login, renovação automática, logout e identidade autenticada disponíveis. Os módulos
 de gestão permanecem nas próximas etapas.
 
+## Recuperação e alteração de senha
+
+RF-007 e RF-008 disponibilizam `/recuperar-senha`, `/redefinir-senha` e
+`/seguranca`. As rotas POST correspondentes são
+`/api/v1/auth/recuperar-senha` (202 genérico),
+`/api/v1/auth/redefinir-senha` (200) e
+`/api/v1/auth/alterar-senha` (200, Bearer e sessão ativa).
+Todas exigem `Origin` autorizado. Erros de validação/token/senha retornam 400;
+sessão inválida, 401; limite, 429 com Retry-After; falhas internas, 503 sanitizado.
+
+Configure e-mail pelas variáveis de `backend/.env.example`, preservando o `.env`
+existente. Desenvolvimento usa `PROVEDOR_EMAIL=smtp`, `SMTP_HOST`, `SMTP_PORT`
+e `SMTP_SEGURO`; autenticação é opcional e exige `SMTP_USUARIO`/`SMTP_SENHA`
+juntos. `URL_FRONTEND` é a origem pública sem barra final, usada no link, e
+`EMAIL_REMETENTE` informa o remetente. Produção usa `PROVEDOR_EMAIL=resend`,
+`RESEND_API_KEY`, frontend HTTPS e remetente de domínio verificado no provedor.
+Configuração incompleta falha antes de escutar; indisponibilidade do provedor
+não altera `/ready`. Nunca defina essas credenciais com prefixo `VITE_`.
+
+O token expira em 30 minutos, funciona uma vez e só tem hash persistido.
+Troca bem-sucedida revoga todas as sessões e exige novo login. A confirmação
+de recuperação não revela se existe conta. O 202 confirma a persistência do
+trabalho elegível no PostgreSQL; reinícios não perdem trabalhos pendentes.
+Aplique migrations com `pnpm --filter ./backend exec prisma migrate deploy`
+antes de iniciar a versão atual.
+
+`EMAIL_FILA_INTERVALO_MS` define o polling (1.000 ms); lease padrão de 60 s,
+até cinco tentativas e atraso exponencial de 30 s até 3.600 s. Os trabalhos
+finais permanecem sete dias e a limpeza usa lotes de 500. Todos os parâmetros
+`EMAIL_FILA_*` estão no exemplo do backend; use políticas iguais nas réplicas.
+O encerramento aguarda até 30 s. Depois de aceite do provedor com confirmação
+perdida no banco, outro e-mail pode ser enviado com novo token; só o mais
+recente vale. Consulte [architecture.md](docs/architecture.md).
+
+Após `pnpm build`, execute a verificação real explicitamente:
+
+```bash
+pnpm --filter ./backend run verify:password-security
+```
+
+Ela inicia SMTP de captura, Chrome headless real e duas instâncias do backend;
+confirma reinício após 202, lease abandonado, retentativa SMTP, rollback e limpeza;
+usa o PostgreSQL configurado, dados únicos e limpa somente seus registros,
+mensagens e processos. Exige Chrome instalado (`CHROME_PATH` opcional).
+Não envia e-mails externos. Integração Resend implementada e contrato HTTP
+testado; entrega externa não executada por ausência de credenciais/domínio
+verificado e destinatário de teste autorizado confirmados.
+
 ## Requisitos
 
 - Node.js 20.19 ou superior (verificado com Node.js 24 no Windows)

@@ -115,6 +115,6 @@ describe("configuração do limite de requisições", () => {
   it("não confia em proxy por padrão e aceita somente IPs e CIDRs explícitos", () => {
     expect(validarAmbiente(ambiente).TRUST_PROXY).toBe(false);
     expect(validarAmbiente({ ...ambiente, TRUST_PROXY: '127.0.0.1, 192.0.2.0/24, ::1' }).TRUST_PROXY).toEqual(['127.0.0.1', '192.0.2.0/24', '::1']);
-    expect(validarAmbiente({ ...ambiente, NODE_ENV: 'production', AUTH_FRONTEND_ORIGIN: 'https://app.example.test' }).RATE_LIMIT_LOGIN_IP_MAX).toBe(10);
+    expect(validarAmbiente({ ...ambiente, NODE_ENV: 'production', AUTH_FRONTEND_ORIGIN: 'https://app.example.test', URL_FRONTEND: 'https://app.example.test', EMAIL_REMETENTE: 'Web Direito <contato@example.test>' }).RATE_LIMIT_LOGIN_IP_MAX).toBe(10);
   });
 });

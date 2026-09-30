@@ -27,7 +27,7 @@ devem ser tratadas como decisões de implementação.
 | RN-016 | O cadastro público cria escritório, primeiro usuário e vínculo em uma única operação atômica. Se qualquer gravação falhar, nenhum dos três registros deve permanecer. A criação interna da TASK-003 é preservada, mas não possui endpoint público separado. |
 | RN-017 | O nome do responsável é obrigatório, recebe trim e contém entre 2 e 120 pontos de código Unicode. O usuário recebe UUID, datas de criação e atualização e estado inicial `ATIVO`. `INATIVO` é reconhecido para negar autenticação; ainda não existe fluxo de administração desse estado. |
 | RN-018 | O e-mail é obrigatório, tem formato validado, recebe trim e lowercase e é único globalmente. A restrição do PostgreSQL garante a unicidade também em cadastros concorrentes; o conflito produz erro previsível. |
-| RN-019 | A senha tem entre 12 e 128 caracteres, sem trim; a confirmação deve coincidir e pertence somente ao frontend. Somente o hash Argon2id é persistido. Senha e hash não podem aparecer em respostas, logs ou auditoria, e a senha não pode ser persistida no navegador. |
+| RN-019 | A senha tem entre 12 e 128 caracteres, sem trim; a confirmação deve coincidir; no cadastro pertence ao frontend, e nas trocas de senha também é exigida pela API. Somente o hash Argon2id é persistido. Senha e hash não podem aparecer em respostas, logs ou auditoria, e a senha não pode ser persistida no navegador. |
 | RN-020 | O primeiro vínculo sempre recebe `PROPRIETARIO`, papel de autoridade administrativa máxima. Somente esse papel é implementado; papéis adicionais e sua matriz de permissões permanecem pendentes. A entrega do cadastro não implementa autorização das operações futuras. |
 | RN-021 | O vínculo identifica escritório e usuário existentes e é único para o par `officeId` + `userId`. A persistência restringe exclusão e alteração dos identificadores referenciados; não há exclusão em cascata nesse relacionamento. |
 | RN-022 | O cadastro público aceita somente nome do escritório, nome do responsável, e-mail e senha. IDs, papel, estado e datas são definidos pelo servidor, e campos extras são rejeitados. |
@@ -46,6 +46,20 @@ devem ser tratadas como decisões de implementação.
 | RN-035 | Logout revoga a sessão quando identificável, limpa cookie e memória e retorna 204 também para sessão ausente, inválida, expirada ou já revogada. Não há blacklist de JWT; validade residual máxima de 15 minutos, mas `/me` rejeita imediatamente a sessão revogada no banco. Falha de infraestrutura não pode ser apresentada como revogação confirmada. |
 | RN-036 | POSTs de autenticação exigem Origin exato configurado; origem ausente/null é recusada. Cookie SameSite=Lax complementa CSRF; API permanece sob proxy de mesma origem, sem CORS. Refresh limita, por padrão, 30 tentativas por IP/minuto, com contagem compartilhada no PostgreSQL. |
 
+## Recuperação e alteração de senha
+
+Regras adicionais confirmadas para RF-007/RF-008:
+
+| ID | Regra |
+| --- | --- |
+| RN-037 | Solicitação elegível recebe 202 genérico somente após commit do trabalho no PostgreSQL, sem aguardar e-mail. Usuário ausente/inativo recebe a mesma confirmação, sem trabalho ou envio. Persistência indisponível retorna 503 sanitizado; origem, validação e rate limits preservam respostas seguras sem revelar elegibilidade. |
+| RN-038 | O token de recuperação é aleatório de 256 bits, independente do segredo JWT, tem uso único e expira em 30 minutos. Somente SHA-256 é persistido. Token é gerado somente na tentativa de envio; nova tentativa substitui o hash e invalida o token anterior. Falha invalida especificamente a recuperação associada; consumo impede reenvio. |
+| RN-039 | Redefinição e alteração exigem 12–128 pontos de código Unicode, sem trim, confirmação igual e senha diferente da atual. Alteração autenticada exige ainda sessão ativa e verificação Argon2id da senha atual. |
+| RN-040 | Troca da senha, consumo/invalidação das recuperações e revogação de todas as sessões acontecem em uma transação. Operações concorrentes são serializadas por usuário; login em andamento não pode criar sessão usando hash de senha anterior. |
+| RN-041 | Solicitação limita 5/IP/15 minutos e 3/e-mail/60 minutos. Redefinição limita 5/IP e 5/hash de token por 15 minutos. Alteração limita 5/IP e 5/usuário por 15 minutos. Identidades são limitadas entre IPs, com chaves HMAC no PostgreSQL; valores são configuráveis. |
+| RN-042 | O link usa fragmento, removido imediatamente da URL; token e senhas ficam somente em memória. A troca exige novo login em todos os dispositivos, limpa refresh cookie e propaga logout entre abas. SMTP local e Resend de produção são detalhes de infraestrutura. |
+| RN-043 | Trabalhos de recuperação sobrevivem a reinícios e usam reserva exclusiva com expiração entre instâncias. Padrão: cinco tentativas, atraso exponencial de 30 segundos até 3.600 segundos; falha definitiva ou esgotamento encerra o trabalho. Troca de senha cancela pendências. Uma confirmação perdida após aceite do provedor pode gerar outro e-mail, mas apenas o último token permanece válido. Trabalhos finais têm retenção padrão de sete dias e limpeza em lotes de 500. |
+
 ## Decisões pendentes
 
 Os IDs abaixo registram perguntas em aberto, não regras aprovadas. Devem ser
@@ -54,14 +68,14 @@ resolvidos com o responsável pelo produto antes da conclusão da etapa afetada.
 | ID | Decisão pendente | Requisitos afetados |
 | --- | --- | --- |
 | P-001 | Como serão manutenção e inativação de escritórios, convites e gerenciamento de membros, incluindo entrada e saída? Como será o uso de uma identidade em múltiplos escritórios? O cadastro conjunto e o primeiro vínculo PROPRIETARIO estão confirmados em RN-016 a RN-023; essas operações posteriores permanecem fora do escopo concluído de RF-001 e RF-002. | Evolução de escritórios e usuários; RF-004 |
-| P-002 | Quais papéis existirão além de PROPRIETARIO e qual será a matriz de permissões? Quem pode ver ou alterar cada tipo de recurso, documento, anotação e auditoria? Haverá restrições adicionais por recurso dentro do mesmo escritório? | RF-004, RF-012, RF-013, RF-016 |
-| P-003 | Como implementar verificação de e-mail, recuperação de senha e dois fatores? Login, rotação, reutilização, logout, `/me`, coordenação entre abas compatíveis e limites compartilhados estão entregues. O cadastro não autentica automaticamente. | Evolução de autenticação e segurança após RF-004/RF-005/RF-006 |
-| P-004 | Quais campos de cliente são obrigatórios e como detectar duplicidades? Clientes inativos poderão receber novos vínculos ou ser reativados? | RF-007 |
-| P-005 | Quais campos e estados definem casos e processos? Quais são as relações permitidas entre clientes, casos e processos e seus critérios de encerramento? | RF-008, RF-009 |
-| P-006 | Quais estados, responsáveis e regras de conclusão se aplicam a tarefas? Como registrar data, horário e fuso de prazos e agenda? Serão necessários recorrência, lembretes ou justificativa de alteração? | RF-010, RF-011, RF-014 |
-| P-007 | Onde serão armazenados documentos? Quais tipos, tamanhos, versões e regras de substituição serão aceitos? Como editar e organizar anotações? | RF-012, RF-013 |
-| P-008 | Quais operações exigem auditoria e justificativa? Quando usar inativação, arquivamento ou exclusão? Quais regras de restauração, retenção e manutenção se aplicam a históricos, arquivos e registros de auditoria? | RF-007, RF-010 a RF-013, RF-016 |
-| P-009 | Quais indicadores, filtros e períodos compõem o dashboard e como cada valor é calculado a partir dos registros? | RF-015 |
+| P-002 | Quais papéis existirão além de PROPRIETARIO e qual será a matriz de permissões? Quem pode ver ou alterar cada tipo de recurso, documento, anotação e auditoria? Haverá restrições adicionais por recurso dentro do mesmo escritório? | RF-004, RF-014, RF-015, RF-018 |
+| P-003 | Como implementar verificação de e-mail e dois fatores? Recuperação e alteração de senha estão entregues em RF-007/RF-008. Login, rotação, reutilização, logout, `/me`, coordenação entre abas compatíveis e limites compartilhados estão entregues. O cadastro não autentica automaticamente. | Evolução de autenticação e segurança após RF-004/RF-005/RF-006 |
+| P-004 | Quais campos de cliente são obrigatórios e como detectar duplicidades? Clientes inativos poderão receber novos vínculos ou ser reativados? | RF-009 |
+| P-005 | Quais campos e estados definem casos e processos? Quais são as relações permitidas entre clientes, casos e processos e seus critérios de encerramento? | RF-010, RF-011 |
+| P-006 | Quais estados, responsáveis e regras de conclusão se aplicam a tarefas? Como registrar data, horário e fuso de prazos e agenda? Serão necessários recorrência, lembretes ou justificativa de alteração? | RF-012, RF-013, RF-016 |
+| P-007 | Onde serão armazenados documentos? Quais tipos, tamanhos, versões e regras de substituição serão aceitos? Como editar e organizar anotações? | RF-014, RF-015 |
+| P-008 | Quais operações exigem auditoria e justificativa? Quando usar inativação, arquivamento ou exclusão? Quais regras de restauração, retenção e manutenção se aplicam a históricos, arquivos e registros de auditoria? | RF-009, RF-012 a RF-015, RF-018 |
+| P-009 | Quais indicadores, filtros e períodos compõem o dashboard e como cada valor é calculado a partir dos registros? | RF-017 |
 | P-010 | Quais mecanismos adicionais de proteção avançada contra abuso serão aplicados ao cadastro público? Rate limit compartilhado por IP foi entregue; validação, hash, limite de corpo e esse controle inicial não representam proteção completa contra abuso distribuído. | RF-001; RNF-002 |
 
 Não foram definidas regras de contagem jurídica de prazos, feriados, suspensão,

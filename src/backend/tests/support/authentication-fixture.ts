@@ -33,13 +33,13 @@ export async function criarCenarioAutenticacao() {
     }),
     substituirHashDeRenovacao: vi.fn(async ({ id, hashAtual, proximoHash, agora }) => {
       const sessao = sessoes.get(id);
-      if (!sessao || !sessao.estaAtiva(agora) || sessao.obterCopiaDoEstado().hashTokenRenovacao !== hashAtual) return false;
-      sessoes.set(id, Sessao.restaurar({ ...sessao.obterCopiaDoEstado(), hashTokenRenovacao: proximoHash, ultimoUsoEm: agora, atualizadoEm: agora }));
+      if (!sessao || !sessao.estaAtiva(agora) || sessao.obterEstadoAtualDaSessao().hashTokenRenovacao !== hashAtual) return false;
+      sessoes.set(id, Sessao.restaurar({ ...sessao.obterEstadoAtualDaSessao(), hashTokenRenovacao: proximoHash, ultimoUsoEm: agora, atualizadoEm: agora }));
       return true;
     }),
     revogarSessao: vi.fn(async (id, agora) => {
       const sessao = sessoes.get(id);
-      if (sessao && !sessao.obterCopiaDoEstado().revogadaEm) sessoes.set(id, Sessao.restaurar({ ...sessao.obterCopiaDoEstado(), revogadaEm: agora, atualizadoEm: agora }));
+      if (sessao && !sessao.obterEstadoAtualDaSessao().revogadaEm) sessoes.set(id, Sessao.restaurar({ ...sessao.obterEstadoAtualDaSessao(), revogadaEm: agora, atualizadoEm: agora }));
     }),
   };
   const protecaoDeSenhas = { compararSenhaComHash: vi.fn((hash: string, senha: string) => PROTECAO_DE_SENHAS.compararSenhaComHash(hash, senha)) };

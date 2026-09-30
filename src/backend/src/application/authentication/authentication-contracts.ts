@@ -8,7 +8,7 @@ export interface UsuarioComVinculos {
 
 export interface RepositorioAutenticacao {
   buscarUsuarioComVinculosPorEmail(email: string): Promise<UsuarioComVinculos | null>;
-  salvarSessao(sessao: Sessao): Promise<void>;
+  salvarSessao(sessao: Sessao, hashSenhaEsperado: string): Promise<void>;
   buscarSessaoComUsuarioPorId(id: string): Promise<{ sessao: Sessao; usuarioComVinculos: UsuarioComVinculos } | null>;
   substituirHashDeRenovacao(entrada: { id: string; hashAtual: string; proximoHash: string; agora: Date }): Promise<boolean>;
   revogarSessao(id: string, agora: Date): Promise<void>;

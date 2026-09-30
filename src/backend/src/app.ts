@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { registrarRotasSenhas, type ServicosRotasSenhas } from './presentation/password-routes.js';
 import { LIMITADOR_REQUISICOES_INDISPONIVEL, type LimitadorRequisicoes } from './application/security/rate-limiter.js';
 import type { CadastroDeEscritorioComProprietario } from './application/onboarding/register-office-with-owner.js';
 import type { VerificadorSaudeBanco } from './database-health-checker.js';
@@ -10,6 +11,7 @@ export function criarAplicacao(
   cadastro?: Pick<CadastroDeEscritorioComProprietario, 'cadastrarEscritorioComProprietario'>,
   autenticacao?: ServicosRotasAutenticacao,
   seguranca: { limitador: LimitadorRequisicoes; proxiesConfiaveis?: false | string[] } = { limitador: LIMITADOR_REQUISICOES_INDISPONIVEL },
+  senhas?: ServicosRotasSenhas,
 ) {
   const aplicacao = Fastify({ logger: false, trustProxy: seguranca.proxiesConfiaveis ?? false });
 
@@ -28,6 +30,7 @@ export function criarAplicacao(
     registrarRotaCadastro(aplicacao, cadastro, seguranca.limitador);
   }
   if (autenticacao) registrarRotasAutenticacao(aplicacao, autenticacao, seguranca.limitador);
+  if (autenticacao && senhas) registrarRotasSenhas(aplicacao, senhas, autenticacao, seguranca.limitador);
 
   return aplicacao;
 }

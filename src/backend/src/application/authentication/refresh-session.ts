@@ -17,7 +17,7 @@ export class RenovacaoDeSessao {
     if (!sessaoComUsuario) throw new ErroTokenAcessoInvalido();
     const { sessao, usuarioComVinculos: usuarioComVinculos } = sessaoComUsuario;
     const agora = this.relogio();
-    if (!this.tokensRenovacao.compararHashesDeRenovacao(tokenInterpretado.hash, sessao.obterCopiaDoEstado().hashTokenRenovacao)) {
+    if (!this.tokensRenovacao.compararHashesDeRenovacao(tokenInterpretado.hash, sessao.obterEstadoAtualDaSessao().hashTokenRenovacao)) {
       await this.repositorioAutenticacao.revogarSessao(sessao.id, agora);
       throw new ErroTokenAcessoInvalido();
     }

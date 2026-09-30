@@ -15,7 +15,7 @@ export function converterRegistroPrismaEmSessao(registroSessao: RegistroSessao):
 }
 
 export function converterSessaoEmRegistroPrisma(sessao: Sessao): RegistroSessao {
-  const estado = sessao.obterCopiaDoEstado();
+  const estado = sessao.obterEstadoAtualDaSessao();
   return { id: estado.id, userId: estado.idUsuario, activeOfficeId: estado.idEscritorioAtivo,
     refreshTokenHash: estado.hashTokenRenovacao, expiresAt: estado.expiraEm, revokedAt: estado.revogadaEm,
     createdAt: estado.criadoEm, updatedAt: estado.atualizadoEm, lastUsedAt: estado.ultimoUsoEm };
