@@ -13,3 +13,6 @@ export class ErroMultiplosEscritoriosAtivos extends Error {
 export class ErroTokenAcessoInvalido extends Error {
   constructor() { super('Invalid authenticated session'); this.name = 'ErroTokenAcessoInvalido'; }
 }
+export class ErroPrimeiroAcessoObrigatorio extends Error {
+  constructor() { super('PRIMEIRO_ACESSO_OBRIGATORIO'); }
+}

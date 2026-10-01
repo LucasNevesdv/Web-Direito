@@ -5,7 +5,7 @@ import type { AlteracaoDeSenhaAutenticada, RedefinicaoDeSenha } from '../applica
 import type { SolicitacaoRecuperacaoDeSenha } from '../application/passwords/request-password-recovery.js';
 import type { TokensRecuperacao } from '../application/passwords/password-contracts.js';
 import { ErroTrocaDeSenha } from '../application/passwords/password-errors.js';
-import { ErroTokenAcessoInvalido } from '../application/authentication/authentication-errors.js';
+import { ErroTokenAcessoInvalido, ErroPrimeiroAcessoObrigatorio } from '../application/authentication/authentication-errors.js';
 import type { ServicosRotasAutenticacao } from './authentication-routes.js';
 import type { EscopoLimiteRequisicoes, LimitadorRequisicoes } from '../application/security/rate-limiter.js';
 import { criarTratadorDeLimiteDeRequisicoes } from './rate-limit-hook.js';
@@ -34,6 +34,7 @@ export function registrarRotasSenhas(aplicacao: FastifyInstance, servicos: Servi
       if (requisicao.headers.origin !== autenticacao.origemFrontend) return resposta.status(403).send({ erro: 'PROIBIDO', mensagem: 'Solicitação não permitida.' });
     });
     rotas.setErrorHandler((erro, _requisicao, resposta) => {
+      if (erro instanceof ErroPrimeiroAcessoObrigatorio) return resposta.status(403).send({ erro: 'PRIMEIRO_ACESSO_OBRIGATORIO', mensagem: 'Conclua o primeiro acesso para continuar.' });
       if (erro instanceof ErroTrocaDeSenha) return resposta.status(400).send({ erro: erro.codigo, mensagem: MENSAGENS[erro.codigo] });
       if (erro instanceof ErroTokenAcessoInvalido) return resposta.status(401).send({ erro: 'NAO_AUTORIZADO', mensagem: 'Entre novamente para continuar.' });
       return resposta.status(erro instanceof z.ZodError || (erro as { statusCode?: number }).statusCode === 413 ? 400 : 503)
@@ -60,13 +61,18 @@ export function registrarRotasSenhas(aplicacao: FastifyInstance, servicos: Servi
       resposta.clearCookie('refresh_token', { path: '/api/v1/auth', httpOnly: true, sameSite: 'lax', secure: autenticacao.deveUsarCookieSeguro });
       return resposta.send({ mensagem: 'Senha redefinida. Entre novamente com sua nova senha.' });
     });
-    rotas.post('/api/v1/auth/alterar-senha', { bodyLimit: 4096, onRequest: criarTratadorDeLimiteDeRequisicoes(limitador, 'password-change-ip') }, async (requisicao, resposta) => {
+    for (const primeiroAcesso of [false, true]) rotas.post(primeiroAcesso ? '/api/v1/auth/primeiro-acesso' : '/api/v1/auth/alterar-senha', { bodyLimit: 4096, onRequest: criarTratadorDeLimiteDeRequisicoes(limitador, 'password-change-ip') }, async (requisicao, resposta) => {
       const token = requisicao.headers.authorization?.match(/^Bearer (\S+)$/i)?.[1];
       if (!token) throw new ErroTokenAcessoInvalido();
       const identidade = await autenticacao.consultaIdentidade.consultarIdentidadeAutenticada(token);
       if (!await limitarIdentificador('password-change-user', requisicao.ip, identidade.usuario.id, resposta)) return;
-      const corpo = NOVA_SENHA.extend({ senhaAtual: z.string().max(256) }).strict().parse(requisicao.body);
-      await servicos.alteracao.alterarSenha(token, corpo);
+      if (primeiroAcesso) {
+        const corpo = NOVA_SENHA.extend({ senhaTemporaria: z.string().max(256) }).strict().parse(requisicao.body);
+        await servicos.alteracao.alterarSenha(token, { novaSenha: corpo.novaSenha, confirmacaoNovaSenha: corpo.confirmacaoNovaSenha, senhaAtual: corpo.senhaTemporaria }, true);
+      } else {
+        const corpo = NOVA_SENHA.extend({ senhaAtual: z.string().max(256) }).strict().parse(requisicao.body);
+        await servicos.alteracao.alterarSenha(token, corpo);
+      }
       resposta.clearCookie('refresh_token', { path: '/api/v1/auth', httpOnly: true, sameSite: 'lax', secure: autenticacao.deveUsarCookieSeguro });
       return resposta.send({ mensagem: 'Senha alterada. Entre novamente com sua nova senha.' });
     });

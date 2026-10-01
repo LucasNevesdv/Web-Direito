@@ -9,7 +9,7 @@ if (window.location.pathname === '/redefinir-senha') {
   window.history.replaceState(null, '', window.location.pathname);
 }
 
-export function PaginaSenhas({ finalidade }: { finalidade: 'recuperar' | 'redefinir' | 'alterar' }) {
+export function PaginaSenhas({ finalidade }: { finalidade: 'recuperar' | 'redefinir' | 'alterar' | 'primeiro' }) {
   const { cliente } = useAutenticacao();
   const [token, definirToken] = useState(tokenRecebido);
   const [valores, definirValores] = useState({ email: '', senhaAtual: '', novaSenha: '', confirmacaoNovaSenha: '' });
@@ -25,7 +25,8 @@ export function PaginaSenhas({ finalidade }: { finalidade: 'recuperar' | 'redefi
     return () => window.removeEventListener('pagehide', limparSegredos);
   }, []);
   const estaRecuperando = finalidade === 'recuperar';
-  const titulo = estaRecuperando ? 'Recuperar senha' : finalidade === 'redefinir' ? 'Redefinir senha' : 'Alterar senha';
+  const exigeSenhaAtual = finalidade === 'alterar' || finalidade === 'primeiro';
+  const titulo = estaRecuperando ? 'Recuperar senha' : finalidade === 'redefinir' ? 'Redefinir senha' : finalidade === 'primeiro' ? 'Primeiro acesso' : 'Alterar senha';
   const faltaToken = finalidade === 'redefinir' && !token;
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
@@ -37,7 +38,7 @@ export function PaginaSenhas({ finalidade }: { finalidade: 'recuperar' | 'redefi
     } else {
       if (Array.from(valores.novaSenha).length < 12 || Array.from(valores.novaSenha).length > 128) validacao.novaSenha = 'Use entre 12 e 128 caracteres.';
       if (valores.novaSenha !== valores.confirmacaoNovaSenha) validacao.confirmacaoNovaSenha = 'A confirmação deve ser igual à nova senha.';
-      if (finalidade === 'alterar' && !valores.senhaAtual) validacao.senhaAtual = 'Informe sua senha atual.';
+      if (exigeSenhaAtual && !valores.senhaAtual) validacao.senhaAtual = 'Informe sua senha atual.';
     }
     definirErros(validacao); definirMensagem('');
     if (Object.keys(validacao).length) { document.getElementById(`senha-${Object.keys(validacao)[0]}`)?.focus(); return; }
@@ -45,11 +46,11 @@ export function PaginaSenhas({ finalidade }: { finalidade: 'recuperar' | 'redefi
     try {
       const corpo = estaRecuperando ? { email: valores.email.trim().toLowerCase() }
         : { novaSenha: valores.novaSenha, confirmacaoNovaSenha: valores.confirmacaoNovaSenha,
-          ...(finalidade === 'alterar' ? { senhaAtual: valores.senhaAtual } : { token }) };
+          ...(finalidade === 'primeiro' ? { senhaTemporaria: valores.senhaAtual } : finalidade === 'alterar' ? { senhaAtual: valores.senhaAtual } : { token }) };
       const caminho = `/api/v1/auth/${finalidade}-senha`;
       const opcoes = { method: 'POST', credentials: 'include' as const, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo), signal: AbortSignal.timeout(15000) };
       const resposta = estaRecuperando ? await fetch(caminho, opcoes)
-        : await cliente.trocarSenha(finalidade === 'alterar' ? '/api/v1/auth/alterar-senha' : '/api/v1/auth/redefinir-senha', corpo);
+        : await cliente.trocarSenha(finalidade === 'primeiro' ? '/api/v1/auth/primeiro-acesso' : finalidade === 'alterar' ? '/api/v1/auth/alterar-senha' : '/api/v1/auth/redefinir-senha', corpo);
       if (resposta.status === 429) { definirMensagem('Muitas tentativas. Aguarde antes de tentar novamente.'); return; }
       if (resposta.status === 401) { definirMensagem('Entre novamente para continuar.'); return; }
       const resultado = await resposta.json();
@@ -71,11 +72,12 @@ export function PaginaSenhas({ finalidade }: { finalidade: 'recuperar' | 'redefi
   }
   const campos: Array<{ nome: keyof typeof valores; rotulo: string; tipo: string; preenchimento: string }> = estaRecuperando
     ? [{ nome: 'email', rotulo: 'E-mail', tipo: 'email', preenchimento: 'username' }]
-    : [...(finalidade === 'alterar' ? [{ nome: 'senhaAtual' as const, rotulo: 'Senha atual', tipo: 'password', preenchimento: 'current-password' }] : []),
+    : [...(exigeSenhaAtual ? [{ nome: 'senhaAtual' as const, rotulo: finalidade === 'primeiro' ? 'Senha temporária' : 'Senha atual', tipo: 'password', preenchimento: 'current-password' }] : []),
       { nome: 'novaSenha', rotulo: 'Nova senha', tipo: 'password', preenchimento: 'new-password' },
       { nome: 'confirmacaoNovaSenha', rotulo: 'Confirmar nova senha', tipo: 'password', preenchimento: 'new-password' }];
   return <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-slate-100">
     <section className="w-full max-w-lg"><p className="text-cyan-300">Web Direito</p><h1 className="my-6 text-3xl font-bold">{titulo}</h1>
+      {finalidade === 'primeiro' && <p className="mb-5">Substitua a senha temporária para acessar o sistema. Entre novamente após definir sua senha própria.</p>}
       {faltaToken ? <p role="alert">Link inválido, utilizado ou expirado. Solicite uma nova recuperação.</p> :
         <form onSubmit={enviar} noValidate aria-busy={estaEnviando}><fieldset disabled={estaEnviando || foiEnviado} className="space-y-5 rounded-xl bg-slate-900 p-6">
           <legend className="sr-only">{titulo}</legend>
@@ -90,6 +92,7 @@ export function PaginaSenhas({ finalidade }: { finalidade: 'recuperar' | 'redefi
         </fieldset></form>}
       {mensagem && <p role="status" className="my-5">{mensagem}</p>}
       <nav className="mt-6 flex gap-5"><a href="/login" className="text-cyan-300 underline">Voltar ao login</a>
+        {finalidade === 'primeiro' && <button onClick={() => { void cliente.encerrarSessao().catch(() => definirMensagem('Não foi possível encerrar a sessão.')); }}>Sair</button>}
         {!estaRecuperando && <a href="/recuperar-senha" className="text-cyan-300 underline">Solicitar nova recuperação</a>}</nav>
     </section></main>;
 }

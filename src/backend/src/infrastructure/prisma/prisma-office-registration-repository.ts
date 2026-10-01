@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { PoliticaEquipe } from '../../application/team/team-policy.js';
 import { ErroEmailJaCadastrado } from '../../application/onboarding/email-already-registered-error.js';
 import type { RepositorioCadastroEscritorio } from '../../application/onboarding/office-registration-repository.js';
 import { MAPEADOR_ESCRITORIO } from './office-mapper.js';
@@ -53,6 +54,7 @@ export class RepositorioCadastroEscritorioPrisma implements RepositorioCadastroE
             officeId: vinculo.idEscritorio,
             userId: vinculo.idUsuario,
             role: 'OWNER',
+            permissions: PoliticaEquipe.permissoesPadrao('PROPRIETARIO'),
             createdAt: vinculo.criadoEm,
           },
         });

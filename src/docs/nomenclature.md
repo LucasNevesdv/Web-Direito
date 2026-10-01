@@ -69,9 +69,10 @@ indica o encerramento da limpeza periódica de limites. A requisição de
 sincronização usa a variável local `identificadorDaRequisicao`; os campos
 serializados do protocolo entre abas permanecem inalterados.
 
-O domínio usa `ATIVO`, `INATIVO` e `PROPRIETARIO`. Não foram acrescentados papéis,
-estados ou regras. Mappers e repositórios convertem esses valores para os enums
-físicos, mantendo os registros existentes acessíveis.
+A refatoração semântica preservou os nomes físicos. Na entrega posterior de equipe,
+o domínio acrescenta ADMINISTRADOR, ADVOGADO, ESTAGIARIO e SECRETARIO;
+`team-mapper.ts` converte para ADMIN, LAWYER, INTERN e SECRETARY. PROPRIETARIO/OWNER
+e ATIVO/ACTIVE, INATIVO/INACTIVE permanecem compatíveis com registros existentes.
 
 ## Contrato público preservado nesta revisão
 
@@ -239,3 +240,13 @@ A lista abaixo corresponde ao diff e aos arquivos novos; nenhum arquivo foi remo
 - `src/frontend/src/routing.ts`
 - `src/frontend/src/session-coordinator.test.ts`
 - `src/frontend/src/session-coordinator.ts`
+
+## Nomes da entrega de equipe
+
+Contratos próprios: `GestaoEquipe`, `PoliticaEquipe`, `RepositorioEquipe`,
+`MembroEquipe`, `HistoricoEquipe`, `deveAlterarSenha`, `estaRestrita`,
+`estaAtivo`, `permissoes`, `versao`, `senhaTemporaria` e
+`confirmacaoSenhaTemporaria`. O frontend e a API usam os mesmos nomes.
+Permissões persistem os identificadores portugueses EQUIPE_* como contrato
+explícito; nomes Prisma/SQL novos seguem a convenção existente em inglês,
+incluindo MembershipHistory/membership_history, mustChangePassword e restricted.

@@ -21,9 +21,9 @@ export class RenovacaoDeSessao {
       await this.repositorioAutenticacao.revogarSessao(sessao.id, agora);
       throw new ErroTokenAcessoInvalido();
     }
-    const vinculoAtivo = usuarioComVinculos.vinculos.find(({ escritorio, papel }) =>
-      escritorio.id === sessao.idEscritorioAtivo && escritorio.situacao === 'ATIVO' && papel === 'PROPRIETARIO');
-    if (!sessao.estaAtiva(agora) || usuarioComVinculos.usuario.id !== sessao.idUsuario || usuarioComVinculos.usuario.situacao !== 'ATIVO' || !vinculoAtivo) {
+    const vinculoAtivo = usuarioComVinculos.vinculos.find(({ escritorio, estaAtivo }) =>
+      escritorio.id === sessao.idEscritorioAtivo && escritorio.situacao === 'ATIVO' && estaAtivo !== false);
+    if (sessao.estaRestrita || usuarioComVinculos.usuario.deveAlterarSenha || !sessao.estaAtiva(agora) || usuarioComVinculos.usuario.id !== sessao.idUsuario || usuarioComVinculos.usuario.situacao !== 'ATIVO' || !vinculoAtivo) {
       throw new ErroTokenAcessoInvalido();
     }
     const novoTokenDeRenovacao = this.tokensRenovacao.gerarTokenDeRenovacao(sessao.id);

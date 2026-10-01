@@ -77,7 +77,7 @@ export class CadastroDeEscritorioComProprietario {
         atualizadoEm: escritorio.atualizadoEm,
       },
       usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email },
-      papel: vinculo.papel,
+      papel: 'PROPRIETARIO',
     };
   }
 }

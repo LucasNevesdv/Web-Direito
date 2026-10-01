@@ -18,6 +18,19 @@ function preparar() {
   return { ...c, ...limites, aplicacao, enviar };
 }
 describe('HTTP de senhas', () => {
+  it('primeiro acesso exige Bearer, encaminha contrato específico e limita o usuário entre IPs', async () => {
+    const c = preparar(), alterar = vi.spyOn(c.alteracao, 'alterarSenha').mockResolvedValue();
+    const dados = { senhaTemporaria: 'credencial temporária', novaSenha: 'senha própria segura', confirmacaoNovaSenha: 'senha própria segura' };
+    expect((await c.enviar('primeiro-acesso', dados)).statusCode).toBe(401);
+    for (let indice = 1; indice <= 3; indice++) {
+      const resultado = await c.enviar('primeiro-acesso', dados, `127.0.0.${indice}`, true);
+      expect(resultado.statusCode).toBe(200); expect(resultado.headers['set-cookie']).toContain('refresh_token=;');
+      expect(resultado.body).not.toContain(dados.senhaTemporaria);
+    }
+    expect(alterar).toHaveBeenCalledWith('acesso', { senhaAtual: dados.senhaTemporaria, novaSenha: dados.novaSenha, confirmacaoNovaSenha: dados.confirmacaoNovaSenha }, true);
+    const bloqueada = await c.enviar('primeiro-acesso', dados, '127.0.0.4', true);
+    expect(bloqueada.statusCode).toBe(429); expect(bloqueada.headers['retry-after']).toBeDefined(); expect(alterar).toHaveBeenCalledTimes(3);
+  });
   it('retorna 202 idêntico para existente, inexistente, malformado e inativo sem aguardar envio', async () => {
     const c = preparar(); const respostas = [];
     for (const email of [c.usuario.email, 'ausente@example.test', 'invalido']) respostas.push(await c.enviar('recuperar-senha', { email }));

@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose';
 import type { DadosTokenAcesso, TokensAcesso } from '../../application/authentication/authentication-contracts.js';
 import { ErroTokenAcessoInvalido } from '../../application/authentication/authentication-errors.js';
+import { PAPEIS_DOMINIO, PAPEIS_PRISMA } from '../prisma/team-mapper.js';
 
 export class TokensAcessoJose implements TokensAcesso {
   readonly #chave: Uint8Array;
@@ -14,7 +15,7 @@ export class TokensAcessoJose implements TokensAcesso {
 
   async criarTokenDeAcesso(dadosToken: DadosTokenAcesso): Promise<string> {
     const agora = Math.floor(this.relogio().getTime() / 1000);
-    return new SignJWT({ sessionId: dadosToken.idSessao, activeOfficeId: dadosToken.idEscritorioAtivo, role: dadosToken.papel === 'PROPRIETARIO' ? 'OWNER' : dadosToken.papel })
+    return new SignJWT({ sessionId: dadosToken.idSessao, activeOfficeId: dadosToken.idEscritorioAtivo, role: PAPEIS_PRISMA[dadosToken.papel] })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setSubject(dadosToken.idUsuario).setIssuer(this.emissor).setAudience(this.audiencia)
       .setIssuedAt(agora).setExpirationTime(agora + this.validadeSegundos).sign(this.#chave);
@@ -32,10 +33,10 @@ export class TokensAcessoJose implements TokensAcesso {
       if (typeof conteudo.sub !== 'string' || !padraoUuid.test(conteudo.sub)
         || typeof conteudo.sessionId !== 'string' || !padraoUuid.test(conteudo.sessionId)
         || typeof conteudo.activeOfficeId !== 'string' || !padraoUuid.test(conteudo.activeOfficeId)
-        || conteudo.role !== 'OWNER' || typeof conteudo.iat !== 'number' || typeof conteudo.exp !== 'number'
+        || typeof conteudo.role !== 'string' || !Object.hasOwn(PAPEIS_DOMINIO, conteudo.role) || typeof conteudo.iat !== 'number' || typeof conteudo.exp !== 'number'
         || conteudo.iat > Math.floor(agora.getTime() / 1000) || conteudo.exp <= conteudo.iat
         || conteudo.exp - conteudo.iat > this.validadeSegundos) throw new ErroTokenAcessoInvalido();
-      return { idUsuario: conteudo.sub, idSessao: conteudo.sessionId, idEscritorioAtivo: conteudo.activeOfficeId, papel: 'PROPRIETARIO' };
+      return { idUsuario: conteudo.sub, idSessao: conteudo.sessionId, idEscritorioAtivo: conteudo.activeOfficeId, papel: PAPEIS_DOMINIO[conteudo.role as keyof typeof PAPEIS_DOMINIO] };
     } catch { throw new ErroTokenAcessoInvalido(); }
   }
 }

@@ -18,7 +18,7 @@ export function criarCenarioLimitador(substituicoes: Partial<Record<EscopoLimite
       return removidos;
     },
   };
-  const escopos: EscopoLimiteRequisicoes[] = ['onboarding-ip', 'login-ip', 'login-identity', 'refresh-ip', 'recovery-ip', 'recovery-email', 'reset-ip', 'reset-token', 'password-change-ip', 'password-change-user'];
+  const escopos: EscopoLimiteRequisicoes[] = ['team-create-ip', 'onboarding-ip', 'login-ip', 'login-identity', 'refresh-ip', 'recovery-ip', 'recovery-email', 'reset-ip', 'reset-token', 'password-change-ip', 'password-change-user'];
   const politicas = Object.fromEntries(escopos.map((escopo) => [escopo, { limite: 1000, janelaSegundos: 900, ...substituicoes[escopo] }])) as Record<EscopoLimiteRequisicoes, PoliticaLimiteRequisicoes>;
   const chaves = new ChavesLimiteRequisicoesHmac(Buffer.alloc(48, 8).toString('base64url'));
   return { limitador: new LimitadorRequisicoesCompartilhado(armazenamento, chaves, politicas), armazenamento, chaves, contadores, politicas };

@@ -1,7 +1,7 @@
 import type { RecuperacaoDeSenha } from '../../domain/password-recovery/password-recovery.js';
 
 export interface UsuarioParaTrocaDeSenha { id: string; email: string; hashSenha: string; estaAtivo: boolean }
-export interface TrocaDeSenha { idUsuario: string; hashSenhaAnterior: string; novoHashSenha: string; agora: Date }
+export interface TrocaDeSenha { idUsuario: string; hashSenhaAnterior: string; novoHashSenha: string; agora: Date; primeiroAcesso?: boolean }
 export interface RepositorioSenhas {
   buscarUsuarioPorEmail(email: string): Promise<UsuarioParaTrocaDeSenha | null>;
   buscarUsuarioPorId(idUsuario: string): Promise<UsuarioParaTrocaDeSenha | null>;

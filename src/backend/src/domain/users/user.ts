@@ -8,6 +8,7 @@ interface EstadoUsuario {
   nome: string;
   email: string;
   hashSenha: string;
+  deveAlterarSenha?: boolean;
   situacao: SituacaoUsuario;
   criadoEm: Date;
   atualizadoEm: Date;
@@ -22,6 +23,7 @@ export class Usuario {
   readonly #nome: string;
   readonly #email: string;
   readonly #hashSenha: string;
+  readonly deveAlterarSenha: boolean;
   readonly #situacao: SituacaoUsuario;
   readonly #criadoEm: number;
   readonly #atualizadoEm: number;
@@ -53,6 +55,8 @@ export class Usuario {
     this.#nome = nome;
     this.#email = email;
     this.#hashSenha = estado.hashSenha;
+    if (estado.deveAlterarSenha !== undefined && typeof estado.deveAlterarSenha !== 'boolean') throw new ErroUsuarioInvalido('deveAlterarSenha');
+    this.deveAlterarSenha = estado.deveAlterarSenha ?? false;
     this.#situacao = estado.situacao;
     this.#criadoEm = estado.criadoEm.getTime();
     this.#atualizadoEm = estado.atualizadoEm.getTime();
@@ -95,13 +99,14 @@ export class Usuario {
     return email;
   }
 
-  static criar(entrada: { nome: string; email: string; hashSenha: string; id?: string }): Usuario {
+  static criar(entrada: { nome: string; email: string; hashSenha: string; id?: string; deveAlterarSenha?: boolean }): Usuario {
     const agora = new Date();
     return new Usuario({
       id: entrada.id === undefined ? randomUUID() : entrada.id,
       nome: entrada.nome,
       email: entrada.email,
       hashSenha: entrada.hashSenha,
+      deveAlterarSenha: entrada.deveAlterarSenha,
       situacao: 'ATIVO',
       criadoEm: agora,
       atualizadoEm: agora,

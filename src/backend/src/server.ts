@@ -1,4 +1,7 @@
 import { criarAplicacao } from './app.js';
+import { GestaoEquipe } from './application/team/manage-team.js';
+import { RepositorioEquipePrisma } from './infrastructure/prisma/prisma-team-repository.js';
+import { TokensAcessoJose } from './infrastructure/security/jose-access-tokens.js';
 import { comporServicosDeSenhas } from './infrastructure/password-services.js';
 import { comporServicosDeAutenticacao } from './authentication.js';
 import { CadastroDeEscritorioComProprietario } from './application/onboarding/register-office-with-owner.js';
@@ -42,7 +45,8 @@ try {
   const limitacaoRequisicoes = comporLimitacaoDeRequisicoes(prisma, ambiente);
   const senhas = comporServicosDeSenhas(prisma, ambiente, protecaoDeSenhas, autenticacao);
   processamentoSenhas = senhas.processamento;
-  aplicacao = criarAplicacao(criarVerificadorSaudePrisma(prisma), cadastro, autenticacao, { limitador: limitacaoRequisicoes.limitador, proxiesConfiaveis: ambiente.TRUST_PROXY }, senhas.servicos);
+  const equipe = new GestaoEquipe(new RepositorioEquipePrisma(prisma), new TokensAcessoJose(ambiente.AUTH_JWT_SECRET, ambiente.AUTH_JWT_ISSUER, ambiente.AUTH_JWT_AUDIENCE, ambiente.AUTH_ACCESS_TTL_SECONDS), protecaoDeSenhas);
+  aplicacao = criarAplicacao(criarVerificadorSaudePrisma(prisma), cadastro, autenticacao, { limitador: limitacaoRequisicoes.limitador, proxiesConfiaveis: ambiente.TRUST_PROXY }, senhas.servicos, equipe);
   await aplicacao.listen({
     host: ambiente.HOST,
     port: ambiente.PORT,

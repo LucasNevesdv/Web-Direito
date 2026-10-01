@@ -3,6 +3,7 @@ import { ErroCredenciaisInvalidas } from '../../application/authentication/authe
 import { bloquearUsuarioParaTrocaDeSenha } from './prisma-password-repository.js';
 import type { UsuarioComVinculos, RepositorioAutenticacao } from '../../application/authentication/authentication-contracts.js';
 import { Sessao } from '../../domain/sessions/session.js';
+import { PAPEIS_DOMINIO } from './team-mapper.js';
 import { converterRegistroPrismaEmUsuario, converterRegistroPrismaEmSessao, converterSessaoEmRegistroPrisma } from './authentication-mapper.js';
 
 const INCLUSAO_VINCULOS_E_ESCRITORIOS = { memberships: { include: { office: true } } } satisfies Prisma.UserInclude;
@@ -11,8 +12,8 @@ type RegistroPrismaDeUsuarioComVinculos = Prisma.UserGetPayload<{ include: typeo
 function converterRegistroPrismaEmUsuarioComVinculos(registroUsuario: RegistroPrismaDeUsuarioComVinculos): UsuarioComVinculos {
   return {
     usuario: converterRegistroPrismaEmUsuario(registroUsuario),
-    vinculos: registroUsuario.memberships.map(({ office: escritorio, role: papel }) => ({
-      escritorio: { id: escritorio.id, nome: escritorio.name, situacao: escritorio.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO' }, papel: papel === 'OWNER' ? 'PROPRIETARIO' : papel,
+    vinculos: registroUsuario.memberships.map(({ office: escritorio, role: papel, active }) => ({
+      escritorio: { id: escritorio.id, nome: escritorio.name, situacao: escritorio.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO' }, papel: PAPEIS_DOMINIO[papel], estaAtivo: active,
     })),
   };
 }
@@ -28,7 +29,8 @@ export class RepositorioAutenticacaoPrisma implements RepositorioAutenticacao {
   async salvarSessao(sessao: Sessao, hashSenhaEsperado: string): Promise<void> {
     await this.prisma.$transaction(async (transacao) => {
       await bloquearUsuarioParaTrocaDeSenha(transacao, sessao.idUsuario);
-      if (!await transacao.user.findFirst({ where: { id: sessao.idUsuario, passwordHash: hashSenhaEsperado, status: 'ACTIVE' } })) {
+      if (!await transacao.user.findFirst({ where: { id: sessao.idUsuario, passwordHash: hashSenhaEsperado, status: 'ACTIVE', mustChangePassword: sessao.estaRestrita,
+        memberships: { some: { officeId: sessao.idEscritorioAtivo, active: true, office: { status: 'ACTIVE' } } } } })) {
         throw new ErroCredenciaisInvalidas();
       }
       await transacao.session.create({ data: converterSessaoEmRegistroPrisma(sessao), select: { id: true } });
@@ -46,7 +48,7 @@ export class RepositorioAutenticacaoPrisma implements RepositorioAutenticacao {
     const resumoDaAtualizacao = await this.prisma.session.updateMany({
       where: {
         id: substituicaoDoHash.id, refreshTokenHash: substituicaoDoHash.hashAtual, revokedAt: null, expiresAt: { gt: substituicaoDoHash.agora },
-        user: { status: 'ACTIVE' }, office: { status: 'ACTIVE' }, membership: { role: 'OWNER' },
+        restricted: false, user: { status: 'ACTIVE', mustChangePassword: false }, office: { status: 'ACTIVE' }, membership: { active: true },
       },
       data: { refreshTokenHash: substituicaoDoHash.proximoHash, lastUsedAt: substituicaoDoHash.agora, updatedAt: substituicaoDoHash.agora },
     });

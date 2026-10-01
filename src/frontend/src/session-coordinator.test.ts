@@ -43,6 +43,14 @@ function criarCenario() {
 }
 
 describe("coordenação da autenticação entre abas da mesma origem", () => {
+  it('não repete invalidação terminal da mesma sessão, mas respeita logout explícito posterior', async () => {
+    const cenario = criarCenario(), um = cenario.criarCoordenadorDeTeste(), dois = cenario.criarCoordenadorDeTeste();
+    um.compartilharCredenciaisDaSessao(criarTokenDeAcessoSimulado(), IDENTIDADE, 'entrar'); await dois.sincronizarSessaoEntreAbas();
+    const observar = vi.fn(); um.observarMudancasDaSessao(observar);
+    dois.propagarInvalidacaoDaSessao('invalido'); await um.sincronizarSessaoEntreAbas(); expect(observar).toHaveBeenCalledTimes(1);
+    dois.propagarInvalidacaoDaSessao('invalido'); await um.sincronizarSessaoEntreAbas(); expect(observar).toHaveBeenCalledTimes(1);
+    dois.propagarInvalidacaoDaSessao('sair'); await um.sincronizarSessaoEntreAbas(); expect(observar).toHaveBeenCalledTimes(2);
+  });
   it("restaura abas simultâneas com uma renovação e compartilha o token com uma aba posterior", async () => {
     const cenario = criarCenario();
     const armazenamento = vi.spyOn(Storage.prototype, 'setItem');

@@ -15,7 +15,8 @@
     "configure:auth": "node scripts/configure-auth.mjs",
     "verify:auth-browser": "node tests/integration/authentication-browser.check.mjs",
     "verify:rate-limit": "node tests/integration/distributed-rate-limit.check.mjs",
-    "verify:password-security": "node tests/integration/password-security.check.mjs"
+    "verify:password-security": "node tests/integration/password-security.check.mjs",
+    "verify:team": "node tests/integration/team-management.check.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11",

@@ -3,6 +3,7 @@ export type CampoUsuarioInvalido =
   | 'nome'
   | 'email'
   | 'hashSenha'
+  | 'deveAlterarSenha'
   | 'situacao'
   | 'criadoEm'
   | 'atualizadoEm';

@@ -30,7 +30,7 @@ describe('compatibilidade da autenticação com registros físicos existentes', 
     const sessao = converterRegistroPrismaEmSessao(registro);
     expect(sessao).toBeInstanceOf(Sessao);
     expect(sessao.estaAtiva(new Date('2026-01-04'))).toBe(false);
-    expect(converterSessaoEmRegistroPrisma(sessao)).toEqual(registro);
+    expect(converterSessaoEmRegistroPrisma(sessao)).toEqual({ ...registro, restricted: false });
     expect(JSON.stringify(sessao)).not.toContain(registro.refreshTokenHash);
   });
 });

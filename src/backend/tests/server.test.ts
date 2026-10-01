@@ -13,6 +13,8 @@ const SIMULACOES = vi.hoisted(() => {
     HOST: '127.0.0.2',
     PORT: 4321,
     NODE_ENV: 'test',
+    AUTH_JWT_SECRET: Buffer.alloc(48, 7).toString('base64url'),
+    AUTH_JWT_ISSUER: 'teste', AUTH_JWT_AUDIENCE: 'teste', AUTH_ACCESS_TTL_SECONDS: 900,
   };
   const aplicacao = {
     listen: vi.fn(async () => {}),
@@ -125,7 +127,7 @@ describe("inicialização do backend", () => {
       SIMULACOES.repositorio, SIMULACOES.protecaoDeSenhas,
     );
     expect(SIMULACOES.comporServicosDeAutenticacao).toHaveBeenCalledWith(SIMULACOES.prisma, SIMULACOES.ambiente, SIMULACOES.protecaoDeSenhas);
-    expect(SIMULACOES.criarAplicacao).toHaveBeenCalledWith(SIMULACOES.verificador, SIMULACOES.cadastro, SIMULACOES.autenticacao, { limitador: SIMULACOES.limitador, proxiesConfiaveis: undefined }, {});
+    expect(SIMULACOES.criarAplicacao).toHaveBeenCalledWith(SIMULACOES.verificador, SIMULACOES.cadastro, SIMULACOES.autenticacao, { limitador: SIMULACOES.limitador, proxiesConfiaveis: undefined }, {}, expect.objectContaining({ cadastrar: expect.any(Function), definirSituacao: expect.any(Function) }));
     expect(SIMULACOES.aplicacao.listen).toHaveBeenCalledWith({
       host: SIMULACOES.ambiente.HOST,
       port: SIMULACOES.ambiente.PORT,

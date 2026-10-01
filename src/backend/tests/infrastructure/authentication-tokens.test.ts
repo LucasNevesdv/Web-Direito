@@ -27,7 +27,7 @@ describe("tokens de acesso JWT", () => {
     if (cenario === 'wrong-issuer') conteudo.iss = 'another';
     if (cenario === 'wrong-audience') conteudo.aud = 'another';
     if (cenario === 'missing-session') delete conteudo.sessionId;
-    if (cenario === 'invalid-role') conteudo.role = 'ADMIN';
+    if (cenario === 'invalid-role') conteudo.role = 'UNKNOWN_ROLE';
     if (cenario === 'long-lifetime') conteudo.exp = instante + 901;
     const token = await new SignJWT(conteudo).setProtectedHeader({ alg: cenario === 'wrong-algorithm' ? 'HS384' : 'HS256', typ: 'JWT' })
       .sign(cenario === 'wrong-signature' ? Buffer.alloc(48, 8) : Buffer.from(SEGREDO_TESTE, 'base64url'));

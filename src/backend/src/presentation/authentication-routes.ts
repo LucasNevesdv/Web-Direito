@@ -29,6 +29,7 @@ const EXCESSO_TENTATIVAS = { erro: 'EXCESSO_TENTATIVAS', mensagem: 'Muitas tenta
 
 function selecionarCamposDaIdentidadePublica(identidade: IdentidadePublica): IdentidadePublica {
   return {
+    ...(identidade.deveAlterarSenha ? { deveAlterarSenha: true } : {}),
     usuario: { id: identidade.usuario.id, nome: identidade.usuario.nome, email: identidade.usuario.email },
     escritorio: { id: identidade.escritorio.id, nome: identidade.escritorio.nome, papel: identidade.escritorio.papel },
   };

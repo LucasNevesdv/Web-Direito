@@ -1,4 +1,4 @@
-export type EscopoLimiteRequisicoes = 'onboarding-ip' | 'login-ip' | 'login-identity' | 'refresh-ip'
+export type EscopoLimiteRequisicoes = 'onboarding-ip' | 'login-ip' | 'login-identity' | 'refresh-ip' | 'team-create-ip'
   | 'recovery-ip' | 'recovery-email' | 'reset-ip' | 'reset-token' | 'password-change-ip' | 'password-change-user';
 export interface DecisaoLimiteRequisicoes { podeProsseguir: boolean; tentarAposSegundos: number }
 export interface PoliticaLimiteRequisicoes { limite: number; janelaSegundos: number }

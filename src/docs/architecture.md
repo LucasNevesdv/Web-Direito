@@ -80,9 +80,8 @@ no formulário. Nenhum ID, papel, estado ou data é aceito do cliente.
 Os nomes são normalizados com trim e têm entre 2 e 120 pontos de código Unicode.
 O e-mail recebe trim e lowercase, tem formato validado e é único globalmente.
 A senha tem entre 12 e 128 caracteres e não sofre trim. O primeiro vínculo é
-sempre `PROPRIETARIO`, único papel implementado e responsável pela autoridade
-administrativa máxima prevista. A aplicação dessa autoridade às operações
-protegidas depende da futura autenticação e autorização.
+sempre `PROPRIETARIO`, autoridade administrativa máxima. Os papéis inferiores
+e a política específica de equipe são implementados em RF-009/RF-010/RF-011.
 
 O hash é calculado antes da transação, evitando manter conexão do banco durante
 o trabalho do Argon2. A transação grava `Office`, `User` e `Membership`, nessa
@@ -95,7 +94,8 @@ A migration `20260923160423_create_users_and_memberships`, revisada e aplicada,
 acrescenta `users`, `memberships`, `user_status` e `membership_role`. Há unicidade
 de `users.email` e de `(office_id, user_id)`, além de chaves estrangeiras para
 escritório e usuário com `RESTRICT` na exclusão e na atualização. O estado do
-usuário admite `ACTIVE` e `INACTIVE` desde RF-003; o único papel é `OWNER`. As migrations anteriores
+usuário admite `ACTIVE` e `INACTIVE` desde RF-003. RF-010 acrescenta quatro
+papéis inferiores ao `OWNER`, sem alterar os valores físicos existentes. As migrations anteriores
 e os dados existentes são preservados.
 
 O endpoint retorna HTTP 201 com os cinco campos públicos de escritório, somente
@@ -120,10 +120,9 @@ nesta entrega. Nenhum algoritmo próprio é empregado.
 
 RF-002 foi atendido como condição técnica da atomicidade de RF-001: cadastro
 inicial do usuário e de seu vínculo. O login foi entregue em RF-003. Permanecem pendentes verificação de
-e-mail, convites, gerenciamento de membros, autenticação
-em dois fatores e proteção avançada contra abuso do endpoint público. Não foram
-implementados auditoria de negócio, permissões customizáveis ou isolamento de
-consultas dos demais módulos entre escritórios nesta entrega.
+e-mail, autenticação em dois fatores e proteção avançada contra abuso do
+endpoint público. RF-009/RF-010/RF-011 implementam permissões e histórico da
+equipe; auditoria e isolamento dos demais módulos continuam pendentes.
 
 ## Autenticação e sessão — RF-003 a RF-006
 
@@ -266,7 +265,8 @@ público do login com um novo access token; nunca retorna refresh no JSON.
 
 `RenovacaoDeSessao` reconfirma validade, estado e vínculo. O repositório faz
 `updateMany` condicionado por ID, hash atual, `revokedAt=null`, expiração futura,
-usuário/escritório ACTIVE e Membership OWNER. O hash funciona como versão de
+usuário/escritório ACTIVE, vínculo ativo e ausência de primeiro acesso pendente.
+Sessões restritas não renovam. O hash funciona como versão de
 concorrência: somente uma atualização pode consumir o token atual. Uma divergência
 de hash ou disputa perdida revoga toda a sessão e retorna 401 genérico. Em duas
 renovações concorrentes, uma pode responder 200, mas a detecção da outra revoga
@@ -522,3 +522,90 @@ A mudança de JSON exige publicar frontend e backend juntos e recarregar abas
 antigas. O formato assinado dos JWTs, o cookie e as chaves dos contadores
 permanecem compatíveis. Consulte [nomenclatura](nomenclature.md) para contratos
 e exceções da tradução.
+
+## Provisionamento administrativo de equipe — RF-009/RF-010/RF-011
+
+`GestaoEquipe` usa o contrato específico `RepositorioEquipe` e
+`PoliticaEquipe`, sem conhecer Fastify ou Prisma. As rotas validam o contrato;
+a política central verifica hierarquia e permissões. A infraestrutura traduz
+os cinco papéis e implementa transações, autorização atual e histórico.
+
+| Papel | Padrão | Personalização e autoridade |
+| --- | --- | --- |
+| PROPRIETARIO | Todas as cinco permissões | Imutável; gerencia os quatro inferiores; criado somente no onboarding. |
+| ADMINISTRADOR | Todas as cinco permissões | Proprietário pode reduzir; gerencia somente os três inferiores, dentro das permissões que possui. |
+| ADVOGADO / ESTAGIARIO / SECRETARIO | Nenhuma | Podem receber EQUIPE_VISUALIZAR; nunca as quatro permissões de gestão. |
+
+As permissões reais são `EQUIPE_VISUALIZAR`, `EQUIPE_CADASTRAR_USUARIO`,
+`EQUIPE_ALTERAR_USUARIO`, `EQUIPE_DEFINIR_PERMISSOES` e
+`EQUIPE_ATIVAR_INATIVAR_USUARIO`. Criar usuário exige cadastro e definição de
+permissões. Não há autogestão, edição de proprietário nem edição de administrador
+por outro administrador. Não se modelam permissões de módulos inexistentes.
+
+### Persistência e concorrência
+
+Migration `20261001100000_administrative_team_provisioning`: acrescenta
+ADMIN/LAWYER/INTERN/SECRETARY ao enum físico, `users.must_change_password`,
+`sessions.restricted`, estado/permissões/versão/data de alteração do vínculo e
+`membership_history`. Proprietários anteriores recebem as cinco permissões.
+As sete migrations anteriores e nomes físicos existentes são preservados.
+
+A transação bloqueia a linha do escritório antes de revalidar sessão/vínculo
+no banco, serializando decisões administrativas naquele contexto. Criação usa
+advisory lock transacional derivado do e-mail normalizado, inclusive entre
+escritórios; constraints únicas continuam como garantia final. Argon2 é executado
+fora da transação, após autorização preliminar, e a autorização é revalidada
+antes de gravar. Conta existente não recebe novo hash nem alteração global.
+
+Edição aplica compare-and-swap pela versão, bloqueia usuário com o mesmo protocolo
+de login/troca de senha e revoga sessões somente do escritório afetado. Histórico
+e alterações pertencem à mesma transação: falha no histórico desfaz tudo.
+Limites: statement_timeout local de cinco segundos, maxWait cinco e transação dez.
+Histórico registra autor, data, ação e antes/depois de papel/permissões/estado/versão,
+sem senha/hash. Consulta devolve os últimos 100 eventos; não há módulo genérico.
+
+### API e frontend
+
+Todas as rotas de equipe exigem Bearer e revalidam autorização no PostgreSQL.
+Identificador `:id` representa o vínculo, sempre filtrado pelo escritório da
+sessão. Recurso externo retorna 404. Corpos estritos recusam mass assignment;
+mutação exige Origin autorizado, erros sanitizados e Cache-Control no-store.
+
+| Método | Caminho | Resultado |
+| --- | --- | --- |
+| GET | /api/v1/equipe/usuarios/configuracao | 200; permissões atuais, papéis possíveis e seus padrões. |
+| GET | /api/v1/equipe/usuarios | 200; usuarios/total/pagina/tamanhoPagina; pesquisa por nome/e-mail, máximo 50. |
+| GET | /api/v1/equipe/usuarios/:id | 200; membro público. |
+| GET | /api/v1/equipe/usuarios/:id/historico | 200; eventos autorizados. |
+| POST | /api/v1/equipe/usuarios | 201; nome/email/papel/permissoes/senhaTemporaria/confirmacaoSenhaTemporaria. |
+| POST | /api/v1/equipe/usuarios/confirmar-vinculo | 201; email/papel/permissoes/confirmacaoVinculo=true, sem senha. |
+| PATCH | /api/v1/equipe/usuarios/:id | 200; papel/permissoes/versao. |
+| POST | /api/v1/equipe/usuarios/:id/ativar ou /inativar | 200; versao. |
+| POST | /api/v1/auth/primeiro-acesso | 200; senhaTemporaria/novaSenha/confirmacaoNovaSenha; limpa cookie. |
+
+Membro público: id, idUsuario, nome, email, papel, permissoes, estaAtivo,
+deveAlterarSenha, criadoEm e versao. Erros: 400 entrada inválida, 401 sessão,
+403 autoridade insuficiente/restrita, 404 vínculo externo/inexistente, 409
+conta/vínculo/versão/estado conflitante, 429 com Retry-After e 503 indisponibilidade.
+Cadastro usa escopo próprio no limitador compartilhado, com configuração do
+onboarding (padrão 10/IP/15 minutos); primeiro acesso usa o limite de troca de
+senha (5/IP e 5/usuário/15 minutos). Não há novas variáveis de ambiente.
+
+`/equipe` usa permissões atuais para ações, padrões por papel, confirmações e
+controle de envio. Senhas são removidas dos campos ao enviar, não persistidas.
+`/primeiro-acesso` bloqueia outras telas enquanto houver obrigação. Login e
+identidade acrescentam `deveAlterarSenha: true` apenas quando necessário;
+sessões regulares preservam o formato anterior. Só identidade, logout e troca
+obrigatória são permitidos na sessão restrita, inclusive bloqueando refresh.
+Outra aba ativa pode compartilhar credenciais; sem ela, recarga exige novo login.
+
+Troca obrigatória e recuperação removem a flag e revogam todas as sessões na
+mesma transação. A resposta limpa cookie; o cliente limpa memória e propaga logout
+pelo coordenador existente. Abas visíveis consultam /me a cada dois segundos e ao
+recuperar foco. Revogação é imediata na API; a atualização visual depende dessa
+consulta/retomada. Permissões não dependem de esperar o JWT expirar.
+
+Limitações deliberadas: não há escolha/troca de escritório (RF-013); login com
+múltiplos vínculos ativos retorna 409, preservando sessões anteriores. RF-012
+não foi implementado e RF-014 não é considerado concluído: isolamento foi
+comprovado somente nas operações existentes, incluindo equipe.

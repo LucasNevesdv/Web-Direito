@@ -14,9 +14,10 @@ export class ConsultaDeIdentidadeAutenticada {
     if (!sessaoComUsuario || !sessaoComUsuario.sessao.estaAtiva(this.relogio()) || sessaoComUsuario.usuarioComVinculos.usuario.situacao !== 'ATIVO'
       || sessaoComUsuario.sessao.idUsuario !== dadosToken.idUsuario || sessaoComUsuario.usuarioComVinculos.usuario.id !== dadosToken.idUsuario
       || sessaoComUsuario.sessao.idEscritorioAtivo !== dadosToken.idEscritorioAtivo) throw new ErroTokenAcessoInvalido();
-    const vinculoAutorizado = sessaoComUsuario.usuarioComVinculos.vinculos.find(({ escritorio, papel }) =>
-      escritorio.id === dadosToken.idEscritorioAtivo && escritorio.situacao === 'ATIVO' && papel === dadosToken.papel);
+    const vinculoAutorizado = sessaoComUsuario.usuarioComVinculos.vinculos.find(({ escritorio, papel, estaAtivo }) =>
+      escritorio.id === dadosToken.idEscritorioAtivo && escritorio.situacao === 'ATIVO' && estaAtivo !== false && papel === dadosToken.papel);
     if (!vinculoAutorizado) throw new ErroTokenAcessoInvalido();
-    return extrairIdentidadePublicaDoVinculo(sessaoComUsuario.usuarioComVinculos, vinculoAutorizado.escritorio.id);
+    const identidade = extrairIdentidadePublicaDoVinculo(sessaoComUsuario.usuarioComVinculos, vinculoAutorizado.escritorio.id);
+    return { ...identidade, ...(sessaoComUsuario.sessao.estaRestrita ? { deveAlterarSenha: true } : {}) };
   }
 }

@@ -47,22 +47,28 @@ enum UserStatus {
 
 enum MembershipRole {
   OWNER
+  ADMIN
+  LAWYER
+  INTERN
+  SECRETARY
 
   @@map("membership_role")
 }
 
 model User {
-  id                 String             @id @db.Uuid
-  name               String             @db.VarChar(120)
-  email              String             @unique @db.VarChar(254)
-  passwordHash       String             @map("password_hash") @db.Text
-  status             UserStatus         @default(ACTIVE)
-  createdAt          DateTime           @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime           @map("updated_at") @db.Timestamptz(3)
+  id                 String              @id @db.Uuid
+  name               String              @db.VarChar(120)
+  email              String              @unique @db.VarChar(254)
+  passwordHash       String              @map("password_hash") @db.Text
+  status             UserStatus          @default(ACTIVE)
+  createdAt          DateTime            @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime            @map("updated_at") @db.Timestamptz(3)
   memberships        Membership[]
   sessions           Session[]
   passwordRecoveries PasswordRecovery[]
   recoveryEmailJobs  RecoveryEmailJob[]
+  mustChangePassword Boolean             @default(false) @map("must_change_password")
+  teamChanges        MembershipHistory[]
 
   @@map("users")
 }
@@ -118,17 +124,23 @@ model RecoveryEmailJob {
 }
 
 model Membership {
-  id        String         @id @db.Uuid
-  officeId  String         @map("office_id") @db.Uuid
-  userId    String         @map("user_id") @db.Uuid
-  role      MembershipRole
-  createdAt DateTime       @map("created_at") @db.Timestamptz(3)
-  office    Office         @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  user      User           @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  sessions  Session[]
+  id          String              @id @db.Uuid
+  officeId    String              @map("office_id") @db.Uuid
+  userId      String              @map("user_id") @db.Uuid
+  role        MembershipRole
+  createdAt   DateTime            @map("created_at") @db.Timestamptz(3)
+  office      Office              @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user        User                @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sessions    Session[]
+  active      Boolean             @default(true)
+  permissions String[]            @default([])
+  version     Int                 @default(0)
+  updatedAt   DateTime            @default(now()) @map("updated_at") @db.Timestamptz(3)
+  history     MembershipHistory[]
 
   @@unique([officeId, userId])
   @@index([userId])
+  @@index([officeId, active, createdAt])
   @@map("memberships")
 }
 
@@ -142,10 +154,27 @@ model Session {
   createdAt        DateTime   @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime   @map("updated_at") @db.Timestamptz(3)
   lastUsedAt       DateTime?  @map("last_used_at") @db.Timestamptz(3)
+  restricted       Boolean    @default(false)
   user             User       @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   office           Office     @relation(fields: [activeOfficeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   membership       Membership @relation(fields: [activeOfficeId, userId], references: [officeId, userId], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([expiresAt])
+  @@index([activeOfficeId, userId, revokedAt])
   @@map("sessions")
+}
+
+model MembershipHistory {
+  id           String     @id @db.Uuid
+  membershipId String     @map("membership_id") @db.Uuid
+  actorId      String     @map("actor_id") @db.Uuid
+  action       String     @db.VarChar(32)
+  previous     Json?
+  current      Json
+  createdAt    DateTime   @map("created_at") @db.Timestamptz(3)
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor        User       @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([membershipId, createdAt])
+  @@map("membership_history")
 }

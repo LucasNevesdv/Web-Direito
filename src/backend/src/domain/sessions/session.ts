@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 export interface EstadoSessao {
+  estaRestrita?: boolean;
   id: string;
   idUsuario: string;
   idEscritorioAtivo: string;
@@ -24,6 +25,7 @@ export class Sessao {
   readonly #estado: EstadoSessao;
 
   private constructor(estado: EstadoSessao) {
+    if (estado.estaRestrita !== undefined && typeof estado.estaRestrita !== 'boolean') throw new ErroSessaoInvalida('estaRestrita');
     for (const campo of ['id', 'idUsuario', 'idEscritorioAtivo'] as const) {
       if (typeof estado[campo] !== 'string' || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(estado[campo])) {
         throw new ErroSessaoInvalida(campo);
@@ -40,6 +42,7 @@ export class Sessao {
     }
     if (estado.expiraEm <= estado.criadoEm) throw new ErroSessaoInvalida('expiraEm');
     this.#estado = structuredClone({
+      ...(estado.estaRestrita ? { estaRestrita: true } : {}),
       id: estado.id, idUsuario: estado.idUsuario, idEscritorioAtivo: estado.idEscritorioAtivo,
       hashTokenRenovacao: estado.hashTokenRenovacao, expiraEm: estado.expiraEm,
       criadoEm: estado.criadoEm, atualizadoEm: estado.atualizadoEm,
@@ -47,17 +50,19 @@ export class Sessao {
     });
   }
 
-  static criar(entrada: { id?: string; idUsuario: string; idEscritorioAtivo: string; hashTokenRenovacao: string; expiraEm: Date; agora?: Date }): Sessao {
+  static criar(entrada: { id?: string; idUsuario: string; idEscritorioAtivo: string; hashTokenRenovacao: string; expiraEm: Date; agora?: Date; estaRestrita?: boolean }): Sessao {
     const agora = entrada.agora ?? new Date();
     return new Sessao({
       id: entrada.id ?? randomUUID(), idUsuario: entrada.idUsuario, idEscritorioAtivo: entrada.idEscritorioAtivo,
       hashTokenRenovacao: entrada.hashTokenRenovacao, expiraEm: entrada.expiraEm,
       criadoEm: agora, atualizadoEm: agora, revogadaEm: null, ultimoUsoEm: null,
+      estaRestrita: entrada.estaRestrita,
     });
   }
 
   static restaurar(estado: EstadoSessao): Sessao { return new Sessao(estado); }
   get id(): string { return this.#estado.id; }
+  get estaRestrita(): boolean { return this.#estado.estaRestrita ?? false; }
   get idUsuario(): string { return this.#estado.idUsuario; }
   get idEscritorioAtivo(): string { return this.#estado.idEscritorioAtivo; }
   get expiraEm(): Date { return new Date(this.#estado.expiraEm); }

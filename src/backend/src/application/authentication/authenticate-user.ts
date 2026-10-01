@@ -25,7 +25,7 @@ export class AutenticacaoDeUsuario {
     const senhaCorrespondeAoHash = await this.protecaoDeSenhas.compararSenhaComHash(usuarioComVinculos?.usuario.hashSenha ?? this.opcoes.hashSenhaReferencia, credenciaisInformadas.senha);
     if (!usuarioComVinculos || !senhaCorrespondeAoHash) throw new ErroCredenciaisInvalidas();
     if (usuarioComVinculos.usuario.situacao !== 'ATIVO') throw new ErroUsuarioInativo();
-    const vinculosAtivos = usuarioComVinculos.vinculos.filter(({ escritorio }) => escritorio.situacao === 'ATIVO');
+    const vinculosAtivos = usuarioComVinculos.vinculos.filter(({ escritorio, estaAtivo }) => escritorio.situacao === 'ATIVO' && estaAtivo !== false);
     if (vinculosAtivos.length === 0) throw new ErroEscritorioInativo();
     if (vinculosAtivos.length !== 1) throw new ErroMultiplosEscritoriosAtivos();
     const vinculoAtivo = vinculosAtivos[0];
@@ -33,6 +33,7 @@ export class AutenticacaoDeUsuario {
     const agora = this.relogio();
     const sessao = Sessao.criar({
       id: tokenDeRenovacao.idSessao,
+      estaRestrita: usuarioComVinculos.usuario.deveAlterarSenha,
       idUsuario: usuarioComVinculos.usuario.id, idEscritorioAtivo: vinculoAtivo.escritorio.id, hashTokenRenovacao: tokenDeRenovacao.hash,
       expiraEm: new Date(agora.getTime() + this.opcoes.validadeRenovacaoSegundos * 1000), agora,
     });

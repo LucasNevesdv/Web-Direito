@@ -1,5 +1,5 @@
 import type { TokensAcesso } from '../authentication/authentication-contracts.js';
-import { ErroTokenAcessoInvalido } from '../authentication/authentication-errors.js';
+import { ErroTokenAcessoInvalido, ErroPrimeiroAcessoObrigatorio } from '../authentication/authentication-errors.js';
 import type { ConsultaDeIdentidadeAutenticada } from '../authentication/get-authenticated-identity.js';
 import type { ProtecaoDeSenhas } from '../security/password-hasher.js';
 import { senhaAtendePolitica } from '../security/password-policy.js';
@@ -35,8 +35,9 @@ export class AlteracaoDeSenhaAutenticada {
     private readonly tokensAcesso: TokensAcesso, private readonly identidade: Pick<ConsultaDeIdentidadeAutenticada, 'consultarIdentidadeAutenticada'>,
     private readonly relogio: () => Date = () => new Date()) {}
 
-  async alterarSenha(tokenAcesso: string, dados: NovaSenha & { senhaAtual: string }): Promise<void> {
-    await this.identidade.consultarIdentidadeAutenticada(tokenAcesso);
+  async alterarSenha(tokenAcesso: string, dados: NovaSenha & { senhaAtual: string }, primeiroAcesso = false): Promise<void> {
+    const identidade = await this.identidade.consultarIdentidadeAutenticada(tokenAcesso);
+    if (!!identidade.deveAlterarSenha !== primeiroAcesso) throw new ErroPrimeiroAcessoObrigatorio();
     const credenciais = await this.tokensAcesso.validarTokenDeAcesso(tokenAcesso);
     const usuario = await this.repositorio.buscarUsuarioPorId(credenciais.idUsuario);
     if (!usuario?.estaAtivo) throw new ErroTokenAcessoInvalido();
@@ -46,6 +47,6 @@ export class AlteracaoDeSenhaAutenticada {
     if (await this.protecao.compararSenhaComHash(usuario.hashSenha, dados.novaSenha)) throw new ErroTrocaDeSenha('SENHA_REPETIDA');
     const novoHashSenha = await this.protecao.gerarHashDaSenha(dados.novaSenha);
     if (!await this.repositorio.alterarSenha({ idUsuario: usuario.id, idSessao: credenciais.idSessao,
-      hashSenhaAnterior: usuario.hashSenha, novoHashSenha, agora: this.relogio() })) throw new ErroTokenAcessoInvalido();
+      hashSenhaAnterior: usuario.hashSenha, novoHashSenha, agora: this.relogio(), ...(primeiroAcesso ? { primeiroAcesso: true } : {}) })) throw new ErroTokenAcessoInvalido();
   }
 }

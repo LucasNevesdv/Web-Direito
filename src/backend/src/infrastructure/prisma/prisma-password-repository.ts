@@ -51,13 +51,14 @@ export class RepositorioSenhasPrisma implements RepositorioSenhas {
       // Reavalia expiração após obter o bloqueio; não aceita o relógio anterior à espera.
       const agora = new Date(Math.max(dados.agora.getTime(), Date.now()));
       if (idSessao && !await transacao.session.findFirst({ where: { id: idSessao, userId: dados.idUsuario, revokedAt: null,
-        expiresAt: { gt: agora }, office: { status: 'ACTIVE' }, membership: { role: 'OWNER' } } })) return false;
+        expiresAt: { gt: agora }, restricted: dados.primeiroAcesso ?? false, office: { status: 'ACTIVE' }, membership: { active: true } } })) return false;
+      if (idSessao && usuario.mustChangePassword !== (dados.primeiroAcesso ?? false)) return false;
       if (idRecuperacao) {
         const consumo = await transacao.passwordRecovery.updateMany({ where: { id: idRecuperacao, userId: dados.idUsuario,
           usedAt: null, invalidatedAt: null, expiresAt: { gt: agora } }, data: { usedAt: agora } });
         if (consumo.count !== 1) return false;
       }
-      await transacao.user.update({ where: { id: dados.idUsuario }, data: { passwordHash: dados.novoHashSenha, updatedAt: agora } });
+      await transacao.user.update({ where: { id: dados.idUsuario }, data: { passwordHash: dados.novoHashSenha, updatedAt: agora, mustChangePassword: false } });
       await transacao.session.updateMany({ where: { userId: dados.idUsuario, revokedAt: null }, data: { revokedAt: agora, updatedAt: agora } });
       await transacao.passwordRecovery.updateMany({ where: { userId: dados.idUsuario, usedAt: null, invalidatedAt: null }, data: { invalidatedAt: agora } });
       await transacao.recoveryEmailJob.updateMany({ where: { userId: dados.idUsuario, status: { in: ['PENDING', 'PROCESSING'] } },

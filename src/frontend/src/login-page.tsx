@@ -67,6 +67,7 @@ export function PaginaLogin() {
             <p>Papel: <strong>{identidade.escritorio.papel}</strong></p>
             <p className="text-sm leading-6 text-slate-300">Esta é uma área autenticada provisória.</p>
             <a href="/seguranca" className="block text-cyan-300 underline">Segurança e alteração de senha</a>
+            <a href="/equipe" className="block text-cyan-300 underline">Equipe</a>
             <button type="button" onClick={() => {
               void cliente.encerrarSessao().catch(() => definirMensagem('Não foi possível encerrar a sessão no servidor. Tente novamente.'));
             }} className="rounded-lg bg-cyan-300 px-5 py-3 font-semibold text-slate-950">Sair</button>

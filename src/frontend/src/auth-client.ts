@@ -1,8 +1,9 @@
 import type { CoordenadorSessao } from './session-coordinator';
 
 export interface IdentidadeAutenticada {
+  deveAlterarSenha?: boolean;
   usuario: { id: string; nome: string; email: string };
-  escritorio: { id: string; nome: string; papel: 'PROPRIETARIO' };
+  escritorio: { id: string; nome: string; papel: 'PROPRIETARIO' | 'ADMINISTRADOR' | 'ADVOGADO' | 'ESTAGIARIO' | 'SECRETARIO' };
 }
 export type EstadoAutenticacao = { situacao: 'carregando' | 'autenticado' | 'naoAutenticado'; identidade: IdentidadeAutenticada | null };
 
@@ -14,8 +15,8 @@ function validarEExtrairIdentidade(respostaDaApi: unknown): IdentidadeAutenticad
   const identidadeRecebida = respostaDaApi as IdentidadeAutenticada | undefined;
   if (!identidadeRecebida || !identidadeRecebida.usuario || !identidadeRecebida.escritorio ||
     ![identidadeRecebida.usuario.id, identidadeRecebida.usuario.nome, identidadeRecebida.usuario.email, identidadeRecebida.escritorio.id, identidadeRecebida.escritorio.nome].every((campo) => typeof campo === 'string' && campo.length > 0) ||
-    identidadeRecebida.escritorio.papel !== 'PROPRIETARIO') throw new Error('Identidade indisponível.');
-  return { usuario: { id: identidadeRecebida.usuario.id, nome: identidadeRecebida.usuario.nome, email: identidadeRecebida.usuario.email },
+    !['PROPRIETARIO', 'ADMINISTRADOR', 'ADVOGADO', 'ESTAGIARIO', 'SECRETARIO'].includes(identidadeRecebida.escritorio.papel)) throw new Error('Identidade indisponível.');
+  return { ...(identidadeRecebida.deveAlterarSenha ? { deveAlterarSenha: true } : {}), usuario: { id: identidadeRecebida.usuario.id, nome: identidadeRecebida.usuario.nome, email: identidadeRecebida.usuario.email },
     escritorio: { id: identidadeRecebida.escritorio.id, nome: identidadeRecebida.escritorio.nome, papel: identidadeRecebida.escritorio.papel } };
 }
 
@@ -211,18 +212,18 @@ export class ClienteAutenticacao {
     this.aoExigirNovoLogin();
   }
 
-  async trocarSenha(caminho: '/api/v1/auth/alterar-senha' | '/api/v1/auth/redefinir-senha', dados: object): Promise<Response> {
+  async trocarSenha(caminho: '/api/v1/auth/alterar-senha' | '/api/v1/auth/redefinir-senha' | '/api/v1/auth/primeiro-acesso', dados: object): Promise<Response> {
     await this.promessaDeEncerramento;
     await this.promessaRenovacao;
     // Renovar, se necessário, antes de adquirir o mesmo lock usado pelo refresh.
-    if (caminho === '/api/v1/auth/alterar-senha') {
+    if (caminho !== '/api/v1/auth/redefinir-senha') {
       const identidade = await this.enviarRequisicaoAutenticada('/api/v1/auth/me');
       if (!identidade.ok) return identidade;
     }
     return this.executarOperacaoExclusiva(async (sinal) => {
       await this.coordenador?.sincronizarSessaoEntreAbas();
       const cabecalhos: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (caminho === '/api/v1/auth/alterar-senha' && this.tokenAcessoEmMemoria) cabecalhos.Authorization = `Bearer ${this.tokenAcessoEmMemoria}`;
+      if (caminho !== '/api/v1/auth/redefinir-senha' && this.tokenAcessoEmMemoria) cabecalhos.Authorization = `Bearer ${this.tokenAcessoEmMemoria}`;
       const resposta = await this.enviarRequisicaoHttp(caminho, { method: 'POST', credentials: 'include',
         headers: cabecalhos, body: JSON.stringify(dados), signal: sinal });
       if (resposta.ok) this.confirmarRevogacaoPorTrocaDeSenha();

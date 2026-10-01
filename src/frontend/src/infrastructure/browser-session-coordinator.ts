@@ -4,6 +4,7 @@ import type { CoordenadorSessao, SessaoCompartilhada } from '../session-coordina
 const NOME_CANAL = 'web-direito:authentication:v1';
 const NOME_LOCK = 'web-direito:authentication-mutation:v1';
 const PADRAO_UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+const PAPEIS_TOKEN: Record<string, string> = { PROPRIETARIO: 'OWNER', ADMINISTRADOR: 'ADMIN', ADVOGADO: 'LAWYER', ESTAGIARIO: 'INTERN', SECRETARIO: 'SECRETARY' };
 interface CanalDeMensagensEntreAbas {
   postMessage(mensagem: unknown): void;
   addEventListener(tipo: 'message', observador: (evento: MessageEvent) => void): void;
@@ -25,11 +26,11 @@ function validarCredenciaisCompartilhadas(tokenAcesso: string, identidadeRecebid
   // Metadata is only for coordination. The API still verifies the JWT on every request.
   const metadadosDoToken = JSON.parse(atob(tokenAcesso.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
   if (!PADRAO_UUID.test(metadadosDoToken.sessionId) || metadadosDoToken.sub !== identidadeRecebida.usuario?.id || metadadosDoToken.activeOfficeId !== identidadeRecebida.escritorio?.id ||
-    metadadosDoToken.role !== 'OWNER' || identidadeRecebida.escritorio.papel !== 'PROPRIETARIO' || !PADRAO_UUID.test(identidadeRecebida.usuario.id) || !PADRAO_UUID.test(identidadeRecebida.escritorio.id) ||
+    !Object.hasOwn(PAPEIS_TOKEN, identidadeRecebida.escritorio.papel) || metadadosDoToken.role !== PAPEIS_TOKEN[identidadeRecebida.escritorio.papel] || !PADRAO_UUID.test(identidadeRecebida.usuario.id) || !PADRAO_UUID.test(identidadeRecebida.escritorio.id) ||
     ![identidadeRecebida.usuario.nome, identidadeRecebida.usuario.email, identidadeRecebida.escritorio.nome].every((campo) => typeof campo === 'string' && campo.length > 0 && campo.length <= 254) ||
     !Number.isFinite(metadadosDoToken.exp) || metadadosDoToken.exp * 1000 > Date.now() + 902000 || metadadosDoToken.exp * 1000 <= Date.now()) throw new Error('Invalid shared session');
-  const identidade: IdentidadeAutenticada = { usuario: { id: identidadeRecebida.usuario.id, nome: identidadeRecebida.usuario.nome, email: identidadeRecebida.usuario.email },
-    escritorio: { id: identidadeRecebida.escritorio.id, nome: identidadeRecebida.escritorio.nome, papel: 'PROPRIETARIO' } };
+  const identidade: IdentidadeAutenticada = { ...(identidadeRecebida.deveAlterarSenha ? { deveAlterarSenha: true } : {}), usuario: { id: identidadeRecebida.usuario.id, nome: identidadeRecebida.usuario.nome, email: identidadeRecebida.usuario.email },
+    escritorio: { id: identidadeRecebida.escritorio.id, nome: identidadeRecebida.escritorio.nome, papel: identidadeRecebida.escritorio.papel } };
   return { idSessao: metadadosDoToken.sessionId as string, credenciais: { tokenAcesso: tokenAcesso, identidade, expiraEm: metadadosDoToken.exp * 1000 } };
 }
 
@@ -86,6 +87,11 @@ export class CoordenadorSessaoNavegador implements CoordenadorSessao {
         sessaoRecebida.idSessao !== mensagem.idSessao || (sessaoRecebida.idSessao !== null && !PADRAO_UUID.test(sessaoRecebida.idSessao)) ||
         !["entrar", "renovar", "sair", "invalido"].includes(sessaoRecebida.motivo)) return;
       if (this.sessaoCompartilhada?.idSessao && this.sessaoCompartilhada.idSessao !== sessaoRecebida.idSessao && sessaoRecebida.motivo !== "entrar") return;
+      // Outras abas podem descobrir a mesma revogação em consultas sobrepostas.
+      // A repetição não deve cancelar um novo login explícito já em andamento.
+      // Logout explícito continua sendo processado, inclusive durante o login.
+      if (this.sessaoCompartilhada && !this.sessaoCompartilhada.credenciais && !sessaoRecebida.credenciais
+        && sessaoRecebida.motivo === 'invalido' && sessaoRecebida.idSessao === this.sessaoCompartilhada.idSessao) return;
       // Revocation is terminal for a session, even if an in-flight refresh broadcasts later.
       const deveInvalidarSessaoAtual = this.sessaoCompartilhada?.credenciais && sessaoRecebida.idSessao === this.sessaoCompartilhada.idSessao &&
         !sessaoRecebida.credenciais && (sessaoRecebida.motivo === "sair" || sessaoRecebida.motivo === "invalido");

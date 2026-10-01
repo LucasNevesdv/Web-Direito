@@ -1,9 +1,10 @@
 import type { Sessao } from '../../domain/sessions/session.js';
 import type { Usuario } from '../../domain/users/user.js';
+import type { PapelVinculoEscritorio } from '../../domain/memberships/membership.js';
 
 export interface UsuarioComVinculos {
   usuario: Usuario;
-  vinculos: { escritorio: { id: string; nome: string; situacao: 'ATIVO' | 'INATIVO' }; papel: 'PROPRIETARIO' }[];
+  vinculos: { escritorio: { id: string; nome: string; situacao: 'ATIVO' | 'INATIVO' }; papel: PapelVinculoEscritorio; estaAtivo?: boolean }[];
 }
 
 export interface RepositorioAutenticacao {
@@ -18,7 +19,7 @@ export interface DadosTokenAcesso {
   idUsuario: string;
   idSessao: string;
   idEscritorioAtivo: string;
-  papel: 'PROPRIETARIO';
+  papel: PapelVinculoEscritorio;
 }
 
 export interface TokensAcesso {
@@ -33,13 +34,15 @@ export interface TokensRenovacao {
 }
 
 export interface IdentidadePublica {
+  deveAlterarSenha?: boolean;
   usuario: { id: string; nome: string; email: string };
-  escritorio: { id: string; nome: string; papel: 'PROPRIETARIO' };
+  escritorio: { id: string; nome: string; papel: PapelVinculoEscritorio };
 }
 
 export function extrairIdentidadePublicaDoVinculo(usuarioComVinculos: UsuarioComVinculos, idEscritorio: string): IdentidadePublica {
   const vinculo = usuarioComVinculos.vinculos.find((vinculoDoUsuario) => vinculoDoUsuario.escritorio.id === idEscritorio)!;
   return {
+    ...(usuarioComVinculos.usuario.deveAlterarSenha ? { deveAlterarSenha: true } : {}),
     usuario: { id: usuarioComVinculos.usuario.id, nome: usuarioComVinculos.usuario.nome, email: usuarioComVinculos.usuario.email },
     escritorio: { id: vinculo.escritorio.id, nome: vinculo.escritorio.nome, papel: vinculo.papel },
   };

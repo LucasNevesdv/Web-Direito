@@ -74,6 +74,7 @@ describe("RepositorioCadastroEscritorioPrisma", () => {
     expect(criarVinculo).toHaveBeenCalledWith({ data: {
       id: vinculo.id, officeId: escritorio.id, userId: usuario.id,
       role: 'OWNER', createdAt: vinculo.criadoEm,
+      permissions: ['EQUIPE_VISUALIZAR', 'EQUIPE_CADASTRAR_USUARIO', 'EQUIPE_ALTERAR_USUARIO', 'EQUIPE_DEFINIR_PERMISSOES', 'EQUIPE_ATIVAR_INATIVAR_USUARIO'],
     } });
   });
 

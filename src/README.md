@@ -1,8 +1,9 @@
 # Legal System
 
 SaaS jurídico Legal System, com cadastro inicial de escritório e primeiro
-administrador, login, renovação automática, logout e identidade autenticada disponíveis. Os módulos
-de gestão permanecem nas próximas etapas.
+administrador, login, renovação automática, logout, recuperação/alteração de senha
+e gestão administrativa da equipe disponíveis. Os demais módulos de negócio
+permanecem nas próximas etapas.
 
 ## Recuperação e alteração de senha
 
@@ -256,8 +257,39 @@ Detalhes da composição, encerramento e limites estão em
 [`docs/architecture.md`](docs/architecture.md).
 
 Para servir o frontend compilado em produção, configure fallback de rotas da
-SPA para `/register`, `/login` e `/app` e um proxy reverso de `/api` para o backend na mesma origem.
+SPA para `/register`, `/login`, `/app`, `/equipe`, `/primeiro-acesso`,
+`/recuperar-senha`, `/redefinir-senha` e `/seguranca` e um proxy reverso de `/api` para o backend na mesma origem.
 O proxy de desenvolvimento do Vite não substitui essa configuração de produção.
-Verificação de e-mail, recuperação de senha, convites, gerenciamento de
-membros, autenticação em dois fatores e proteção avançada contra abuso do cadastro
-público permanecem pendentes.
+Verificação de e-mail, seleção/troca de escritório, autenticação em dois fatores
+e proteção avançada contra abuso do cadastro público permanecem pendentes.
+
+## Equipe e primeiro acesso — RF-009, RF-010 e RF-011
+
+O proprietário entra em `/equipe` para cadastrar diretamente os integrantes,
+com e-mail como login, papel, permissões e senha temporária. Administrador gerencia
+somente advogado, estagiário e secretário. Somente o onboarding cria proprietário.
+A tela possui pesquisa, paginação, edição, ativação/inativação e histórico.
+
+A senha temporária não é enviada por e-mail: o responsável fornece por canal
+separado. O formulário apaga as senhas imediatamente após enviar. No primeiro
+login, `/primeiro-acesso` exige a senha temporária e uma nova senha confirmada.
+A troca encerra todas as sessões, inclusive em outras abas, e exige novo login.
+Recuperação por e-mail também remove a obrigação de primeiro acesso.
+
+Conta já existente exige confirmação explícita para criar apenas o vínculo;
+a senha e as sessões de outros escritórios permanecem intactas. Não há convites
+ou transferência de propriedade. E-mail e senha não são editáveis pela equipe.
+
+A migration `20261001100000_administrative_team_provisioning` deve ser aplicada
+com `pnpm exec prisma migrate deploy` dentro de `backend/`. Ela preserva as sete
+anteriores e atribui as permissões aos proprietários existentes. Depois de
+`pnpm build` no workspace, execute `pnpm --filter ./backend verify:team` para a
+verificação optativa com PostgreSQL e Chrome reais; o script cria registros
+exclusivos e limpa seus dados/processos em `finally`.
+
+Limites: login com mais de um vínculo ativo continua respondendo 409 até RF-013;
+as sessões já abertas permanecem válidas nos seus escritórios. Sessão temporária
+não pode renovar: com todas as abas fechadas ou token expirado, entre novamente.
+A revogação vale imediatamente na API; a tela verifica identidade a cada dois
+segundos enquanto visível e ao recuperar foco. RF-012 e RF-014 não foram entregues.
+Detalhes de autorização e contratos estão em [architecture.md](docs/architecture.md).

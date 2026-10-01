@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { ErroVinculoInvalido } from './invalid-membership-error.js';
 
-export type PapelVinculoEscritorio = 'PROPRIETARIO';
+export const PAPEIS_VINCULO = ['PROPRIETARIO', 'ADMINISTRADOR', 'ADVOGADO', 'ESTAGIARIO', 'SECRETARIO'] as const;
+export type PapelVinculoEscritorio = typeof PAPEIS_VINCULO[number];
 
 interface EstadoVinculoEscritorio {
   id: string;
@@ -26,7 +27,7 @@ export class VinculoEscritorio {
         throw new ErroVinculoInvalido(campo);
       }
     }
-    if (estado.papel !== 'PROPRIETARIO') {
+    if (!PAPEIS_VINCULO.includes(estado.papel)) {
       throw new ErroVinculoInvalido('papel');
     }
     if (!(estado.criadoEm instanceof Date) || !Number.isFinite(estado.criadoEm.getTime())) {

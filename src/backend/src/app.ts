@@ -1,4 +1,6 @@
 import Fastify from 'fastify';
+import type { GestaoEquipe } from './application/team/manage-team.js';
+import { registrarRotasEquipe } from './presentation/team-routes.js';
 import { registrarRotasSenhas, type ServicosRotasSenhas } from './presentation/password-routes.js';
 import { LIMITADOR_REQUISICOES_INDISPONIVEL, type LimitadorRequisicoes } from './application/security/rate-limiter.js';
 import type { CadastroDeEscritorioComProprietario } from './application/onboarding/register-office-with-owner.js';
@@ -12,6 +14,7 @@ export function criarAplicacao(
   autenticacao?: ServicosRotasAutenticacao,
   seguranca: { limitador: LimitadorRequisicoes; proxiesConfiaveis?: false | string[] } = { limitador: LIMITADOR_REQUISICOES_INDISPONIVEL },
   senhas?: ServicosRotasSenhas,
+  equipe?: GestaoEquipe,
 ) {
   const aplicacao = Fastify({ logger: false, trustProxy: seguranca.proxiesConfiaveis ?? false });
 
@@ -31,6 +34,7 @@ export function criarAplicacao(
   }
   if (autenticacao) registrarRotasAutenticacao(aplicacao, autenticacao, seguranca.limitador);
   if (autenticacao && senhas) registrarRotasSenhas(aplicacao, senhas, autenticacao, seguranca.limitador);
+  if (autenticacao && equipe) registrarRotasEquipe(aplicacao, equipe, autenticacao.origemFrontend, seguranca.limitador);
 
   return aplicacao;
 }

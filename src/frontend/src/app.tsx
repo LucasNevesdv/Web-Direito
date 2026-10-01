@@ -1,5 +1,6 @@
 import { PaginaCadastro } from './register-page';
 import { PaginaSenhas } from './password-pages';
+import { PaginaEquipe } from './team-page';
 import { PaginaLogin } from './login-page';
 import { useEffect, useSyncExternalStore } from 'react';
 import { ProvedorAutenticacao, useAutenticacao } from './auth-context';
@@ -17,12 +18,28 @@ export function Aplicacao({ cliente = CLIENTE_AUTENTICACAO }: { cliente?: Client
 }
 
 function Rotas() {
-  const { situacao } = useAutenticacao();
+  const { situacao, identidade, cliente } = useAutenticacao();
   const caminho = useSyncExternalStore(observarCaminho, () => window.location.pathname);
   useEffect(() => {
-    if (caminho === '/login' && situacao === 'autenticado') navegar('/app');
+    if (situacao === 'autenticado' && identidade?.deveAlterarSenha && caminho !== '/primeiro-acesso') navegar('/primeiro-acesso');
+    else if ((caminho === '/login' || caminho === '/primeiro-acesso') && situacao === 'autenticado' && !identidade?.deveAlterarSenha) navegar('/app');
     if (!['/', '/register', '/login', '/recuperar-senha', '/redefinir-senha'].includes(caminho) && situacao === 'naoAutenticado') navegar('/login');
-  }, [caminho, situacao]);
+  }, [caminho, situacao, identidade]);
+  useEffect(() => {
+    if (situacao !== 'autenticado') return;
+    let pendente = false;
+    const revalidar = async () => {
+      if (pendente || document.visibilityState === 'hidden') return;
+      pendente = true;
+      try { await cliente.enviarRequisicaoAutenticada('/api/v1/auth/me'); } catch { /* Falha transitória não confirma revogação. */ }
+      finally { pendente = false; }
+    };
+    const temporizador = setInterval(() => { void revalidar(); }, 2000);
+    window.addEventListener('focus', revalidar); document.addEventListener('visibilitychange', revalidar);
+    return () => { clearInterval(temporizador); window.removeEventListener('focus', revalidar); document.removeEventListener('visibilitychange', revalidar); };
+  }, [cliente, situacao]);
+  if (situacao === 'autenticado' && identidade?.deveAlterarSenha) return <PaginaSenhas finalidade="primeiro" />;
+  if (caminho === '/equipe' && situacao === 'autenticado') return <PaginaEquipe />;
   if (caminho === '/recuperar-senha') return <PaginaSenhas finalidade="recuperar" />;
   if (caminho === '/redefinir-senha') return <PaginaSenhas finalidade="redefinir" />;
   if (caminho === '/seguranca' && situacao === 'autenticado') return <PaginaSenhas finalidade="alterar" />;

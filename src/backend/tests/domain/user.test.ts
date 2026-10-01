@@ -12,6 +12,14 @@ const USUARIO_PERSISTIDO = {
 };
 
 describe("Usuario", () => {
+  it('preserva estado explícito de primeiro acesso e mantém contas anteriores sem obrigação', () => {
+    expect(Usuario.criar(ENTRADA_VALIDA).deveAlterarSenha).toBe(false);
+    expect(Usuario.criar({ ...ENTRADA_VALIDA, deveAlterarSenha: true }).deveAlterarSenha).toBe(true);
+    expect(Usuario.restaurar({ ...USUARIO_PERSISTIDO, deveAlterarSenha: true }).deveAlterarSenha).toBe(true);
+  });
+  it('identifica corretamente o campo inválido de primeiro acesso', () => {
+    expect(() => Usuario.criar({ ...ENTRADA_VALIDA, deveAlterarSenha: 'sim' as unknown as boolean })).toThrow(expect.objectContaining({ campo: 'deveAlterarSenha' }));
+  });
   it("cria usuário ativo com UUID e datas", () => {
     const antes = Date.now();
     const usuario = Usuario.criar(ENTRADA_VALIDA);
