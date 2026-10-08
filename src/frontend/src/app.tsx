@@ -2,11 +2,13 @@ import { PaginaCadastro } from './register-page';
 import { PaginaSenhas } from './password-pages';
 import { PaginaEquipe } from './team-page';
 import { PaginaLogin } from './login-page';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { ProvedorAutenticacao, useAutenticacao } from './auth-context';
 import type { ClienteAutenticacao } from './auth-client';
 import { CLIENTE_AUTENTICACAO } from './authentication';
 import { navegar } from './routing';
+import { PaginaSelecaoEscritorio, PaginaSessoes } from './session-pages';
+import { iniciarVerificacaoPeriodica } from './infrastructure/session-polling';
 
 const observarCaminho = (aoAlterarCaminho: () => void) => {
   window.addEventListener('popstate', aoAlterarCaminho);
@@ -21,25 +23,30 @@ function Rotas() {
   const { situacao, identidade, cliente } = useAutenticacao();
   const caminho = useSyncExternalStore(observarCaminho, () => window.location.pathname);
   useEffect(() => {
-    if (situacao === 'autenticado' && identidade?.deveAlterarSenha && caminho !== '/primeiro-acesso') navegar('/primeiro-acesso');
-    else if ((caminho === '/login' || caminho === '/primeiro-acesso') && situacao === 'autenticado' && !identidade?.deveAlterarSenha) navegar('/app');
-    if (!['/', '/register', '/login', '/recuperar-senha', '/redefinir-senha'].includes(caminho) && situacao === 'naoAutenticado') navegar('/login');
+    if (situacao === 'selecionando') {
+      if (caminho !== '/selecionar-escritorio') navegar('/selecionar-escritorio');
+      return;
+    }
+    if (situacao === 'autenticado') {
+      if (identidade?.deveAlterarSenha) {
+        if (caminho !== '/primeiro-acesso') navegar('/primeiro-acesso');
+      } else if (caminho === '/login' || caminho === '/primeiro-acesso') navegar('/app');
+      return;
+    }
+    if (situacao === 'naoAutenticado' && !['/', '/register', '/login', '/recuperar-senha', '/redefinir-senha'].includes(caminho)) navegar('/login');
   }, [caminho, situacao, identidade]);
   useEffect(() => {
     if (situacao !== 'autenticado') return;
-    let pendente = false;
-    const revalidar = async () => {
-      if (pendente || document.visibilityState === 'hidden') return;
-      pendente = true;
-      try { await cliente.enviarRequisicaoAutenticada('/api/v1/auth/me'); } catch { /* Falha transitória não confirma revogação. */ }
-      finally { pendente = false; }
-    };
-    const temporizador = setInterval(() => { void revalidar(); }, 2000);
-    window.addEventListener('focus', revalidar); document.addEventListener('visibilitychange', revalidar);
-    return () => { clearInterval(temporizador); window.removeEventListener('focus', revalidar); document.removeEventListener('visibilitychange', revalidar); };
+    return iniciarVerificacaoPeriodica(() => cliente.revalidarSessaoSemRenovar());
   }, [cliente, situacao]);
+  const contexto = identidade?.escritorio.id;
+  const contextoAnterior = useRef(contexto);
+  useEffect(() => { if (contextoAnterior.current && contexto && contextoAnterior.current !== contexto) navegar('/app'); if (contexto) contextoAnterior.current = contexto; }, [contexto]);
+  if (situacao === 'selecionando') return <PaginaSelecaoEscritorio />;
   if (situacao === 'autenticado' && identidade?.deveAlterarSenha) return <PaginaSenhas finalidade="primeiro" />;
-  if (caminho === '/equipe' && situacao === 'autenticado') return <PaginaEquipe />;
+  if (caminho === '/selecionar-escritorio' && situacao === 'autenticado') return <PaginaSelecaoEscritorio key={contexto} />;
+  if (caminho === '/seguranca/sessoes' && situacao === 'autenticado') return <PaginaSessoes key={contexto} />;
+  if (caminho === '/equipe' && situacao === 'autenticado') return <PaginaEquipe key={contexto} />;
   if (caminho === '/recuperar-senha') return <PaginaSenhas finalidade="recuperar" />;
   if (caminho === '/redefinir-senha') return <PaginaSenhas finalidade="redefinir" />;
   if (caminho === '/seguranca' && situacao === 'autenticado') return <PaginaSenhas finalidade="alterar" />;

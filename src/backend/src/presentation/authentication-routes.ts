@@ -1,4 +1,8 @@
 import cookie from '@fastify/cookie';
+import type { GestaoSessoes } from '../application/authentication/manage-sessions.js';
+import { ErroGestaoSessao, SelecaoEscritorioNecessaria } from '../application/authentication/session-management-contracts.js';
+import { ErroPrimeiroAcessoObrigatorio } from '../application/authentication/authentication-errors.js';
+import { capturarMetadadosSessao } from './session-metadata.js';
 import type { LimitadorRequisicoes } from '../application/security/rate-limiter.js';
 import { criarTratadorDeLimiteDeRequisicoes } from './rate-limit-hook.js';
 import type { FastifyInstance } from 'fastify';
@@ -11,6 +15,7 @@ import type { IdentidadePublica } from '../application/authentication/authentica
 import { ErroEscritorioInativo, ErroUsuarioInativo, ErroTokenAcessoInvalido, ErroCredenciaisInvalidas, ErroMultiplosEscritoriosAtivos } from '../application/authentication/authentication-errors.js';
 
 export interface ServicosRotasAutenticacao {
+  gestaoSessoes?: GestaoSessoes;
   autenticacao: Pick<AutenticacaoDeUsuario, 'autenticarUsuario'>;
   consultaIdentidade: Pick<ConsultaDeIdentidadeAutenticada, 'consultarIdentidadeAutenticada'>;
   renovacao: Pick<RenovacaoDeSessao, 'renovarSessao'>;
@@ -47,7 +52,7 @@ export function registrarRotasAutenticacao(aplicacao: FastifyInstance, servicos:
     });
     autenticacao.addHook('onRequest', async (requisicao, respostaHttp) => {
       // Same-origin proxy deployment: never trust Host/X-Forwarded-Host as the allowed origin.
-      if (requisicao.method === 'POST' && requisicao.headers.origin !== servicos.origemFrontend) {
+      if (!['GET', 'HEAD'].includes(requisicao.method) && requisicao.headers.origin !== servicos.origemFrontend) {
         return respostaHttp.status(403).send({ erro: 'PROIBIDO', mensagem: 'Solicitação não permitida.' });
       }
       if ((requisicao.headers.cookie?.length ?? 0) > 4096) {
@@ -60,6 +65,13 @@ export function registrarRotasAutenticacao(aplicacao: FastifyInstance, servicos:
       }
     });
     autenticacao.setErrorHandler((erro, _requisicao, respostaHttp) => {
+      if (erro instanceof SelecaoEscritorioNecessaria) {
+        respostaHttp.clearCookie('refresh_token', opcoesCookie);
+        return respostaHttp.status(200).send(erro.resposta);
+      }
+      if (erro instanceof ErroGestaoSessao) return respostaHttp.status(erro.situacao).send({ erro: erro.codigo, mensagem: 'Não foi possível concluir a operação. Confira sua sessão e o escritório selecionado.' });
+      if (erro instanceof ErroPrimeiroAcessoObrigatorio) return respostaHttp.status(403).send({ erro: 'PRIMEIRO_ACESSO_OBRIGATORIO', mensagem: 'Conclua o primeiro acesso.' });
+      if (erro instanceof z.ZodError) return respostaHttp.status(400).send({ erro: 'DADOS_INVALIDOS', mensagem: 'Confira os dados informados.' });
       if (erro instanceof ErroCredenciaisInvalidas || erro instanceof ErroUsuarioInativo || erro instanceof ErroEscritorioInativo) {
         return respostaHttp.status(401).send(CREDENCIAIS_INVALIDAS);
       }
@@ -92,7 +104,7 @@ export function registrarRotasAutenticacao(aplicacao: FastifyInstance, servicos:
         }
         return respostaHttp.status(400).send({ erro: 'ERRO_VALIDACAO', mensagem: 'Confira os dados informados.', campos });
       }
-      const resultado = await servicos.autenticacao.autenticarUsuario(interpretado.data);
+      const resultado = await servicos.autenticacao.autenticarUsuario(interpretado.data, capturarMetadadosSessao(requisicao.headers['user-agent'], requisicao.ip));
       respostaHttp.setCookie('refresh_token', resultado.tokenRenovacao, {
         ...opcoesCookie,
         maxAge: servicos.validadeRenovacaoSegundos, expires: resultado.renovacaoExpiraEm,
@@ -118,10 +130,40 @@ export function registrarRotasAutenticacao(aplicacao: FastifyInstance, servicos:
     });
 
     autenticacao.post('/api/v1/auth/logout', { bodyLimit: 1024 }, async (requisicao, respostaHttp) => {
+      const selecao = requisicao.headers.authorization?.match(/^Selecao ([A-Za-z0-9_-]{43})$/)?.[1];
+      if (selecao) await servicos.gestaoSessoes?.cancelarSelecao(selecao);
       try { await servicos.encerramento.encerrarSessao(requisicao.cookies.refresh_token); }
       finally { respostaHttp.clearCookie('refresh_token', opcoesCookie); }
       return respostaHttp.status(204).send();
     });
+
+    const gestao = servicos.gestaoSessoes;
+    if (gestao) {
+      const token = (requisicao: import('fastify').FastifyRequest) => {
+        const valor = requisicao.headers.authorization?.match(/^Bearer (\S+)$/i)?.[1];
+        if (!valor) throw new ErroTokenAcessoInvalido(); return valor;
+      };
+      autenticacao.get('/api/v1/auth/sessoes', requisicao => gestao.listar(token(requisicao)));
+      autenticacao.get('/api/v1/auth/escritorios', requisicao => gestao.escritorios(token(requisicao)));
+      autenticacao.delete('/api/v1/auth/sessoes/:sessaoId', async (requisicao, resposta) => {
+        const { sessaoId } = z.object({ sessaoId: z.string().uuid() }).parse(requisicao.params);
+        if (await gestao.encerrar(token(requisicao), sessaoId)) resposta.clearCookie('refresh_token', opcoesCookie);
+        return resposta.status(204).send();
+      });
+      autenticacao.post('/api/v1/auth/sessoes/encerrar-outras', async (requisicao, resposta) => {
+        await gestao.encerrar(token(requisicao), 'outras'); return resposta.status(204).send();
+      });
+      for (const troca of [false, true]) autenticacao.post(`/api/v1/auth/${troca ? 'trocar' : 'selecionar'}-escritorio`, {
+        bodyLimit: 1024, onRequest: criarTratadorDeLimiteDeRequisicoes(limitador, 'refresh-ip'),
+      }, async (requisicao, resposta) => {
+        const { idEscritorio } = z.object({ idEscritorio: z.string().uuid() }).strict().parse(requisicao.body);
+        const autorizacao = troca ? token(requisicao) : requisicao.headers.authorization?.match(/^Selecao ([A-Za-z0-9_-]{43})$/)?.[1];
+        if (!autorizacao) throw new ErroGestaoSessao('SELECAO_INVALIDA', 401);
+        const resultado = await gestao.estabelecerContexto(autorizacao, idEscritorio, capturarMetadadosSessao(requisicao.headers['user-agent'], requisicao.ip), troca);
+        resposta.setCookie('refresh_token', resultado.tokenRenovacao, { ...opcoesCookie, expires: resultado.renovacaoExpiraEm, maxAge: servicos.validadeRenovacaoSegundos });
+        return resposta.send({ tokenAcesso: resultado.resposta.tokenAcesso, expiraEmSegundos: resultado.resposta.expiraEmSegundos, ...selecionarCamposDaIdentidadePublica(resultado.resposta) });
+      });
+    }
 
     autenticacao.get('/api/v1/auth/me', async (requisicao, respostaHttp) => {
       const autorizacao = requisicao.headers.authorization;

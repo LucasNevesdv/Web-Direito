@@ -2,13 +2,17 @@ import type { RepositorioAutenticacao, TokensRenovacao } from './authentication-
 
 export class EncerramentoDeSessao {
   constructor(
-    private readonly repositorioAutenticacao: Pick<RepositorioAutenticacao, 'revogarSessao'>,
-    private readonly tokensRenovacao: Pick<TokensRenovacao, 'interpretarTokenDeRenovacao'>,
+    private readonly repositorioAutenticacao: Pick<RepositorioAutenticacao, 'revogarSessao' | 'buscarSessaoComUsuarioPorId'>,
+    private readonly tokensRenovacao: Pick<TokensRenovacao, 'interpretarTokenDeRenovacao' | 'compararHashesDeRenovacao'>,
     private readonly relogio: () => Date = () => new Date(),
   ) {}
 
   async encerrarSessao(tokenDeRenovacao: string | undefined): Promise<void> {
     const tokenInterpretado = tokenDeRenovacao ? this.tokensRenovacao.interpretarTokenDeRenovacao(tokenDeRenovacao) : null;
-    if (tokenInterpretado) await this.repositorioAutenticacao.revogarSessao(tokenInterpretado.idSessao, this.relogio());
+    if (!tokenInterpretado) return;
+    const registro = await this.repositorioAutenticacao.buscarSessaoComUsuarioPorId(tokenInterpretado.idSessao);
+    if (registro && this.tokensRenovacao.compararHashesDeRenovacao(tokenInterpretado.hash, registro.sessao.obterEstadoAtualDaSessao().hashTokenRenovacao)) {
+      await this.repositorioAutenticacao.revogarSessao(tokenInterpretado.idSessao, this.relogio());
+    }
   }
 }

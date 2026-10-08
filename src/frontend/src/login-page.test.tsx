@@ -44,7 +44,7 @@ describe("página de login", () => {
   });
   it("envia somente e-mail normalizado e senha e consulta /me com token em memória", async () => {
     const armazenamento = vi.spyOn(Storage.prototype, 'setItem');
-    FETCH_SIMULADO.mockResolvedValueOnce(criarRespostaHttp(200, { tokenAcesso: 'unit-test-access-token' })).mockResolvedValueOnce(criarRespostaHttp(200, IDENTIDADE));
+    FETCH_SIMULADO.mockResolvedValueOnce(criarRespostaHttp(200, { tokenAcesso: 'unit-test-access-token', expiraEmSegundos: 900 })).mockResolvedValueOnce(criarRespostaHttp(200, IDENTIDADE));
     renderizarLogin();preencherCredenciais();await userEvent.click(screen.getByRole('button', { name: 'Entrar' }));
     await screen.findByRole('heading', { name: 'Sessão autenticada' });
     expect(FETCH_SIMULADO).toHaveBeenNthCalledWith(1, '/api/v1/auth/login', {
@@ -82,7 +82,7 @@ describe("página de login", () => {
     expect(document.body.textContent).not.toContain('private server detail');expect(FETCH_SIMULADO).toHaveBeenCalledTimes(1);
   });
   it("não exibe conteúdo autenticado quando /me rejeita a sessão", async () => {
-    FETCH_SIMULADO.mockResolvedValueOnce(criarRespostaHttp(200, { tokenAcesso: 'unit-test-access-token' })).mockResolvedValueOnce(criarRespostaHttp(401));
+    FETCH_SIMULADO.mockResolvedValueOnce(criarRespostaHttp(200, { tokenAcesso: 'unit-test-access-token', expiraEmSegundos: 900 })).mockResolvedValueOnce(criarRespostaHttp(401));
     renderizarLogin();preencherCredenciais();await userEvent.click(screen.getByRole('button', { name: 'Entrar' }));
     await screen.findByRole('alert');expect(screen.queryByRole('heading', { name: 'Sessão autenticada' })).toBeNull();
   });

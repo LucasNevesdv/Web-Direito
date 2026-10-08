@@ -6,11 +6,14 @@ import type { MembroEquipe, OperacoesEquipe, RepositorioEquipe } from '../../app
 import { ErroEquipe } from '../../application/team/team-policy.js';
 import { converterMembro, PAPEIS_PRISMA } from './team-mapper.js';
 import { bloquearUsuarioParaTrocaDeSenha } from './prisma-password-repository.js';
+import { validarContextoDoEscritorio } from '../../application/authentication/office-context.js';
+import { registrarAtividadeDaSessao } from './session-activity.js';
 
 const estadoAdministrativo = (membro: MembroEquipe) => ({ papel: membro.papel, permissoes: membro.permissoes, estaAtivo: membro.estaAtivo, versao: membro.versao });
 export class RepositorioEquipePrisma implements RepositorioEquipe {
   constructor(private readonly prisma: PrismaClient) {}
   async executar<T>(contexto: DadosTokenAcesso, operacao: (equipe: OperacoesEquipe) => Promise<T>): Promise<T> {
+    validarContextoDoEscritorio(contexto);
     try {
       return await this.prisma.$transaction(async (transacao) => {
         await transacao.$executeRaw`SET LOCAL statement_timeout = '5s'`;
@@ -20,6 +23,7 @@ export class RepositorioEquipePrisma implements RepositorioEquipe {
           revokedAt: null, expiresAt: { gt: new Date() }, user: { status: 'ACTIVE' }, office: { status: 'ACTIVE' }, membership: { active: true } }, include: { user: true, membership: { include: { user: true } } } });
         if (!sessao) throw new ErroTokenAcessoInvalido();
         if (sessao.restricted || sessao.user.mustChangePassword) throw new ErroPrimeiroAcessoObrigatorio();
+        await registrarAtividadeDaSessao(transacao, sessao);
         const autor = converterMembro(sessao.membership);
         async function consultar(id: string) {
           const registro = await transacao.membership.findFirst({ where: { id, officeId: contexto.idEscritorioAtivo }, include: { user: true } });

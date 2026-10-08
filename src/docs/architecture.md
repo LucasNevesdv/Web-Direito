@@ -6,10 +6,10 @@ O repositório Git está em `Neodireito/`; o workspace pnpm permanece em
 ## Aplicação e infraestrutura
 
 - `backend/src/database-health-checker.ts` define somente
-  `VerificadorSaudeBanco.verificar(): Promise<void>`.
+  `VerificadorSaudeBanco.verificarConexaoComBanco(): Promise<void>`.
 - `backend/src/app.ts` constrói o Fastify e recebe esse contrato e o caso de uso
   de cadastro e os serviços de autenticação. Não importa Prisma ou a infraestrutura. `/health` informa liveness sem chamar o verificador;
-  `/ready` chama apenas `verificar()` e converte sucesso/falha em HTTP 200/503.
+  `/ready` chama apenas `verificarConexaoComBanco()` e converte sucesso/falha em HTTP 200/503.
 - `backend/src/database.ts` cria o Prisma Client e implementa o verificador com
   uma consulta `SELECT 1`. A dependência instalada é Prisma ORM 6.19.3, com o
   engine PostgreSQL padrão da versão 6, sem adaptador ou driver adicional.
@@ -224,8 +224,9 @@ O login normaliza o e-mail e verifica Argon2id antes de avaliar estado e víncul
 Quando o e-mail não existe, verifica um hash de referência gerado uma vez no
 bootstrap, com os mesmos parâmetros do cadastro. Erros internos distinguem
 credenciais inválidas, usuário inativo e ausência de escritório ativo; todos
-resultam no mesmo HTTP 401 externo. Mais de um escritório ativo retorna 409,
-pois seleção de escritório ainda não existe.
+resultam no mesmo HTTP 401 externo. Um vínculo ativo seleciona o escritório
+automaticamente; vários vínculos exigem a autorização restrita de RF-013, sem
+emitir sessão completa ou cookie de renovação antes da escolha.
 
 `RepositorioAutenticacaoPrisma` consulta o usuário e seus vínculos, persiste
 Sessao e recupera sessão por ID para `/me`. A migration
@@ -601,11 +602,43 @@ Outra aba ativa pode compartilhar credenciais; sem ela, recarga exige novo login
 
 Troca obrigatória e recuperação removem a flag e revogam todas as sessões na
 mesma transação. A resposta limpa cookie; o cliente limpa memória e propaga logout
-pelo coordenador existente. Abas visíveis consultam /me a cada dois segundos e ao
-recuperar foco. Revogação é imediata na API; a atualização visual depende dessa
-consulta/retomada. Permissões não dependem de esperar o JWT expirar.
+pelo coordenador existente. A coordenação periódica de sessão é independente:
+uma aba visível mantém um Web Lock enquanto lidera e verifica a cada 30 segundos;
+compartilha o resultado pelo canal próprio de polling. O foco solicita
+revalidação imediata. Revogação é
+imediata na API; a atualização visual depende dessa consulta/retomada.
+Permissões não dependem de esperar o JWT expirar.
 
-Limitações deliberadas: não há escolha/troca de escritório (RF-013); login com
-múltiplos vínculos ativos retorna 409, preservando sessões anteriores. RF-012
-não foi implementado e RF-014 não é considerado concluído: isolamento foi
-comprovado somente nas operações existentes, incluindo equipe.
+## Sessões, seleção de escritório e isolamento — RF-012/RF-013/RF-014
+
+`GestaoSessoes` usa um contrato de persistência específico para listar e revogar
+as sessões do usuário autenticado, sem limitar a listagem ao escritório atual.
+Cada item expõe apenas identificador, escritório, navegador/dispositivo
+reconhecidos, IP mascarado, datas e estado; não retorna tokens ou hashes. A sessão
+atual é identificada, revogação é condicional e operações de outras identidades
+retornam 404. Atividade é gravada no máximo uma vez a cada cinco minutos.
+
+O login com vários vínculos ativos gera segredo aleatório de 256 bits. O cliente
+mantém a autorização apenas em memória; o PostgreSQL guarda somente SHA-256,
+vencimento de até cinco minutos e versão da conta. A seleção aceita somente
+rotas específicas, revalida usuário, escritório e vínculo, e consome o segredo
+com atualização condicional dentro da transação que cria a sessão. O primeiro
+acesso pode escolher o contexto inicial, mas continua restrito à troca de senha.
+Troca de escritório revalida o vínculo e, na mesma transação, cria a nova sessão
+e revoga a anterior. Assim, tokens antigos deixam de autorizar no banco; as
+outras sessões do usuário em outros dispositivos não são afetadas.
+
+`RepositorioEquipePrisma` valida o UUID de contexto e cada consulta ou mutação filtra pelo
+escritório autenticado junto ao identificador do recurso. Histórico segue o
+mesmo filtro. Corpos estritos rejeitam identificadores de escritório fora dos
+dois endpoints que precisam receber explicitamente o destino; nesses endpoints
+o valor não concede autorização e o vínculo é validado no servidor. Conta,
+recuperação de senha e gerenciamento das próprias sessões são operações globais
+por identidade. Esse padrão deve ser aplicado e testado novamente em cada módulo
+futuro; o RF-014 cobre somente os módulos existentes nesta entrega.
+
+A migration `20261001140000_session_management_office_selection` adiciona
+metadados limitados às sessões e a tabela de autorizações pendentes. Sessões
+legadas preservam IDs, vínculos, hashes e revogações; recebem metadados
+desconhecidos e atividade derivada de `last_used_at` ou criação. Nenhum escritório
+é atribuído a uma sessão existente e nenhuma migration anterior foi editada.

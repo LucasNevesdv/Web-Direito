@@ -69,6 +69,7 @@ model User {
   recoveryEmailJobs  RecoveryEmailJob[]
   mustChangePassword Boolean             @default(false) @map("must_change_password")
   teamChanges        MembershipHistory[]
+  officeSelections   OfficeSelection[]
 
   @@map("users")
 }
@@ -145,6 +146,10 @@ model Membership {
 }
 
 model Session {
+  browser          String     @default("Desconhecido") @db.VarChar(64)
+  device           String     @default("Desconhecido") @db.VarChar(64)
+  maskedIp         String     @default("Indisponível") @map("masked_ip") @db.VarChar(64)
+  lastActivityAt   DateTime   @default(now()) @map("last_activity_at") @db.Timestamptz(3)
   id               String     @id @db.Uuid
   userId           String     @map("user_id") @db.Uuid
   activeOfficeId   String     @map("active_office_id") @db.Uuid
@@ -161,7 +166,22 @@ model Session {
 
   @@index([expiresAt])
   @@index([activeOfficeId, userId, revokedAt])
+  @@index([userId, createdAt])
   @@map("sessions")
+}
+
+model OfficeSelection {
+  tokenHash     String    @id @map("token_hash") @db.Char(64)
+  userId        String    @map("user_id") @db.Uuid
+  userUpdatedAt DateTime  @map("user_updated_at") @db.Timestamptz(3)
+  createdAt     DateTime  @map("created_at") @db.Timestamptz(3)
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt    DateTime? @map("consumed_at") @db.Timestamptz(3)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("office_selections")
 }
 
 model MembershipHistory {

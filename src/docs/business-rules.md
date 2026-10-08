@@ -33,7 +33,7 @@ devem ser tratadas como decisões de implementação.
 | RN-022 | O cadastro público aceita somente nome do escritório, nome do responsável, e-mail e senha. IDs, papel, estado e datas são definidos pelo servidor, e campos extras são rejeitados. |
 | RN-023 | A resposta de sucesso contém os dados públicos do escritório, somente ID, nome e e-mail do usuário e o papel `PROPRIETARIO`. O cadastro não emite tokens, não inicia sessão nem confirma a titularidade do e-mail. |
 | RN-024 | Login normaliza e-mail com trim/lowercase e verifica a senha sem trim. E-mail inexistente e senha incorreta recebem a mesma resposta genérica; a ausência do usuário também executa verificação Argon2id com hash de referência. |
-| RN-025 | Login exige usuário ATIVO, vínculo ativo e escritório ATIVO. Zero escritórios ativos impede acesso; mais de um gera conflito explícito, sem escolha arbitrária. Seleção e troca de escritório permanecem pendentes. |
+| RN-025 | Login exige usuário ATIVO, vínculo ativo e escritório ATIVO. Zero vínculos ativos impede acesso; um seleciona automaticamente; vários exigem autorização curta e seleção explícita, sem sessão completa antes da escolha. |
 | RN-026 | Cada login válido cria Sessao vinculada a usuário, escritório e VinculoEscritorio existentes. O banco guarda somente SHA-256 do refresh token aleatório de 256 bits; nunca o token original. |
 | RN-027 | Access token JWT tem validade padrão e máxima de 15 minutos, algoritmo fixo HS256 e validação de assinatura, emissor, audiência e expiração. Contém somente identificadores de usuário/sessão/escritório, papel e claims temporais/de validação. |
 | RN-028 | Refresh token tem validade padrão e máxima de 7 dias e é enviado somente por cookie HttpOnly, SameSite=Lax, Path=/api/v1/auth, sem Domain; Secure em produção. O cookie não autentica `/me` sozinho. |
@@ -71,8 +71,21 @@ Regras adicionais confirmadas para RF-007/RF-008:
 | RN-048 | Login temporário cria sessão restrita, informa `deveAlterarSenha: true` e força `/primeiro-acesso`. Somente identidade, logout e troca obrigatória são permitidos como operações autenticadas. Refresh restrito é recusado; outra aba ativa pode compartilhar a sessão em memória. |
 | RN-049 | Primeiro acesso reconfirma a senha temporária, exige nova senha válida, diferente e confirmada. Atualização do hash, remoção da obrigação e revogação de todas as sessões são atômicas. Limpa cookie/memória/abas e exige novo login. Recuperação bem-sucedida também remove a obrigação. |
 | RN-050 | Alterações administrativas usam versão do vínculo; uma versão desatualizada retorna 409. Alteração de papel, permissões ou estado revoga sessões somente daquele escritório e registra histórico atomicamente. Não se pode editar e-mail, senha ou conta global pela equipe. |
-| RN-051 | Inativação preserva vínculo, conta e histórico e impede autenticação/acesso daquele escritório. Reativação preserva papel/permissões e não restaura sessões. Não afeta outros escritórios. A API verifica revogação imediatamente; a interface detecta em até um ciclo de consulta de dois segundos em abas visíveis, ou ao recuperar foco, e propaga logout. |
+| RN-051 | Inativação preserva vínculo, conta e histórico e impede autenticação/acesso daquele escritório. Reativação preserva papel/permissões e não restaura sessões. Não afeta outros escritórios. A API verifica revogação imediatamente; a aba coordenadora verifica a cada 30 segundos ou ao recuperar foco, e propaga logout. |
 | RN-052 | Histórico específico da equipe registra autor, data, ação e estado anterior/novo de papel, permissões, estado e versão, sem credenciais. Consulta limitada aos últimos 100 eventos do vínculo autorizado. Não substitui auditoria geral dos módulos futuros. |
+
+## Sessões e contexto de escritório — RF-012/RF-013/RF-014
+
+| ID | Regra |
+| --- | --- |
+| RN-053 | Usuário consulta e encerra somente as próprias sessões, independentemente do escritório. ID de sessão alheia retorna 404. Encerrar outras preserva a atual; encerrar a atual limpa cookie/memória/abas. Revogação e expiração são verificadas no banco. |
+| RN-054 | Metadados são capturados no backend, limitados e normalizados. Apenas nomes reconhecidos de navegador/dispositivo e IP mascarado são armazenados/exibidos; não há geolocalização nem nome arbitrário fornecido pelo frontend. Atividade é atualizada no máximo a cada cinco minutos por sessão, por escrita condicional. |
+| RN-055 | Seleção usa segredo aleatório de 256 bits, somente em memória no cliente e por hash no servidor. Validade máxima de cinco minutos, consumo atômico único, sem refresh ou acesso comum. Novo login válido, logout, troca de senha, consumo ou expiração invalidam a autorização anterior. |
+| RN-056 | Só vínculos e escritórios ativos podem ser escolhidos. Sessão completa nasce somente após reconfirmação no banco. Primeiro acesso pode selecionar o contexto inicial, mas permanece restrito e não pode trocá-lo antes da senha própria. |
+| RN-057 | Troca de escritório revoga a sessão anterior e cria a substituta na mesma transação. Tokens antigos deixam de autorizar; abas ocultam dados durante a troca, cancelam requisições e descartam respostas do contexto anterior. Não há contexto ou credenciais em armazenamento persistente. |
+| RN-058 | Negócio do escritório exige contexto autenticado explícito, reconfirmado no banco. IDs de recursos são consultados junto do escritório ativo; corpo e query não podem redefinir esse escopo. Recursos alheios retornam 404, inclusive histórico e mutações. |
+| RN-059 | Conta, senha, recuperação, próprios dispositivos e lista dos vínculos são globais por identidade e não por escritório. Onboarding é público e cria novo escritório. Workers de e-mail e limites são infraestrutura global protegida por lease/HMAC; nenhuma exceção autoriza consultar negócio de outro escritório. |
+| RN-060 | Polling padrão de 30 segundos é executado pela aba visível que detém Web Lock, separado das mutações de autenticação; resultados são propagados por BroadcastChannel. Foco solicita revalidação imediata. Sem Web Locks, BroadcastChannel coalesce solicitações de foco entre abas; sem ambos, a revalidação ocorre no foco e é limitada por intervalo, sem polling recorrente. |
 
 ## Decisões pendentes
 
@@ -81,7 +94,7 @@ resolvidos com o responsável pelo produto antes da conclusão da etapa afetada.
 
 | ID | Decisão pendente | Requisitos afetados |
 | --- | --- | --- |
-| P-001 | Como serão manutenção e inativação de escritórios e a seleção/troca de contexto para contas com múltiplos vínculos? Gestão administrativa de membros foi definida em RN-044 a RN-052; transferência de propriedade não faz parte desta entrega. | Evolução de escritórios e usuários; RF-004 |
+| P-001 | Como serão manutenção e inativação de escritórios e transferência de propriedade? Gestão de membros e seleção/troca de contexto estão definidas em RN-044 a RN-060. | Evolução de escritórios e usuários |
 | P-002 | Os cinco papéis e a matriz da equipe estão confirmados. Quem pode ver ou alterar cada tipo de recurso, documento, anotação e auditoria? Haverá restrições adicionais por recurso dentro do mesmo escritório? | RF-004, RF-020, RF-021, RF-024 |
 | P-003 | Como implementar verificação de e-mail e dois fatores? Recuperação e alteração de senha estão entregues em RF-007/RF-008. Login, rotação, reutilização, logout, `/me`, coordenação entre abas compatíveis e limites compartilhados estão entregues. O cadastro não autentica automaticamente. | Evolução de autenticação e segurança após RF-004/RF-005/RF-006 |
 | P-004 | Quais campos de cliente são obrigatórios e como detectar duplicidades? Clientes inativos poderão receber novos vínculos ou ser reativados? | RF-015 |

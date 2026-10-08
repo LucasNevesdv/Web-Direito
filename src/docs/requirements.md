@@ -14,8 +14,8 @@ aprovados permanecem explicitamente pendentes.
 | ID | Requisito e resultado esperado |
 | --- | --- |
 | RF-001 | **Concluído — criar escritório e primeiro usuário administrador no mesmo cadastro.** A página `/register` e `POST /api/v1/onboarding` recebem nome do escritório, nome do responsável, e-mail e senha, validam e normalizam os dados e criam escritório, usuário e vínculo PROPRIETARIO atomicamente. Escritório e usuário começam ATIVO. A resposta contém somente dados públicos; falhas não deixam registros parciais. Manutenção e inativação do escritório permanecem pendentes, fora deste escopo concluído. |
-| RF-002 | **Concluído como condição técnica de RF-001 — persistir usuário e vínculo inicial com o escritório.** O e-mail é único globalmente, inclusive sob concorrência, a senha é protegida com Argon2id e o vínculo inicial tem papel PROPRIETARIO. RF-002 cobre esse cadastro inicial atômico. A gestão administrativa de equipe é entregue em RF-009/RF-010/RF-011; seleção de escritório e autorização dos demais módulos permanecem pendentes. |
-| RF-003 | **Concluído — login com e-mail e senha.** `/login` verifica Argon2id, usuário ATIVO e único escritório ATIVO com vínculo válido, cria Sessao, emite access token e envia refresh token em cookie HttpOnly. `/me` confirma identidade e contexto da sessão. |
+| RF-002 | **Concluído como condição técnica de RF-001 — persistir usuário e vínculo inicial com o escritório.** O e-mail é único globalmente, inclusive sob concorrência, a senha é protegida com Argon2id e o vínculo inicial tem papel PROPRIETARIO. RF-002 cobre esse cadastro inicial atômico. A gestão administrativa de equipe é entregue em RF-009/RF-010/RF-011, e a seleção de escritório em RF-013. A autorização dos módulos jurídicos futuros permanece pendente. |
+| RF-003 | **Concluído — login com e-mail e senha.** `/login` verifica Argon2id, usuário ATIVO e vínculo válido com escritório ATIVO. Um vínculo é escolhido automaticamente; vários exigem seleção antes de criar Sessao, emitir access token e enviar refresh token em cookie HttpOnly. `/me` confirma identidade e contexto da sessão. |
 | RF-004 | **Concluído — emissão e gerenciamento de tokens.** JWT de até 15 minutos, refresh identificável com segredo de 256 bits, somente SHA-256 no banco, rotação atômica e revogação por reutilização. A matriz da equipe é entregue em RF-010; autorização dos demais módulos permanece pendente. |
 | RF-005 | **Concluído — renovação de sessão.** POST `/api/v1/auth/refresh` usa apenas cookie HttpOnly, reconfirma sessão/identidade/vínculo, rotaciona o refresh e preserva a expiração absoluta de sete dias. Frontend restaura após recarga, coordena renovação entre abas por Web Locks/BroadcastChannel e repete cada requisição com 401 uma única vez. Expiração e falha definitiva se propagam; fallback seguro está documentado na arquitetura. |
 | RF-006 | **Concluído — logout.** POST `/api/v1/auth/logout` revoga a sessão, limpa o cookie e retorna 204 de forma idempotente. Botão Sair limpa memória e identidade nas abas conectadas e volta ao login; guard impede exibir conteúdo protegido pelo botão Voltar. |
@@ -24,9 +24,9 @@ aprovados permanecem explicitamente pendentes.
 | RF-009 | **Implementado — cadastro administrativo.** Proprietário/administrador cadastram nome, e-mail, papel, permissões e senha temporária no escritório da sessão. Conta nova e vínculo são atômicos; conta existente exige confirmação explícita para criar somente vínculo, preservando senha e outros escritórios. E-mail não é editável. Concorrência e rollback são obrigatórios. |
 | RF-010 | **Implementado — papéis, permissões e primeiro acesso.** Cinco papéis e cinco permissões reais da equipe, com hierarquia central, validação no backend e histórico. Login temporário leva a sessão restrita e `/primeiro-acesso`; troca transacional revoga sessões e exige novo login. Redefinição por recuperação também remove a obrigação. |
 | RF-011 | **Implementado — ativar/inativar vínculo.** Preserva conta, papel, permissões e histórico. Inativação revoga somente sessões daquele escritório; reativação exige novo login. Proprietário, próprio vínculo e administrador par são protegidos. |
-| RF-012 | **Pendente e fora desta entrega.** Identificador reservado; detalhamento depende de pedido específico aprovado. |
-| RF-013 | **Pendente — seleção/troca de escritório.** A sessão já possui contexto mínimo para autorização e revogação, mas não existe seletor de escritório. Login com múltiplos vínculos ativos continua respondendo 409. |
-| RF-014 | **Pendente — isolamento abrangente do produto.** A equipe filtra todas as operações pelo escritório da sessão; os demais módulos ainda precisam implementar e demonstrar seu próprio isolamento. |
+| RF-012 | **Concluído — sessões e dispositivos.** Listar próprias sessões com metadados seguros; encerrar uma, a atual ou todas as outras. Revogação imediata no PostgreSQL, estado visual sincronizado, atividade limitada a cinco minutos e polling coordenado de 30 segundos. Fluxos reais de Chrome e PostgreSQL verificados. |
+| RF-013 | **Concluído — seleção/troca de escritório.** Login com múltiplos vínculos usa autorização opaca de até cinco minutos, uso único e sem refresh; seleção revalida vínculo. Troca substitui a sessão atomicamente, invalida tokens antigos e limpa o contexto nas abas. Seleção expirada e concorrente verificadas no PostgreSQL. |
+| RF-014 | **Concluído para os módulos existentes — isolamento.** Contexto autenticado obrigatório; consultas por ID e escritório, corpos estritos, 404 para recursos alheios, descarte de respostas atrasadas e provas de fronteira. Módulos futuros continuam obrigados a implementar seus próprios testes antes da entrega. |
 | RF-015 | Cadastrar, consultar, atualizar e inativar clientes do escritório, preservando seus vínculos e histórico. Campos e tratamento de duplicidades: pendentes. |
 | RF-016 | Cadastrar, consultar e atualizar casos e seus vínculos com clientes do mesmo escritório. Estados e cardinalidade dos relacionamentos: pendentes. |
 | RF-017 | Registrar e acompanhar processos com informações inseridas manualmente, associados ao contexto do escritório. Identificadores, estados e relação entre caso e processo: pendentes; captura automática não pertence ao MVP. |
@@ -40,8 +40,7 @@ aprovados permanecem explicitamente pendentes.
 
 ## Requisitos não funcionais
 
-RF-003 a RF-011 abrangem autenticação, senhas e equipe. RF-012 a RF-014
-ficam reservados às próximas entregas, sem implementação nesta tarefa.
+RF-003 a RF-014 abrangem autenticação, senhas, equipe, sessões e contexto isolado.
 Para evitar IDs duplicados, os antigos RF-009 a RF-026 dos módulos de negócio
 e pós-MVP passam a RF-015 a RF-032, preservando o escopo.
 
@@ -94,7 +93,7 @@ Auditoria e isolamento dos demais módulos exigidos por RNF-001 permanecem
 pendentes; emitir tokens não conclui a autorização do produto.
 
 O login responde 200 no sucesso, 400 para corpo inválido, 401 genérico para
-credenciais ou contas indisponíveis, 409 quando há mais de um escritório ativo,
+credenciais ou contas indisponíveis, 200 com seleção necessária para vários vínculos ativos,
 429 para excesso de tentativas e 500 sanitizado para falhas inesperadas.
 Sessões regulares restauram por refresh; sessões restritas podem compartilhar
 credenciais com outra aba ativa, mas não renovam. Após expiração ou fechamento
@@ -140,6 +139,6 @@ sucesso do produto. Não foram definidos preços ou regras jurídicas; o provedo
   limites de alteração de senha (5/IP e 5/usuário/15 minutos). HTTP 429 inclui
   `Retry-After`; erros não revelam segredos.
 - A autorização é revogada imediatamente no servidor. Abas visíveis verificam
-  `/me` a cada dois segundos e ao recuperar foco; a descoberta de revogação
+  `/me` por uma coordenadora a cada 30 segundos e ao recuperar foco; a descoberta de revogação
   propaga logout. Abas suspensas verificam ao voltar a ficar visíveis.
 - Não há envio da senha temporária por e-mail nem transferência de propriedade.

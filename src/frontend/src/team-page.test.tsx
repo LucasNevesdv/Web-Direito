@@ -19,7 +19,7 @@ beforeEach(async () => {
   requisicao.mockReset(); vi.stubGlobal('fetch', requisicao);
   cliente = new ClienteAutenticacao(requisicao);
   requisicao.mockResolvedValueOnce(resposta({}, 401)); await cliente.restaurarSessao();
-  requisicao.mockResolvedValueOnce(resposta({ tokenAcesso: 'token-isolado' })).mockResolvedValueOnce(resposta(identidade));
+  requisicao.mockResolvedValueOnce(resposta({ tokenAcesso: 'token-isolado', expiraEmSegundos: 900 })).mockResolvedValueOnce(resposta(identidade));
   await cliente.autenticarUsuario('maria@example.test', 'senha de teste');
   configuracao = { permissoes: [...permissoes], papeis: ['ADMINISTRADOR', 'ADVOGADO', 'ESTAGIARIO', 'SECRETARIO'].map((papel) => ({ papel, permissoesPadrao: papel === 'ADMINISTRADOR' ? [...permissoes] : [], permissoesPermitidas: papel === 'ADMINISTRADOR' ? [...permissoes] : ['EQUIPE_VISUALIZAR'] })) };
   usuarios = [{ ...membro }]; total = 1;
@@ -115,7 +115,7 @@ describe('gestão da equipe no frontend', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('Vínculo já existente.'); expect(screen.getByRole('button', { name: 'Salvar usuário' })).toBeTruthy();
   });
   it('bloqueia /equipe durante primeiro acesso e mostra senha temporária', async () => {
-    requisicao.mockResolvedValueOnce(resposta({ tokenAcesso: 'token-restrito' })).mockResolvedValueOnce(resposta({ ...identidade, deveAlterarSenha: true }));
+    requisicao.mockResolvedValueOnce(resposta({ tokenAcesso: 'token-restrito', expiraEmSegundos: 900 })).mockResolvedValueOnce(resposta({ ...identidade, deveAlterarSenha: true }));
     await cliente.autenticarUsuario('maria@example.test', 'senha temporária'); render(<Aplicacao cliente={cliente} />);
     expect(await screen.findByLabelText('Senha temporária')).toBeTruthy(); expect(window.location.pathname).toBe('/primeiro-acesso');
     expect(screen.queryByRole('heading', { name: 'Equipe' })).toBeNull();

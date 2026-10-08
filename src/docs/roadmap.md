@@ -224,7 +224,7 @@ sua aplicação.
 
 | Ordem | Etapa e requisitos | Critérios para concluir |
 | --- | --- | --- |
-| 1 | Escritórios e usuários — **Cadastro e equipe concluídos; manutenção de escritórios pendente** | Concluir decisões restantes de P-001 e implementar manutenção de escritórios e seleção de contexto. Gestão administrativa de membros está entregue em RF-009/RF-010/RF-011. Preservar unicidade, histórico aplicável e consistência dos vínculos; o cadastro inicial atômico já está entregue. |
+| 1 | Escritórios e usuários — **Cadastro, equipe e seleção de contexto concluídos; manutenção de escritórios pendente** | Concluir decisões restantes de P-001 e implementar manutenção de escritórios. Gestão administrativa de membros está entregue em RF-009/RF-010/RF-011 e seleção/troca em RF-013. Preservar unicidade, histórico aplicável e consistência dos vínculos; o cadastro inicial atômico já está entregue. |
 | 2 | Autenticação e autorização — Autenticação, senhas e permissões da equipe concluídas; demais módulos pendentes | Preservar login, `/me`, rotação, coordenação entre abas e logout; definir P-002/P-003 e implementar verificação de e-mail, dois fatores e permissões dos demais módulos. RF-007/RF-008 entregam recuperação e alteração de senha. Testar operações autorizadas e isolamento antes de liberar os demais módulos. Evoluir proteção contra abuso além dos limites compartilhados atuais. |
 | 3 | Clientes — RF-015 | Definir P-004 e a política aplicável de P-008; validar cadastro, consulta, edição e inativação sem perda de histórico ou vínculos, respeitando permissões. |
 | 4 | Casos e processos — RF-016, RF-017 | Definir P-005; validar cadastro e atualização manual, estados e vínculos aprovados com clientes; comprovar consistência e isolamento. Captura automática permanece fora desta etapa. |
@@ -357,14 +357,19 @@ reais. A primeira tentativa excedeu o prazo de navegação do Chrome antes do
 cadastro; a repetição passou sem alteração no código ou nas asserções. Ambas
 concluíram a limpeza e preservaram o estado anterior do banco.
 
-Limitações: login com múltiplos vínculos ativos ainda responde 409; seleção e
-troca de escritório (RF-013) não foram implementadas. RF-012 permanece reservado
-para detalhamento próprio e RF-014 não está concluído. Permissões dos módulos
-futuros, transferência de propriedade e auditoria geral permanecem fora do escopo.
-A autorização do servidor é imediata; logout visual depende de consulta a cada
-dois segundos enquanto a aba está visível ou de retomada do foco. Sessões
-restritas não fazem refresh e exigem novo login se nenhuma aba ativa puder
-compartilhar credenciais válidas. Verificação visual executada no Chrome.
+RF-012, RF-013 e RF-014 estão concluídos para os módulos existentes. O pacote
+inclui gestão das próprias sessões, escolha/transição transacional de escritório,
+isolamento verificado e polling coordenado com intervalo de 30 segundos. Em
+08/10/2026, Prisma format/validate/generate, status das nove migrations, lint,
+typecheck, build, diff-check e 609 testes passaram após a refatoração final. Chrome e PostgreSQL reais
+confirmaram seleção e troca entre escritórios, três abas com uma consulta
+periódica, descarte de respostas antigas, isolamento por IDs conhecidos, gestão
+de sessões, login, `/me`, refresh, logout, primeiro acesso, equipe, rate limit
+entre dois processos, favicon 200 e remoção dos registros temporários. O estado
+anterior do banco foi preservado e somente processos iniciados pelas verificações
+foram encerrados. Permissões de módulos futuros, transferência de propriedade e
+auditoria geral permanecem fora deste pacote; cada módulo futuro exige nova
+validação de isolamento.
 
 ## Arquivos da entrega RF-009/RF-010/RF-011
 

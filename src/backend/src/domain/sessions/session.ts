@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
+export interface MetadadosSessao { navegador: string; dispositivo: string; ipMascarado: string }
+
 export interface EstadoSessao {
+  metadados?: MetadadosSessao;
   estaRestrita?: boolean;
   id: string;
   idUsuario: string;
@@ -25,6 +28,7 @@ export class Sessao {
   readonly #estado: EstadoSessao;
 
   private constructor(estado: EstadoSessao) {
+    if (estado.metadados && [estado.metadados.navegador, estado.metadados.dispositivo, estado.metadados.ipMascarado].some(valor => typeof valor !== 'string' || valor.length > 64 || Array.from(valor).some(letra => letra.charCodeAt(0) < 32 || '<>'.includes(letra)))) throw new ErroSessaoInvalida('metadados');
     if (estado.estaRestrita !== undefined && typeof estado.estaRestrita !== 'boolean') throw new ErroSessaoInvalida('estaRestrita');
     for (const campo of ['id', 'idUsuario', 'idEscritorioAtivo'] as const) {
       if (typeof estado[campo] !== 'string' || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(estado[campo])) {
@@ -42,6 +46,7 @@ export class Sessao {
     }
     if (estado.expiraEm <= estado.criadoEm) throw new ErroSessaoInvalida('expiraEm');
     this.#estado = structuredClone({
+      ...(estado.metadados ? { metadados: estado.metadados } : {}),
       ...(estado.estaRestrita ? { estaRestrita: true } : {}),
       id: estado.id, idUsuario: estado.idUsuario, idEscritorioAtivo: estado.idEscritorioAtivo,
       hashTokenRenovacao: estado.hashTokenRenovacao, expiraEm: estado.expiraEm,
@@ -50,13 +55,14 @@ export class Sessao {
     });
   }
 
-  static criar(entrada: { id?: string; idUsuario: string; idEscritorioAtivo: string; hashTokenRenovacao: string; expiraEm: Date; agora?: Date; estaRestrita?: boolean }): Sessao {
+  static criar(entrada: { id?: string; idUsuario: string; idEscritorioAtivo: string; hashTokenRenovacao: string; expiraEm: Date; agora?: Date; estaRestrita?: boolean; metadados?: MetadadosSessao }): Sessao {
     const agora = entrada.agora ?? new Date();
     return new Sessao({
       id: entrada.id ?? randomUUID(), idUsuario: entrada.idUsuario, idEscritorioAtivo: entrada.idEscritorioAtivo,
       hashTokenRenovacao: entrada.hashTokenRenovacao, expiraEm: entrada.expiraEm,
       criadoEm: agora, atualizadoEm: agora, revogadaEm: null, ultimoUsoEm: null,
       estaRestrita: entrada.estaRestrita,
+      ...(entrada.metadados ? { metadados: entrada.metadados } : {}),
     });
   }
 

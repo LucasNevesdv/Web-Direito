@@ -17,7 +17,7 @@ export interface RecursosDeCoordenacaoEntreAbas {
   tempoLimiteMs?: number;
 }
 interface MensagemDeSincronizacaoDeSessao {
-  versao: 1; idAba: string; id: string; tipo: 'requisicao' | 'resposta' | 'estado';
+  versao: 1; idAba: string; id: string; tipo: 'requisicao' | 'resposta' | 'estado' | 'suspender';
   instante: number; idCorrelacao: string | null; idSessao: string | null; estado: SessaoCompartilhada | null;
 }
 
@@ -44,6 +44,9 @@ export class CoordenadorSessaoNavegador implements CoordenadorSessao {
   private readonly controladoresDeCancelamento = new Set<AbortController>();
   private temporizadorDeExpiracao?: ReturnType<typeof setTimeout>;
   private aoExpirarSessao?: () => void;
+  private aoIniciarTroca?: () => void;
+  observarInicioDaTroca(observador: () => void) { this.aoIniciarTroca = observador; }
+  prepararTrocaDeEscritorio() { this.enviarMensagemEntreAbas('suspender'); }
   readonly podeRenovar: boolean;
 
   constructor(private readonly recursosDeCoordenacao: RecursosDeCoordenacaoEntreAbas) {
@@ -80,6 +83,10 @@ export class CoordenadorSessaoNavegador implements CoordenadorSessao {
       this.identificadoresDasMensagensRecebidas.add(mensagem.id);
       if (this.identificadoresDasMensagensRecebidas.size > 256) this.identificadoresDasMensagensRecebidas.delete(this.identificadoresDasMensagensRecebidas.values().next().value!);
       if (mensagem.tipo === "requisicao") { if (this.sessaoCompartilhada) this.enviarMensagemEntreAbas("resposta", mensagem.id); return; }
+      if (mensagem.tipo === 'suspender') {
+        if (mensagem.idSessao && mensagem.idSessao === this.sessaoCompartilhada?.idSessao && this.sessaoCompartilhada.credenciais) this.aoIniciarTroca?.();
+        return;
+      }
       if (mensagem.tipo !== "estado" && mensagem.tipo !== "resposta") return;
       if (mensagem.tipo === "resposta" && (!mensagem.idCorrelacao || !this.sincronizacoesPendentes.has(mensagem.idCorrelacao))) return;
       const sessaoRecebida = mensagem.estado;
@@ -110,7 +117,7 @@ export class CoordenadorSessaoNavegador implements CoordenadorSessao {
       this.sessaoCompartilhada = sessaoValidada;
       this.agendarNotificacaoDeExpiracao();
       this.observadoresDaSessao.forEach((aoAlterarSessao) => aoAlterarSessao(sessaoValidada));
-    } catch { /* Malformed messages never affect the current identity. */ }
+    } catch { /* Mensagens inválidas não afetam a identidade atual. */ }
   }
 
   async sincronizarSessaoEntreAbas(): Promise<void> {
@@ -170,6 +177,6 @@ export class CoordenadorSessaoNavegador implements CoordenadorSessao {
 
 export function criarCoordenadorSessaoNavegador(): CoordenadorSessao {
   let canal: CanalDeMensagensEntreAbas | undefined;
-  try { if (typeof BroadcastChannel !== 'undefined') canal = new BroadcastChannel(NOME_CANAL); } catch { /* Safe degraded mode. */ }
+  try { if (typeof BroadcastChannel !== 'undefined') canal = new BroadcastChannel(NOME_CANAL); } catch { /* Sem canal, mantém o modo limitado. */ }
   return new CoordenadorSessaoNavegador({ canal, bloqueios: typeof navigator !== 'undefined' ? navigator.locks : undefined });
 }

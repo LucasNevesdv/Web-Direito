@@ -10,6 +10,8 @@ export interface SessaoCompartilhada {
 
 // Application code depends on this contract, never on browser coordination APIs.
 export interface CoordenadorSessao {
+  prepararTrocaDeEscritorio?(): void;
+  observarInicioDaTroca?(observador: () => void): void;
   readonly podeRenovar: boolean;
   obterSessaoCompartilhada(): SessaoCompartilhada | null;
   sincronizarSessaoEntreAbas(): Promise<void>;

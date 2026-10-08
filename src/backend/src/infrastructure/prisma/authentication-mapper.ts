@@ -8,15 +8,17 @@ export function converterRegistroPrismaEmUsuario(registroUsuario: Omit<RegistroU
     criadoEm: registroUsuario.createdAt, atualizadoEm: registroUsuario.updatedAt, deveAlterarSenha: registroUsuario.mustChangePassword });
 }
 
-export function converterRegistroPrismaEmSessao(registroSessao: Omit<RegistroSessao, 'restricted'> & { restricted?: boolean }): Sessao {
+export function converterRegistroPrismaEmSessao(registroSessao: Omit<RegistroSessao, 'restricted' | 'browser' | 'device' | 'maskedIp' | 'lastActivityAt'> & Partial<RegistroSessao>): Sessao {
   return Sessao.restaurar({ id: registroSessao.id, idUsuario: registroSessao.userId, idEscritorioAtivo: registroSessao.activeOfficeId,
     hashTokenRenovacao: registroSessao.refreshTokenHash, expiraEm: registroSessao.expiresAt, revogadaEm: registroSessao.revokedAt,
-    criadoEm: registroSessao.createdAt, atualizadoEm: registroSessao.updatedAt, ultimoUsoEm: registroSessao.lastUsedAt, estaRestrita: registroSessao.restricted });
+    criadoEm: registroSessao.createdAt, atualizadoEm: registroSessao.updatedAt, ultimoUsoEm: registroSessao.lastUsedAt, estaRestrita: registroSessao.restricted,
+    ...(registroSessao.browser ? { metadados: { navegador: registroSessao.browser, dispositivo: registroSessao.device!, ipMascarado: registroSessao.maskedIp! } } : {}) });
 }
 
-export function converterSessaoEmRegistroPrisma(sessao: Sessao): RegistroSessao {
+export function converterSessaoEmRegistroPrisma(sessao: Sessao) {
   const estado = sessao.obterEstadoAtualDaSessao();
   return { id: estado.id, userId: estado.idUsuario, activeOfficeId: estado.idEscritorioAtivo,
     refreshTokenHash: estado.hashTokenRenovacao, expiresAt: estado.expiraEm, revokedAt: estado.revogadaEm,
-    createdAt: estado.criadoEm, updatedAt: estado.atualizadoEm, lastUsedAt: estado.ultimoUsoEm, restricted: sessao.estaRestrita };
+    createdAt: estado.criadoEm, updatedAt: estado.atualizadoEm, lastUsedAt: estado.ultimoUsoEm, restricted: sessao.estaRestrita,
+    ...(estado.metadados ? { browser: estado.metadados.navegador, device: estado.metadados.dispositivo, maskedIp: estado.metadados.ipMascarado, lastActivityAt: estado.criadoEm } : {}) };
 }

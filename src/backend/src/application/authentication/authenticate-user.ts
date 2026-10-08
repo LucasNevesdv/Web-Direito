@@ -1,4 +1,6 @@
 import { Sessao } from '../../domain/sessions/session.js';
+import type { MetadadosSessao } from '../../domain/sessions/session.js';
+import type { GestaoSessoes } from './manage-sessions.js';
 import { Usuario } from '../../domain/users/user.js';
 import type { ProtecaoDeSenhas } from '../security/password-hasher.js';
 import { extrairIdentidadePublicaDoVinculo, type TokensAcesso, type RepositorioAutenticacao, type TokensRenovacao } from './authentication-contracts.js';
@@ -12,28 +14,33 @@ export class AutenticacaoDeUsuario {
     private readonly tokensRenovacao: TokensRenovacao,
     private readonly opcoes: { hashSenhaReferencia: string; validadeAcessoSegundos: number; validadeRenovacaoSegundos: number },
     private readonly relogio: () => Date = () => new Date(),
+    private readonly selecao?: Pick<GestaoSessoes, 'exigirSelecao'>,
   ) {}
 
-  async autenticarUsuario(credenciaisInformadas: { email: string; senha: string }) {
+  async autenticarUsuario(credenciaisInformadas: { email: string; senha: string }, metadados?: MetadadosSessao) {
     let email: string;
     try { email = Usuario.normalizarEmail(credenciaisInformadas.email); } catch { throw new ErroCredenciaisInvalidas(); }
     if (typeof credenciaisInformadas.senha !== 'string' || Array.from(credenciaisInformadas.senha).length < 1 || Array.from(credenciaisInformadas.senha).length > 128) {
       throw new ErroCredenciaisInvalidas();
     }
     const usuarioComVinculos = await this.repositorioAutenticacao.buscarUsuarioComVinculosPorEmail(email);
-    // Both unknown email and wrong password perform the same Argon2 verification.
+    // E-mail ausente e senha incorreta passam pela mesma verificação Argon2.
     const senhaCorrespondeAoHash = await this.protecaoDeSenhas.compararSenhaComHash(usuarioComVinculos?.usuario.hashSenha ?? this.opcoes.hashSenhaReferencia, credenciaisInformadas.senha);
     if (!usuarioComVinculos || !senhaCorrespondeAoHash) throw new ErroCredenciaisInvalidas();
     if (usuarioComVinculos.usuario.situacao !== 'ATIVO') throw new ErroUsuarioInativo();
     const vinculosAtivos = usuarioComVinculos.vinculos.filter(({ escritorio, estaAtivo }) => escritorio.situacao === 'ATIVO' && estaAtivo !== false);
     if (vinculosAtivos.length === 0) throw new ErroEscritorioInativo();
-    if (vinculosAtivos.length !== 1) throw new ErroMultiplosEscritoriosAtivos();
+    if (vinculosAtivos.length !== 1) {
+      if (this.selecao) return this.selecao.exigirSelecao(usuarioComVinculos);
+      throw new ErroMultiplosEscritoriosAtivos();
+    }
     const vinculoAtivo = vinculosAtivos[0];
     const tokenDeRenovacao = this.tokensRenovacao.gerarTokenDeRenovacao();
     const agora = this.relogio();
     const sessao = Sessao.criar({
       id: tokenDeRenovacao.idSessao,
       estaRestrita: usuarioComVinculos.usuario.deveAlterarSenha,
+      metadados,
       idUsuario: usuarioComVinculos.usuario.id, idEscritorioAtivo: vinculoAtivo.escritorio.id, hashTokenRenovacao: tokenDeRenovacao.hash,
       expiraEm: new Date(agora.getTime() + this.opcoes.validadeRenovacaoSegundos * 1000), agora,
     });

@@ -3,13 +3,14 @@ import { ErroCredenciaisInvalidas } from '../../application/authentication/authe
 import { bloquearUsuarioParaTrocaDeSenha } from './prisma-password-repository.js';
 import type { UsuarioComVinculos, RepositorioAutenticacao } from '../../application/authentication/authentication-contracts.js';
 import { Sessao } from '../../domain/sessions/session.js';
+import { registrarAtividadeDaSessao } from './session-activity.js';
 import { PAPEIS_DOMINIO } from './team-mapper.js';
 import { converterRegistroPrismaEmUsuario, converterRegistroPrismaEmSessao, converterSessaoEmRegistroPrisma } from './authentication-mapper.js';
 
 const INCLUSAO_VINCULOS_E_ESCRITORIOS = { memberships: { include: { office: true } } } satisfies Prisma.UserInclude;
 type RegistroPrismaDeUsuarioComVinculos = Prisma.UserGetPayload<{ include: typeof INCLUSAO_VINCULOS_E_ESCRITORIOS }>;
 
-function converterRegistroPrismaEmUsuarioComVinculos(registroUsuario: RegistroPrismaDeUsuarioComVinculos): UsuarioComVinculos {
+export function converterRegistroPrismaEmUsuarioComVinculos(registroUsuario: RegistroPrismaDeUsuarioComVinculos): UsuarioComVinculos {
   return {
     usuario: converterRegistroPrismaEmUsuario(registroUsuario),
     vinculos: registroUsuario.memberships.map(({ office: escritorio, role: papel, active }) => ({
@@ -34,6 +35,7 @@ export class RepositorioAutenticacaoPrisma implements RepositorioAutenticacao {
         throw new ErroCredenciaisInvalidas();
       }
       await transacao.session.create({ data: converterSessaoEmRegistroPrisma(sessao), select: { id: true } });
+      await transacao.officeSelection.updateMany({ where: { userId: sessao.idUsuario, consumedAt: null }, data: { consumedAt: new Date() } });
     }, { maxWait: 5000, timeout: 10000 });
   }
 
@@ -41,6 +43,7 @@ export class RepositorioAutenticacaoPrisma implements RepositorioAutenticacao {
     const registroSessao = await this.prisma.session.findUnique({
       where: { id }, include: { user: { include: INCLUSAO_VINCULOS_E_ESCRITORIOS } },
     });
+    if (registroSessao) await registrarAtividadeDaSessao(this.prisma, registroSessao);
     return registroSessao ? { sessao: converterRegistroPrismaEmSessao(registroSessao), usuarioComVinculos: converterRegistroPrismaEmUsuarioComVinculos(registroSessao.user) } : null;
   }
 

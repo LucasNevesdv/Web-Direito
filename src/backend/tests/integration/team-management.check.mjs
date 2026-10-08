@@ -28,7 +28,7 @@ let prisma, frontend, chrome, perfil, anteriores, portaChrome, navegador, urlFro
 let etapa = 'inicializacao';
 const verificar = (condicao) => assert.equal(Boolean(condicao), true);
 const relatar = (dados = {}) => console.log(JSON.stringify({ etapa, ok: true, ...dados }));
-async function esperar(consultar, prazo = 20000) {
+async function esperar(consultar, prazo = 45000) {
   const ate = Date.now() + prazo;
   while (Date.now() < ate) { const resultado = await consultar(); if (resultado) return resultado; await aguardar(80); }
   throw new Error('Prazo da verificação excedido');

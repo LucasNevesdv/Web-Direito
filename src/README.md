@@ -1,9 +1,9 @@
 # Legal System
 
-SaaS jurídico Legal System, com cadastro inicial de escritório e primeiro
-administrador, login, renovação automática, logout, recuperação/alteração de senha
-e gestão administrativa da equipe disponíveis. Os demais módulos de negócio
-permanecem nas próximas etapas.
+SaaS jurídico Legal System. RF-001 a RF-014 entregam cadastro de escritório e
+proprietário, autenticação, recuperação e alteração de senha, equipe, sessões,
+seleção de escritório e isolamento dos módulos existentes. Clientes, casos e os
+demais módulos jurídicos permanecem nas próximas etapas.
 
 ## Recuperação e alteração de senha
 
@@ -63,6 +63,25 @@ No Windows PowerShell, use `pnpm.cmd` caso a política local impeça executar
 `pnpm.ps1`. Argon2id usa `argon2` 0.44.0, compatível com Node.js 24 e Windows
 no ambiente desta entrega.
 
+## Organização
+
+`backend/src/domain/` contém entidades e regras sem frameworks;
+`backend/src/application/` contém casos de uso e contratos específicos;
+`backend/src/infrastructure/` implementa Prisma, segurança e e-mail;
+`backend/src/presentation/` valida HTTP e serializa respostas. `server.ts`
+compõe as implementações. O schema e as migrations ficam em `backend/prisma/`.
+No frontend, `frontend/src/` reúne páginas, cliente de autenticação e os
+coordenadores do navegador. Consulte [arquitetura](docs/architecture.md) e
+[nomenclatura](docs/nomenclature.md) antes de ampliar um módulo.
+
+Para incluir um recurso de escritório, obtenha o contexto da sessão validada
+no backend, revalide vínculo e permissão atuais e filtre consultas, alterações
+e histórico pelo escritório e pelo identificador do recurso. Recursos alheios
+retornam 404. Somente os endpoints específicos de seleção e troca recebem o
+identificador do escritório de destino, sempre com validação do vínculo. O
+módulo de equipe mostra esse padrão; cada novo módulo precisa de testes de
+isolamento próprios.
+
 ## Instalação
 
 Execute os comandos a partir de `Neodireito/src/`, que é a raiz do workspace pnpm:
@@ -75,6 +94,10 @@ pnpm --filter ./backend run prisma:generate
 As credenciais locais ficam em `backend/.env`. Se esse arquivo ainda não existir,
 crie-o usando `backend/.env.example` como referência e informe sua conexão
 PostgreSQL. Preserve qualquer `.env` existente; não versione credenciais.
+`frontend/.env.example` mostra o intervalo de verificação de sessão e o destino
+do proxy local. Os padrões funcionam sem arquivo adicional; para personalizá-los,
+copie o exemplo para `frontend/.env.local` e ajuste os valores. Não coloque
+segredos em variáveis com prefixo `VITE_`, pois elas integram o bundle do navegador.
 
 Configure uma vez o segredo local de autenticação, sem exibi-lo:
 
@@ -150,8 +173,8 @@ Sessões do formato anterior de refresh precisam de novo login, sem apagar dados
 Se o logout falhar por indisponibilidade, a interface informa que o encerramento
 no servidor não foi confirmado; a memória local é limpa.
 
-Mais de um escritório ativo gera conflito explícito até existir seleção de escritório.
-POST obrigatório,
+Com vários vínculos ativos, o login exige seleção explícita de escritório antes
+de emitir uma sessão completa ou o cookie de renovação. Métodos POST protegidos,
 validação exata de Origin (ausente/null também recusados), cookie SameSite=Lax e
 ausência de CORS compõem a proteção CSRF. Logs HTTP continuam desativados.
 
@@ -208,9 +231,9 @@ pnpm test
 pnpm build
 ```
 
-A API expõe `GET /health`, que retorna `200 { "status": "ok" }` sem consultar
+A API expõe `GET /health`, que retorna `200 { "situacao": "ok" }` sem consultar
 o banco, e `GET /ready`, que executa `SELECT 1` pelo Prisma. A prontidão retorna
-`200 { "status": "ready" }` ou `503 { "status": "not_ready" }`, sem detalhes internos.
+`200 { "situacao": "ready" }` ou `503 { "situacao": "not_ready" }`, sem detalhes internos.
 
 Para executar o backend compilado após o build:
 
@@ -229,6 +252,9 @@ pnpm --filter ./backend run verify:office-repository
 pnpm --filter ./backend run verify:onboarding
 pnpm --filter ./backend run verify:auth-browser
 pnpm --filter ./backend run verify:rate-limit
+pnpm --filter ./backend run verify:password-security
+pnpm --filter ./backend run verify:team
+pnpm --filter ./backend run verify:sessions
 ```
 
 O primeiro comando verifica criação e recuperação de um escritório. O segundo
@@ -247,6 +273,12 @@ O quarto comando inicia dois processos Node em portas livres e confere limites
 compartilhados, concorrência, próxima janela e SQL de limpeza no PostgreSQL.
 Ambos usam segredo HMAC temporário em memória e removem somente seus buckets,
 sem consumir o orçamento de tentativas dos usuários locais.
+Os três últimos verificam recuperação/alteração de senha com SMTP local,
+primeiro acesso e equipe, e seleção/troca de escritório e sessões com três
+abas, respectivamente. Exigem build atualizado, Chrome e PostgreSQL locais;
+cada verificador identifica e remove seus registros temporários e encerra os
+processos que iniciou. A validação realizada é local, sem afirmar prontidão
+operacional em produção.
 
 O cancelamento da consulta de prontidão é feito pelo PostgreSQL após 5 segundos,
 com `SET LOCAL statement_timeout`, restrito à transação. O cliente também fixa
@@ -258,9 +290,10 @@ Detalhes da composição, encerramento e limites estão em
 
 Para servir o frontend compilado em produção, configure fallback de rotas da
 SPA para `/register`, `/login`, `/app`, `/equipe`, `/primeiro-acesso`,
-`/recuperar-senha`, `/redefinir-senha` e `/seguranca` e um proxy reverso de `/api` para o backend na mesma origem.
+`/recuperar-senha`, `/redefinir-senha`, `/seguranca`, `/seguranca/sessoes` e
+`/selecionar-escritorio` e um proxy reverso de `/api` para o backend na mesma origem.
 O proxy de desenvolvimento do Vite não substitui essa configuração de produção.
-Verificação de e-mail, seleção/troca de escritório, autenticação em dois fatores
+Verificação de e-mail, autenticação em dois fatores
 e proteção avançada contra abuso do cadastro público permanecem pendentes.
 
 ## Equipe e primeiro acesso — RF-009, RF-010 e RF-011
@@ -287,9 +320,40 @@ anteriores e atribui as permissões aos proprietários existentes. Depois de
 verificação optativa com PostgreSQL e Chrome reais; o script cria registros
 exclusivos e limpa seus dados/processos em `finally`.
 
-Limites: login com mais de um vínculo ativo continua respondendo 409 até RF-013;
-as sessões já abertas permanecem válidas nos seus escritórios. Sessão temporária
+Sessão temporária
 não pode renovar: com todas as abas fechadas ou token expirado, entre novamente.
-A revogação vale imediatamente na API; a tela verifica identidade a cada dois
-segundos enquanto visível e ao recuperar foco. RF-012 e RF-014 não foram entregues.
+A revogação vale imediatamente na API; uma aba coordenadora verifica identidade
+a cada 30 segundos e ao recuperar foco, conforme a entrega abaixo.
 Detalhes de autorização e contratos estão em [architecture.md](docs/architecture.md).
+
+## Sessões e múltiplos escritórios — RF-012, RF-013 e RF-014
+
+`/seguranca/sessoes` mostra as próprias sessões, inclusive de outros escritórios,
+com navegador/dispositivo identificáveis, IP mascarado, datas e estado. Permite
+encerrar uma, a atual ou todas as outras, com confirmação. A listagem apresenta
+as últimas 100 e sempre inclui a atual; sessões expiradas não aparecem ativas.
+
+Login com vários vínculos ativos retorna uma autorização opaca de seleção,
+válida por até cinco minutos, sem sessão completa nem refresh cookie. A tela
+`/selecionar-escritorio` conclui o login ou troca o contexto de uma sessão regular.
+Trocar revoga a sessão anterior atomicamente, emite novos tokens e limpa os dados
+antigos em todas as abas. Primeiro acesso continua restrito.
+
+Uma aba visível mantém o Web Lock de polling; resultados passam pelo canal
+dedicado à verificação de sessão. `VITE_SESSION_CHECK_INTERVAL_MS` no ambiente do frontend
+define o intervalo (padrão 30000; faixa 10000–300000 ms), com exemplo em
+`frontend/.env.example`. Sem BroadcastChannel, Web Locks ainda mantém uma única
+aba fazendo polling. Sem Web Locks, o canal coalesce solicitações de foco; sem
+ambos, a revalidação fica limitada ao foco de cada aba, sem polling recorrente.
+Abas suspensas revalidam ao retomar. A API sempre consulta o estado atual no PostgreSQL.
+
+Aplicar `20261001140000_session_management_office_selection` com `prisma migrate
+deploy` em `backend/`; as oito migrations anteriores são preservadas. Sessões
+legadas mantêm sua FK composta segura e recebem metadados desconhecidos e última
+atividade a partir de seu uso/criação. Nenhum escritório é atribuído arbitrariamente.
+
+Após o build, executar `pnpm --filter ./backend verify:sessions`: Chrome,
+frontend, backend e PostgreSQL reais, três abas, isolamento por IDs conhecidos,
+resposta atrasada, seleção concorrente, revogação e limpeza dos próprios dados.
+O isolamento comprovado cobre os módulos existentes; novos módulos jurídicos
+devem cumprir as mesmas fronteiras e testes antes de serem liberados.
