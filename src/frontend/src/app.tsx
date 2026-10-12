@@ -1,6 +1,10 @@
 import { PaginaCadastro } from './features/auth/register-page';
 import { PaginaSenhas } from './features/auth/password-pages';
 import { PaginaEquipe } from './features/team/team-page';
+import { PaginaPainel } from './features/dashboard/dashboard-page';
+import { PaginaTarefas } from './features/tasks/tasks-page';
+import { PaginaPrazos } from './features/tasks/deadlines-page';
+import { PaginaDocumentos } from './features/documents/documents-page';
 import { PaginaLogin } from './features/auth/login-page';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { ProvedorAutenticacao, useAutenticacao } from './shared/auth/auth-context';
@@ -47,6 +51,10 @@ function Rotas() {
   if (caminho === '/selecionar-escritorio' && situacao === 'autenticado') return <PaginaSelecaoEscritorio key={contexto} />;
   if (caminho === '/seguranca/sessoes' && situacao === 'autenticado') return <PaginaSessoes key={contexto} />;
   if (caminho === '/equipe' && situacao === 'autenticado') return <PaginaEquipe key={contexto} />;
+  if (caminho === '/painel' && situacao === 'autenticado') return <PaginaPainel key={contexto} />;
+  if (caminho === '/tarefas' && situacao === 'autenticado') return <PaginaTarefas key={contexto} />;
+  if (caminho === '/prazos' && situacao === 'autenticado') return <PaginaPrazos key={contexto} />;
+  if (caminho === '/documentos' && situacao === 'autenticado') return <PaginaDocumentos key={contexto} />;
   if (caminho === '/recuperar-senha') return <PaginaSenhas finalidade="recuperar" />;
   if (caminho === '/redefinir-senha') return <PaginaSenhas finalidade="redefinir" />;
   if (caminho === '/seguranca' && situacao === 'autenticado') return <PaginaSenhas finalidade="alterar" />;

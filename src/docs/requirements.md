@@ -30,9 +30,9 @@ aprovados permanecem explicitamente pendentes.
 | RF-015 | Cadastrar, consultar, atualizar e inativar clientes do escritório, preservando seus vínculos e histórico. Campos e tratamento de duplicidades: pendentes. |
 | RF-016 | Cadastrar, consultar e atualizar casos e seus vínculos com clientes do mesmo escritório. Estados e cardinalidade dos relacionamentos: pendentes. |
 | RF-017 | Registrar e acompanhar processos com informações inseridas manualmente, associados ao contexto do escritório. Identificadores, estados e relação entre caso e processo: pendentes; captura automática não pertence ao MVP. |
-| RF-018 | Criar, atribuir e acompanhar tarefas, registrando alterações de responsável, estado e prazo quando houver. Estados e regras de conclusão: pendentes. |
-| RF-019 | Registrar e consultar prazos, com data, responsável e contexto de negócio; manter histórico de alterações. Horários, fusos e regras de tratamento de datas: pendentes, sem assumir cálculo jurídico automático. |
-| RF-020 | Incluir, consultar e obter documentos vinculados ao contexto de negócio autorizado. Restringir acesso ao conteúdo; armazenamento, formatos, limites e versionamento: pendentes. |
+| RF-018 | **Implementado — tarefas (RF-049 a RF-052, RF-055 a RF-061, RF-064).** Tarefa comum ou com vínculo, responsável, revisor, prioridade, prazo interno, situações, conclusão com data/autor/observação, checklist, listas de hoje/futuras/atrasadas, filtros e histórico imutável. Regras em RN-061 a RN-068 e RN-073. |
+| RF-019 | **Implementado — prazos judiciais, lembretes e dashboard (RF-053, RF-054, RF-061 a RF-065).** Prazo judicial separado da tarefa, origem informada, confirmação pelo advogado, lembretes internos e por e-mail, escalonamento de prazos críticos e painel `/painel`. Sem contagem automática de dias úteis. |
+| RF-020 | **Implementado — documentos (RF-066 a RF-077).** Envio em fluxo para S3 compatível, vínculo, categoria, metadados, download autorizado, versões, pesquisa por nome/descrição e categoria, descrição, registro de visualização/download/alteração, isolamento entre escritórios e inativação preservando histórico. Regras em RN-069 a RN-072. |
 | RF-021 | Registrar e consultar anotações no contexto de casos ou processos, aplicando controle de acesso também às alterações. Granularidade da visibilidade: pendente. |
 | RF-022 | Registrar e consultar compromissos na agenda e apresentar tarefas e prazos autorizados com suas datas. Regras de exibição, recorrência e eventuais lembretes: pendentes. |
 | RF-023 | Exibir dashboard com resumo de casos, processos, tarefas e prazos acessíveis ao usuário. Indicadores, filtros e períodos: pendentes; valores devem corresponder aos registros de origem. |
@@ -100,6 +100,25 @@ credenciais com outra aba ativa, mas não renovam. Após expiração ou fechamen
 de todas as abas, é necessário novo login temporário. Reutilização revoga a
 sessão. `/me`, equipe e alterações de senha revalidam o banco e rejeitam
 revogação imediatamente, mesmo antes de o JWT expirar. Sessões do formato antigo de refresh exigem novo login.
+
+## Detalhamento de tarefas, prazos e documentos — RF-049 a RF-077
+
+Os IDs abaixo detalham RF-018, RF-019 e RF-020 e seguem a especificação recebida.
+
+| ID | Entrega | Onde |
+| --- | --- | --- |
+| RF-049 | Tarefa comum ou vinculada a cliente, caso ou processo. O vínculo é aceito quando esses módulos registrarem seus resolvedores (RN-067). | `POST /api/v1/tarefas`, `/tarefas` |
+| RF-050 a RF-052 | Responsável, revisor, prioridade e prazo interno. | idem |
+| RF-053, RF-054 | Prazo judicial separado, com origem e detalhes. | `/api/v1/prazos`, `/prazos` |
+| RF-055 a RF-057 | Situações, conclusão com data/autor/observação, histórico preservado por trigger. | `POST /api/v1/tarefas/:id/situacao` |
+| RF-058, RF-059 | Hoje, futuras e atrasadas; filtros por responsável, situação, prioridade e escritório ativo. | `GET /api/v1/tarefas` |
+| RF-060 | Checklist (até 50 itens). | `POST /api/v1/tarefas/:id/checklist` |
+| RF-061 a RF-063 | Lembretes internos, e-mail via SMTP/Resend com novas tentativas e escalonamento. | worker de lembretes, `/api/v1/notificacoes` |
+| RF-064 | Histórico de tarefas e prazos. | `GET .../historico` |
+| RF-065 | Prazos críticos no painel. | `GET /api/v1/painel`, `/painel` |
+| RF-066 a RF-077 | Documentos completos. | `/api/v1/documentos`, `/documentos` |
+
+Verificado com testes unitários e de rota, e em PostgreSQL real descartável (`verify:tasks-documents`). O adaptador S3 ainda não foi verificado contra um bucket real.
 
 ## Funcionalidades e integrações futuras — fora do MVP
 

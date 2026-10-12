@@ -11,12 +11,16 @@ describe('fronteiras de persistência multiempresa', () => {
     // A prova comportamental abaixo executa as operações sobre delegates instrumentados.
     expect(readdirSync(new URL('../src/infrastructure/prisma/', import.meta.url)).filter(n => n.startsWith('prisma-')).sort()).toEqual([
       'prisma-authentication-repository.ts', // Global: autenticação por identidade e sessão.
+      'prisma-business-links.ts', // Negócio: resolvedores recebem o escritório da sessão.
+      'prisma-document-repository.ts', // Negócio: escopo obrigatório; ver work-tenant-boundaries.
       'prisma-office-registration-repository.ts', // Público: criação atômica de um novo tenant.
       'prisma-offices-repository.ts', // Raiz de tenant, interno e sem endpoint de leitura.
       'prisma-password-repository.ts', // Global: credencial da conta autenticada/token de recuperação.
       'prisma-rate-limit-store.ts', // Global: orçamento de abuso por chave HMAC.
       'prisma-recovery-email-jobs.ts', // Global: worker autorizado por lease.
+      'prisma-reminder-repository.ts', // Global: worker; destinatários limitados a vínculos ativos do mesmo escritório.
       'prisma-session-management-repository.ts', // Global por usuário; troca verifica vínculo de destino.
+      'prisma-task-repository.ts', // Negócio: escopo obrigatório; ver work-tenant-boundaries.
       'prisma-team-repository.ts', // Negócio: escopo obrigatório e autorização atual.
     ]);
   });

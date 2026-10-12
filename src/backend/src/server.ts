@@ -11,16 +11,18 @@ import { RepositorioCadastroEscritorioPrisma } from './infrastructure/prisma/pri
 import { ProtecaoDeSenhasArgon2 } from './infrastructure/security/argon2-password-hasher.js';
 import { criarEncerramento } from './shutdown.js';
 import { comporLimitacaoDeRequisicoes } from './rate-limiting.js';
+import { comporServicosDeTrabalho } from './infrastructure/work-services.js';
 
 let prisma: ReturnType<typeof criarClientePrisma> | undefined;
 let aplicacao: ReturnType<typeof criarAplicacao> | undefined;
 let limpezaDeLimites: { parar(): Promise<void> } | undefined;
 let processamentoSenhas: { parar(): Promise<void> } | undefined;
+let processamentoLembretes: { parar(): Promise<void> } | undefined;
 
 const encerrarRecursos = criarEncerramento(
   { close: async () => { await aplicacao?.close(); } },
   { $disconnect: async () => { await prisma?.$disconnect(); } },
-  { parar: async () => { try { await processamentoSenhas?.parar(); } finally { await limpezaDeLimites?.parar(); } } },
+  { parar: async () => { try { await Promise.all([processamentoSenhas?.parar(), processamentoLembretes?.parar()]); } finally { await limpezaDeLimites?.parar(); } } },
 );
 
 function tratarSinalDeEncerramento(): void {
@@ -46,13 +48,16 @@ try {
   const senhas = comporServicosDeSenhas(prisma, ambiente, protecaoDeSenhas, autenticacao);
   processamentoSenhas = senhas.processamento;
   const equipe = new GestaoEquipe(new RepositorioEquipePrisma(prisma), new TokensAcessoJose(ambiente.AUTH_JWT_SECRET, ambiente.AUTH_JWT_ISSUER, ambiente.AUTH_JWT_AUDIENCE, ambiente.AUTH_ACCESS_TTL_SECONDS), protecaoDeSenhas);
-  aplicacao = criarAplicacao(criarVerificadorSaudePrisma(prisma), cadastro, autenticacao, { limitador: limitacaoRequisicoes.limitador, proxiesConfiaveis: ambiente.TRUST_PROXY }, senhas.servicos, equipe);
+  const trabalho = comporServicosDeTrabalho(prisma, ambiente);
+  processamentoLembretes = trabalho.processamento;
+  aplicacao = criarAplicacao(criarVerificadorSaudePrisma(prisma), cadastro, autenticacao, { limitador: limitacaoRequisicoes.limitador, proxiesConfiaveis: ambiente.TRUST_PROXY }, senhas.servicos, equipe, trabalho);
   await aplicacao.listen({
     host: ambiente.HOST,
     port: ambiente.PORT,
   });
   limpezaDeLimites = limitacaoRequisicoes.iniciarLimpeza();
   senhas.processamento.iniciarProcessamento(ambiente.RATE_LIMIT_CLEANUP_INTERVAL_MS);
+  trabalho.processamento.iniciar();
 } catch (erro) {
   process.exitCode = 1;
   console.error(

@@ -17,10 +17,14 @@
     "verify:rate-limit": "node tests/integration/distributed-rate-limit.check.mjs",
     "verify:password-security": "node tests/integration/password-security.check.mjs",
     "verify:team": "node tests/integration/team-management.check.mjs",
-    "verify:sessions": "node tests/integration/session-management.check.mjs"
+    "verify:sessions": "node tests/integration/session-management.check.mjs",
+    "verify:tasks-documents": "tsx tests/integration/tasks-documents.check.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3",
+    "@aws-sdk/lib-storage": "3",
     "@fastify/cookie": "11",
+    "@fastify/multipart": "9",
     "@prisma/client": "^6.16.2",
     "argon2": "0.44.0",
     "dotenv": "^16.6.1",

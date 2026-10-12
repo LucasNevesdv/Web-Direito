@@ -9,6 +9,8 @@ import {
 } from '../src/environment.js';
 
 const PADROES_AUTENTICACAO = {
+  FUSO_HORARIO: 'America/Sao_Paulo', PRAZO_CRITICO_DIAS: 3, LEMBRETES_INTERVALO_MS: 300000, DOCUMENTO_TAMANHO_MAXIMO_MB: 25,
+  S3_REGIAO: 'us-east-1', S3_FORCAR_PATH_STYLE: true,
   EMAIL_FILA_INTERVALO_MS: 1000, EMAIL_FILA_LEASE_SEGUNDOS: 60, EMAIL_FILA_MAX_TENTATIVAS: 5,
   EMAIL_FILA_ATRASO_INICIAL_SEGUNDOS: 30, EMAIL_FILA_ATRASO_MAXIMO_SEGUNDOS: 3600,
   EMAIL_FILA_RETENCAO_DIAS: 7, EMAIL_FILA_ENCERRAMENTO_MS: 30000,
@@ -135,6 +137,12 @@ describe("configuração de ambiente", () => {
       PORT: 3000,
       NODE_ENV: 'development',
     });
+  });
+
+  it("rejeita bucket sem credenciais e fuso horário desconhecido", () => {
+    expect(() => validarAmbiente({ ...AMBIENTE_VALIDO, S3_BUCKET: 'documentos', FUSO_HORARIO: 'Marte/Olimpo', S3_ID_ACESSO: 'id', S3_SEGREDO_ACESSO: 'segredo' }))
+      .toThrowError(new ErroAmbiente(['FUSO_HORARIO']));
+    expect(() => validarAmbiente({ ...AMBIENTE_VALIDO, S3_BUCKET: 'documentos' })).toThrowError(new ErroAmbiente(['S3_ID_ACESSO/S3_SEGREDO_ACESSO']));
   });
 
   it("informa somente nomes das variáveis na configuração malformada", () => {
