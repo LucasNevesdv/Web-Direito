@@ -1,14 +1,14 @@
-import { PaginaCadastro } from './register-page';
-import { PaginaSenhas } from './password-pages';
-import { PaginaEquipe } from './team-page';
-import { PaginaLogin } from './login-page';
+import { PaginaCadastro } from './features/auth/register-page';
+import { PaginaSenhas } from './features/auth/password-pages';
+import { PaginaEquipe } from './features/team/team-page';
+import { PaginaLogin } from './features/auth/login-page';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { ProvedorAutenticacao, useAutenticacao } from './auth-context';
-import type { ClienteAutenticacao } from './auth-client';
-import { CLIENTE_AUTENTICACAO } from './authentication';
+import { ProvedorAutenticacao, useAutenticacao } from './shared/auth/auth-context';
+import type { ClienteAutenticacao } from './shared/auth/auth-client';
+import { CLIENTE_AUTENTICACAO } from './shared/auth/authentication';
 import { navegar } from './routing';
-import { PaginaSelecaoEscritorio, PaginaSessoes } from './session-pages';
-import { iniciarVerificacaoPeriodica } from './infrastructure/session-polling';
+import { PaginaSelecaoEscritorio, PaginaSessoes } from './features/auth/session-pages';
+import { iniciarVerificacaoPeriodica } from './shared/auth/infrastructure/session-polling';
 
 const observarCaminho = (aoAlterarCaminho: () => void) => {
   window.addEventListener('popstate', aoAlterarCaminho);

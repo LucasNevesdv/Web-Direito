@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Aplicacao } from './app';
+import { Aplicacao } from '../../app';
 import { PaginaCadastro } from './register-page';
 
 const SENHA = 'uma-senha-segura-123';

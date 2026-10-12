@@ -1,6 +1,6 @@
 import { useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
-import { ErroLogin } from './auth-client';
-import { useAutenticacao } from './auth-context';
+import { ErroLogin } from '../../shared/auth/auth-client';
+import { useAutenticacao } from '../../shared/auth/auth-context';
 
 const observarMensagemDeLogin = (atualizar: () => void) => {
   window.addEventListener('popstate', atualizar);

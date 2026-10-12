@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useAutenticacao } from './auth-context';
+import { useAutenticacao } from '../../shared/auth/auth-context';
 
 type Papel = 'PROPRIETARIO' | 'ADMINISTRADOR' | 'ADVOGADO' | 'ESTAGIARIO' | 'SECRETARIO';
 interface Membro { id: string; idUsuario: string; nome: string; email: string; papel: Papel; permissoes: string[]; estaAtivo: boolean; deveAlterarSenha: boolean; criadoEm: string; versao: number }

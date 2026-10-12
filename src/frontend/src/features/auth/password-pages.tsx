@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useAutenticacao } from './auth-context';
-import { navegar } from './routing';
+import { useAutenticacao } from '../../shared/auth/auth-context';
+import { navegar } from '../../routing';
 
 // Executado antes da montagem dos componentes e dos efeitos de autenticação.
 let tokenRecebido: string | null = null;
