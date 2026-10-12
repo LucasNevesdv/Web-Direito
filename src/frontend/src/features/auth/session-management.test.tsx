@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { ClienteAutenticacao } from './auth-client';
-import { ProvedorAutenticacao } from './auth-context';
+import { ClienteAutenticacao } from '../../shared/auth/auth-client';
+import { ProvedorAutenticacao } from '../../shared/auth/auth-context';
 import { PaginaSelecaoEscritorio, PaginaSessoes } from './session-pages';
-import { VerificacaoPeriodicaSessao, type RecursosVerificacao } from './infrastructure/session-polling';
+import { VerificacaoPeriodicaSessao, type RecursosVerificacao } from '../../shared/auth/infrastructure/session-polling';
 
 const IDENTIDADE = { usuario: { id: crypto.randomUUID(), nome: 'Ana', email: 'ana@example.test' }, escritorio: { id: crypto.randomUUID(), nome: 'Primeiro', papel: 'PROPRIETARIO' as const } };
 const OUTRO = { ...IDENTIDADE, escritorio: { ...IDENTIDADE.escritorio, id: crypto.randomUUID(), nome: 'Segundo' } };

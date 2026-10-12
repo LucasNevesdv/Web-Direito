@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useAutenticacao } from './auth-context';
-import type { EscritorioDisponivel } from './auth-client';
-import { navegar } from './routing';
+import { useAutenticacao } from '../../shared/auth/auth-context';
+import type { EscritorioDisponivel } from '../../shared/auth/auth-client';
+import { navegar } from '../../routing';
 
 const BOTAO = 'rounded bg-cyan-300 px-4 py-2 text-slate-950 disabled:opacity-50';
 

@@ -27,13 +27,17 @@ enum OfficeStatus {
 }
 
 model Office {
-  id          String       @id @db.Uuid
-  name        String       @db.VarChar(120)
-  status      OfficeStatus @default(ACTIVE)
-  createdAt   DateTime     @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime     @map("updated_at") @db.Timestamptz(3)
-  memberships Membership[]
-  sessions    Session[]
+  id            String             @id @db.Uuid
+  name          String             @db.VarChar(120)
+  status        OfficeStatus       @default(ACTIVE)
+  createdAt     DateTime           @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime           @map("updated_at") @db.Timestamptz(3)
+  memberships   Membership[]
+  sessions      Session[]
+  tasks         Task[]
+  deadlines     JudicialDeadline[]
+  notifications Notification[]
+  documents     Document[]
 
   @@map("offices")
 }
@@ -56,20 +60,35 @@ enum MembershipRole {
 }
 
 model User {
-  id                 String              @id @db.Uuid
-  name               String              @db.VarChar(120)
-  email              String              @unique @db.VarChar(254)
-  passwordHash       String              @map("password_hash") @db.Text
-  status             UserStatus          @default(ACTIVE)
-  createdAt          DateTime            @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime            @map("updated_at") @db.Timestamptz(3)
-  memberships        Membership[]
-  sessions           Session[]
-  passwordRecoveries PasswordRecovery[]
-  recoveryEmailJobs  RecoveryEmailJob[]
-  mustChangePassword Boolean             @default(false) @map("must_change_password")
-  teamChanges        MembershipHistory[]
-  officeSelections   OfficeSelection[]
+  id                   String                    @id @db.Uuid
+  name                 String                    @db.VarChar(120)
+  email                String                    @unique @db.VarChar(254)
+  passwordHash         String                    @map("password_hash") @db.Text
+  status               UserStatus                @default(ACTIVE)
+  createdAt            DateTime                  @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                  @map("updated_at") @db.Timestamptz(3)
+  memberships          Membership[]
+  sessions             Session[]
+  passwordRecoveries   PasswordRecovery[]
+  recoveryEmailJobs    RecoveryEmailJob[]
+  mustChangePassword   Boolean                   @default(false) @map("must_change_password")
+  teamChanges          MembershipHistory[]
+  officeSelections     OfficeSelection[]
+  tasksResponsible     Task[]                    @relation("TaskResponsible")
+  tasksReviewing       Task[]                    @relation("TaskReviewer")
+  tasksCreated         Task[]                    @relation("TaskCreator")
+  tasksCompleted       Task[]                    @relation("TaskCompletedBy")
+  checklistDone        TaskChecklistItem[]
+  taskChanges          TaskHistory[]
+  deadlinesResponsible JudicialDeadline[]        @relation("DeadlineResponsible")
+  deadlinesConfirmed   JudicialDeadline[]        @relation("DeadlineConfirmedBy")
+  deadlinesCompleted   JudicialDeadline[]        @relation("DeadlineCompletedBy")
+  deadlineChanges      JudicialDeadlineHistory[]
+  notifications        Notification[]
+  documentsCreated     Document[]                @relation("DocumentCreator")
+  documentsInactivated Document[]                @relation("DocumentInactivatedBy")
+  documentVersions     DocumentVersion[]
+  documentEvents       DocumentEvent[]
 
   @@map("users")
 }
@@ -197,4 +216,281 @@ model MembershipHistory {
 
   @@index([membershipId, createdAt])
   @@map("membership_history")
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  CANCELED
+
+  @@map("task_status")
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+
+  @@map("task_priority")
+}
+
+model Task {
+  id              String              @id @db.Uuid
+  officeId        String              @map("office_id") @db.Uuid
+  title           String              @db.VarChar(200)
+  description     String              @default("") @db.VarChar(4000)
+  status          TaskStatus          @default(PENDING)
+  priority        TaskPriority        @default(MEDIUM)
+  responsibleId   String              @map("responsible_id") @db.Uuid
+  reviewerId      String?             @map("reviewer_id") @db.Uuid
+  creatorId       String              @map("creator_id") @db.Uuid
+  internalDueDate DateTime?           @map("internal_due_date") @db.Date
+  clientId        String?             @map("client_id") @db.Uuid
+  caseId          String?             @map("case_id") @db.Uuid
+  processId       String?             @map("process_id") @db.Uuid
+  completedAt     DateTime?           @map("completed_at") @db.Timestamptz(3)
+  completedById   String?             @map("completed_by_id") @db.Uuid
+  completionNote  String?             @map("completion_note") @db.VarChar(2000)
+  version         Int                 @default(0)
+  createdAt       DateTime            @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @map("updated_at") @db.Timestamptz(3)
+  office          Office              @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  responsible     User                @relation("TaskResponsible", fields: [responsibleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reviewer        User?               @relation("TaskReviewer", fields: [reviewerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator         User                @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  completedBy     User?               @relation("TaskCompletedBy", fields: [completedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  checklist       TaskChecklistItem[]
+  history         TaskHistory[]
+  deadlines       JudicialDeadline[]
+  notifications   Notification[]
+
+  @@index([officeId, status, internalDueDate])
+  @@index([officeId, responsibleId, status])
+  @@map("tasks")
+}
+
+model TaskChecklistItem {
+  id        String    @id @db.Uuid
+  taskId    String    @map("task_id") @db.Uuid
+  title     String    @db.VarChar(200)
+  done      Boolean   @default(false)
+  doneAt    DateTime? @map("done_at") @db.Timestamptz(3)
+  doneById  String?   @map("done_by_id") @db.Uuid
+  position  Int
+  createdAt DateTime  @map("created_at") @db.Timestamptz(3)
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  doneBy    User?     @relation(fields: [doneById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([taskId, position])
+  @@map("task_checklist_items")
+}
+
+model TaskHistory {
+  id        String   @id @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  action    String   @db.VarChar(40)
+  previous  Json?
+  current   Json
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor     User     @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([taskId, createdAt])
+  @@map("task_history")
+}
+
+enum DeadlineSource {
+  INTIMATION
+  PUBLICATION
+  SUMMONS
+  ORDER
+  HEARING
+  OTHER
+
+  @@map("deadline_source")
+}
+
+enum DeadlineStatus {
+  PENDING
+  FULFILLED
+  CANCELED
+
+  @@map("deadline_status")
+}
+
+model JudicialDeadline {
+  id             String                    @id @db.Uuid
+  officeId       String                    @map("office_id") @db.Uuid
+  description    String                    @db.VarChar(500)
+  dueDate        DateTime                  @map("due_date") @db.Date
+  source         DeadlineSource
+  sourceDetails  String                    @default("") @map("source_details") @db.VarChar(500)
+  status         DeadlineStatus            @default(PENDING)
+  responsibleId  String                    @map("responsible_id") @db.Uuid
+  confirmedById  String                    @map("confirmed_by_id") @db.Uuid
+  confirmedAt    DateTime                  @map("confirmed_at") @db.Timestamptz(3)
+  taskId         String?                   @map("task_id") @db.Uuid
+  clientId       String?                   @map("client_id") @db.Uuid
+  caseId         String?                   @map("case_id") @db.Uuid
+  processId      String?                   @map("process_id") @db.Uuid
+  completedAt    DateTime?                 @map("completed_at") @db.Timestamptz(3)
+  completedById  String?                   @map("completed_by_id") @db.Uuid
+  completionNote String?                   @map("completion_note") @db.VarChar(2000)
+  version        Int                       @default(0)
+  createdAt      DateTime                  @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                  @map("updated_at") @db.Timestamptz(3)
+  office         Office                    @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  responsible    User                      @relation("DeadlineResponsible", fields: [responsibleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  confirmedBy    User                      @relation("DeadlineConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  completedBy    User?                     @relation("DeadlineCompletedBy", fields: [completedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  task           Task?                     @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  history        JudicialDeadlineHistory[]
+  notifications  Notification[]
+
+  @@index([officeId, status, dueDate])
+  @@index([taskId])
+  @@map("judicial_deadlines")
+}
+
+model JudicialDeadlineHistory {
+  id         String           @id @db.Uuid
+  deadlineId String           @map("deadline_id") @db.Uuid
+  actorId    String           @map("actor_id") @db.Uuid
+  action     String           @db.VarChar(40)
+  previous   Json?
+  current    Json
+  createdAt  DateTime         @map("created_at") @db.Timestamptz(3)
+  deadline   JudicialDeadline @relation(fields: [deadlineId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor      User             @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([deadlineId, createdAt])
+  @@map("judicial_deadline_history")
+}
+
+enum NotificationKind {
+  TASK_DUE_SOON
+  TASK_OVERDUE
+  DEADLINE_CRITICAL
+  DEADLINE_OVERDUE
+
+  @@map("notification_kind")
+}
+
+enum NotificationEmailStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+
+  @@map("notification_email_status")
+}
+
+model Notification {
+  id            String                  @id @db.Uuid
+  officeId      String                  @map("office_id") @db.Uuid
+  userId        String                  @map("user_id") @db.Uuid
+  kind          NotificationKind
+  escalated     Boolean                 @default(false)
+  taskId        String?                 @map("task_id") @db.Uuid
+  deadlineId    String?                 @map("deadline_id") @db.Uuid
+  targetId      String                  @map("target_id") @db.Uuid
+  referenceDate DateTime                @map("reference_date") @db.Date
+  title         String                  @db.VarChar(300)
+  dueDate       DateTime                @map("due_date") @db.Date
+  readAt        DateTime?               @map("read_at") @db.Timestamptz(3)
+  emailStatus   NotificationEmailStatus @default(PENDING) @map("email_status")
+  emailAttempts Int                     @default(0) @map("email_attempts")
+  nextAttemptAt DateTime                @map("next_attempt_at") @db.Timestamptz(3)
+  lockedUntil   DateTime?               @map("locked_until") @db.Timestamptz(3)
+  leaseId       String?                 @map("lease_id") @db.Uuid
+  sentAt        DateTime?               @map("sent_at") @db.Timestamptz(3)
+  createdAt     DateTime                @map("created_at") @db.Timestamptz(3)
+  office        Office                  @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user          User                    @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  task          Task?                   @relation(fields: [taskId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  deadline      JudicialDeadline?       @relation(fields: [deadlineId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([userId, kind, targetId, referenceDate])
+  @@index([officeId, userId, readAt, createdAt])
+  @@index([emailStatus, nextAttemptAt])
+  @@index([taskId])
+  @@index([deadlineId])
+  @@map("notifications")
+}
+
+enum DocumentCategory {
+  CONTRACT
+  POWER_OF_ATTORNEY
+  PETITION
+  DECISION
+  EVIDENCE
+  PERSONAL_DOCUMENT
+  RECEIPT
+  OTHER
+
+  @@map("document_category")
+}
+
+model Document {
+  id              String            @id @db.Uuid
+  officeId        String            @map("office_id") @db.Uuid
+  name            String            @db.VarChar(200)
+  description     String            @default("") @db.VarChar(2000)
+  category        DocumentCategory
+  confidential    Boolean           @default(false)
+  active          Boolean           @default(true)
+  clientId        String?           @map("client_id") @db.Uuid
+  caseId          String?           @map("case_id") @db.Uuid
+  processId       String?           @map("process_id") @db.Uuid
+  currentVersion  Int               @map("current_version")
+  creatorId       String            @map("creator_id") @db.Uuid
+  inactivatedAt   DateTime?         @map("inactivated_at") @db.Timestamptz(3)
+  inactivatedById String?           @map("inactivated_by_id") @db.Uuid
+  version         Int               @default(0)
+  createdAt       DateTime          @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime          @map("updated_at") @db.Timestamptz(3)
+  office          Office            @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator         User              @relation("DocumentCreator", fields: [creatorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  inactivatedBy   User?             @relation("DocumentInactivatedBy", fields: [inactivatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  versions        DocumentVersion[]
+  events          DocumentEvent[]
+
+  @@index([officeId, active, category, updatedAt])
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id           String   @id @db.Uuid
+  documentId   String   @map("document_id") @db.Uuid
+  number       Int
+  storageKey   String   @unique @map("storage_key") @db.VarChar(300)
+  originalName String   @map("original_name") @db.VarChar(255)
+  contentType  String   @map("content_type") @db.VarChar(120)
+  sizeBytes    BigInt   @map("size_bytes")
+  sha256       String   @db.Char(64)
+  uploaderId   String   @map("uploader_id") @db.Uuid
+  createdAt    DateTime @map("created_at") @db.Timestamptz(3)
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  uploader     User     @relation(fields: [uploaderId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([documentId, number])
+  @@map("document_versions")
+}
+
+model DocumentEvent {
+  id            String   @id @db.Uuid
+  documentId    String   @map("document_id") @db.Uuid
+  actorId       String   @map("actor_id") @db.Uuid
+  action        String   @db.VarChar(40)
+  versionNumber Int?     @map("version_number")
+  details       Json?
+  createdAt     DateTime @map("created_at") @db.Timestamptz(3)
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor         User     @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([documentId, createdAt])
+  @@map("document_events")
 }

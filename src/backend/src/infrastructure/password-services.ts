@@ -7,8 +7,7 @@ import { RepositorioTrabalhosRecuperacaoPrisma } from './prisma/prisma-recovery-
 import { EnvioRecuperacaoDeSenha } from '../application/passwords/deliver-password-recovery.js';
 import { TokensRecuperacaoCriptograficos } from './security/crypto-password-recovery.js';
 import { ProcessamentoRecuperacaoDeSenha } from './security/password-recovery-worker.js';
-import { EnvioEmailResend } from './email/resend-email.js';
-import { EnvioEmailSmtp } from './email/smtp-email.js';
+import { criarEnvioEmail } from './email/email-provider.js';
 import { SolicitacaoRecuperacaoDeSenha } from '../application/passwords/request-password-recovery.js';
 import { AlteracaoDeSenhaAutenticada, RedefinicaoDeSenha } from '../application/passwords/change-password.js';
 import { TokensAcessoJose } from './security/jose-access-tokens.js';
@@ -18,10 +17,7 @@ export function comporServicosDeSenhas(prisma: PrismaClient, ambiente: Ambiente,
   const tokens = new TokensRecuperacaoCriptograficos();
   const trabalhos = new RepositorioTrabalhosRecuperacaoPrisma(prisma);
   const registrarEvento = (evento: string) => console.info(JSON.stringify({ componente: 'envio_recuperacao', evento }));
-  const envioEmail = ambiente.PROVEDOR_EMAIL === 'resend'
-    ? new EnvioEmailResend(ambiente.RESEND_API_KEY!, ambiente.EMAIL_REMETENTE)
-    : new EnvioEmailSmtp(ambiente.EMAIL_REMETENTE, { host: ambiente.SMTP_HOST, port: ambiente.SMTP_PORT, secure: ambiente.SMTP_SEGURO,
-      ...(ambiente.SMTP_USUARIO ? { auth: { user: ambiente.SMTP_USUARIO, pass: ambiente.SMTP_SENHA! } } : {}) });
+  const envioEmail = criarEnvioEmail(ambiente);
   const envio = new EnvioRecuperacaoDeSenha(trabalhos, tokens, envioEmail, ambiente.URL_FRONTEND, {
     maximoTentativas: ambiente.EMAIL_FILA_MAX_TENTATIVAS, atrasoInicialSegundos: ambiente.EMAIL_FILA_ATRASO_INICIAL_SEGUNDOS,
     atrasoMaximoSegundos: ambiente.EMAIL_FILA_ATRASO_MAXIMO_SEGUNDOS,

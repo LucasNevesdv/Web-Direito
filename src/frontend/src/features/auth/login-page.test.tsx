@@ -2,9 +2,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Aplicacao } from './app';
-import { ClienteAutenticacao } from './auth-client';
-import { ProvedorAutenticacao } from './auth-context';
+import { Aplicacao } from '../../app';
+import { ClienteAutenticacao } from '../../shared/auth/auth-client';
+import { ProvedorAutenticacao } from '../../shared/auth/auth-context';
 let cliente: ClienteAutenticacao;
 const renderizarLogin = () => render(<ProvedorAutenticacao cliente={cliente}><PaginaLogin /></ProvedorAutenticacao>);
 import { PaginaLogin } from './login-page';

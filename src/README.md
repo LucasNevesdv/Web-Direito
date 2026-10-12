@@ -357,3 +357,34 @@ frontend, backend e PostgreSQL reais, três abas, isolamento por IDs conhecidos,
 resposta atrasada, seleção concorrente, revogação e limpeza dos próprios dados.
 O isolamento comprovado cobre os módulos existentes; novos módulos jurídicos
 devem cumprir as mesmas fronteiras e testes antes de serem liberados.
+
+## Tarefas, prazos judiciais e documentos — RF-018, RF-019 e RF-020
+
+Páginas: `/painel` (prazos críticos, minhas tarefas e lembretes), `/tarefas`, `/prazos` e `/documentos`.
+Regras em [business-rules.md](docs/business-rules.md) (RN-061 a RN-073); detalhamento RF-049 a RF-077 em
+[requirements.md](docs/requirements.md).
+
+Aplique a migration `20261011120000_tasks_deadlines_documents` com `prisma migrate deploy`. Ela cria tabelas,
+restrições de vínculo único e triggers que tornam históricos, eventos e versões de documentos somente inclusão.
+
+Lembretes usam o mesmo provedor de e-mail da recuperação de senha (`PROVEDOR_EMAIL`) e rodam em todas as
+instâncias sem duplicar avisos. Configure `FUSO_HORARIO`, `PRAZO_CRITICO_DIAS` e `LEMBRETES_INTERVALO_MS`.
+
+Documentos exigem armazenamento S3 compatível; sem `S3_BUCKET`, os envios respondem 503. MinIO local:
+
+```bash
+docker run -d --name webdireito-minio -p 9000:9000 -p 9001:9001 -e MINIO_ROOT_USER=minio_local -e MINIO_ROOT_PASSWORD=defina_um_segredo_local minio/minio server /data --console-address :9001
+```
+
+Crie o bucket no console (`http://127.0.0.1:9001`) e configure `S3_ENDPOINT=http://127.0.0.1:9000`,
+`S3_BUCKET`, `S3_ID_ACESSO` e `S3_SEGREDO_ACESSO` no `.env` do backend, nunca no frontend.
+
+Vínculos com cliente, caso ou processo já existem na API, no banco e na interface, mas só são aceitos quando
+esses módulos registrarem seus resolvedores em `backend/src/infrastructure/prisma/prisma-business-links.ts`
+(consulta por ID e escritório) e adicionarem as chaves estrangeiras de `client_id`, `case_id` e `process_id`.
+
+Verificação real em banco **descartável** (os históricos não podem ser apagados):
+
+```bash
+VERIFICACAO_BANCO_DESCARTAVEL=true pnpm --filter ./backend run verify:tasks-documents
+```

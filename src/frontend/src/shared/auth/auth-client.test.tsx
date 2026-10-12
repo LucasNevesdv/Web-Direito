@@ -3,8 +3,8 @@ import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ClienteAutenticacao } from './auth-client';
-import { navegar } from './routing';
-import { Aplicacao } from './app';
+import { navegar } from '../../routing';
+import { Aplicacao } from '../../app';
 
 const IDENTIDADE = { usuario: { id: 'u', nome: 'Ana', email: 'ana@example.test' }, escritorio: { id: 'o', nome: 'Office', papel: 'PROPRIETARIO' } };
 const criarRespostaHttp = (situacao = 200, token = 'access-1') => new Response(situacao === 204 ? null : JSON.stringify({ ...IDENTIDADE, tokenAcesso: token, expiraEmSegundos: 900 }), { status: situacao });

@@ -1,6 +1,6 @@
 import { useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
-import { ErroLogin } from './auth-client';
-import { useAutenticacao } from './auth-context';
+import { ErroLogin } from '../../shared/auth/auth-client';
+import { useAutenticacao } from '../../shared/auth/auth-context';
 
 const observarMensagemDeLogin = (atualizar: () => void) => {
   window.addEventListener('popstate', atualizar);
@@ -66,6 +66,10 @@ export function PaginaLogin() {
             <p>Escritório: <strong>{identidade.escritorio.nome}</strong></p>
             <p>Papel: <strong>{identidade.escritorio.papel}</strong></p>
             <p className="text-sm leading-6 text-slate-300">Esta é uma área autenticada provisória.</p>
+            <a href="/painel" className="block text-cyan-300 underline">Painel e prazos críticos</a>
+            <a href="/tarefas" className="block text-cyan-300 underline">Tarefas</a>
+            <a href="/prazos" className="block text-cyan-300 underline">Prazos judiciais</a>
+            <a href="/documentos" className="block text-cyan-300 underline">Documentos</a>
             <a href="/seguranca" className="block text-cyan-300 underline">Segurança e alteração de senha</a>
             <a href="/equipe" className="block text-cyan-300 underline">Equipe</a>
             <a href="/selecionar-escritorio" className="block text-cyan-300 underline">Selecionar ou trocar escritório</a>

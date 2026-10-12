@@ -87,6 +87,24 @@ Regras adicionais confirmadas para RF-007/RF-008:
 | RN-059 | Conta, senha, recuperação, próprios dispositivos e lista dos vínculos são globais por identidade e não por escritório. Onboarding é público e cria novo escritório. Workers de e-mail e limites são infraestrutura global protegida por lease/HMAC; nenhuma exceção autoriza consultar negócio de outro escritório. |
 | RN-060 | Polling padrão de 30 segundos é executado pela aba visível que detém Web Lock, separado das mutações de autenticação; resultados são propagados por BroadcastChannel. Foco solicita revalidação imediata. Sem Web Locks, BroadcastChannel coalesce solicitações de foco entre abas; sem ambos, a revalidação ocorre no foco e é limitada por intervalo, sem polling recorrente. |
 
+## Tarefas, prazos judiciais e documentos — RF-018/RF-019/RF-020 (RF-049 a RF-077)
+
+| ID | Regra |
+| --- | --- |
+| RN-061 | Tarefa e prazo judicial são entidades distintas. A tarefa tem prazo interno opcional; o prazo judicial tem data limite própria, origem (intimação, publicação, citação, despacho, audiência ou outra com descrição) e pode apontar para uma tarefa do mesmo escritório. |
+| RN-062 | Datas de prazo são datas civis, sem horário. "Hoje", "atrasada" e "futura" usam o fuso `FUSO_HORARIO` (padrão America/Sao_Paulo). O sistema não calcula dias úteis, feriados ou suspensões: o advogado informa a data e confirma que a conferiu; autor e momento da confirmação são gravados e renovados a cada alteração. |
+| RN-063 | Somente proprietário, administrador e advogado registram, alteram, cancelam ou reabrem prazos judiciais. O responsável pelo prazo também pode marcá-lo como cumprido. Todos os membros ativos consultam. |
+| RN-064 | Situações da tarefa: PENDENTE ⇄ EM_ANDAMENTO; ambas → CONCLUÍDA ou CANCELADA; CONCLUÍDA/CANCELADA → PENDENTE (reabertura). Alteram a tarefa: criador, responsável, revisor, proprietário e administrador. Cancelar: criador, proprietário ou administrador. Tarefa encerrada não é editada nem tem checklist alterado até ser reaberta. |
+| RN-065 | Concluir registra data, autor e observação opcional. Reabrir limpa a conclusão da tarefa, mas o histórico conserva o evento de conclusão. Históricos de tarefas e prazos, eventos e versões de documentos são somente inclusão, garantidos por trigger no PostgreSQL. |
+| RN-066 | Responsável e revisor devem ser membros ativos do escritório e diferentes entre si. Toda alteração usa `versao` para detectar concorrência (409). |
+| RN-067 | Tarefa, prazo e documento podem ter no máximo um vínculo: cliente, caso ou processo do mesmo escritório. Até os módulos de clientes, casos e processos existirem, nenhum vínculo é aceito (422) e a pesquisa de vínculos retorna vazio. |
+| RN-068 | Lembretes internos e por e-mail: o responsável recebe aviso de tarefa no dia anterior e no dia do prazo interno, e uma vez no dia seguinte ao vencimento. Prazos judiciais pendentes, vencidos ou até `PRAZO_CRITICO_DIAS` (padrão 3) dias à frente são críticos: aviso diário ao responsável, escalado aos proprietários e administradores ativos. No máximo um aviso por destinatário, tipo, alvo e dia, mesmo com várias instâncias. |
+| RN-069 | Documentos: binários ficam em armazenamento S3 compatível; o PostgreSQL guarda somente metadados, chave do objeto, tamanho, tipo, SHA-256 e autor. Tipos aceitos: pdf, doc, docx, xls, xlsx, odt, ods, rtf, txt, jpg, jpeg e png, com o tipo de conteúdo derivado da extensão. Limite `DOCUMENTO_TAMANHO_MAXIMO_MB` (padrão 25). Download sempre como anexo, com `nosniff` e sem cache. |
+| RN-070 | Substituir um arquivo cria uma nova versão numerada; versões anteriores continuam disponíveis para download. Inativar não apaga arquivos, versões nem eventos; documento inativo não recebe nova versão nem alteração de dados até ser reativado. Exclusão definitiva depende de P-008. |
+| RN-071 | Documento confidencial é visível somente a proprietário, administrador, advogado e a quem o enviou; para os demais, é tratado como inexistente (404). Somente esses papéis marcam confidencialidade. Alterar dados ou enviar versão: papéis jurídicos ou quem enviou. Inativar/reativar: proprietário, administrador ou quem enviou. |
+| RN-072 | Visualização dos detalhes, download, envio, nova versão, alteração de dados, inativação e reativação são registrados com autor, versão e momento. |
+| RN-073 | O filtro por escritório é o escritório ativo da sessão. Ver tarefas de outro escritório exige trocar de contexto (RF-013); não há listagem entre escritórios. |
+
 ## Decisões pendentes
 
 Os IDs abaixo registram perguntas em aberto, não regras aprovadas. Devem ser
@@ -99,8 +117,8 @@ resolvidos com o responsável pelo produto antes da conclusão da etapa afetada.
 | P-003 | Como implementar verificação de e-mail e dois fatores? Recuperação e alteração de senha estão entregues em RF-007/RF-008. Login, rotação, reutilização, logout, `/me`, coordenação entre abas compatíveis e limites compartilhados estão entregues. O cadastro não autentica automaticamente. | Evolução de autenticação e segurança após RF-004/RF-005/RF-006 |
 | P-004 | Quais campos de cliente são obrigatórios e como detectar duplicidades? Clientes inativos poderão receber novos vínculos ou ser reativados? | RF-015 |
 | P-005 | Quais campos e estados definem casos e processos? Quais são as relações permitidas entre clientes, casos e processos e seus critérios de encerramento? | RF-016, RF-017 |
-| P-006 | Quais estados, responsáveis e regras de conclusão se aplicam a tarefas? Como registrar data, horário e fuso de prazos e agenda? Serão necessários recorrência, lembretes ou justificativa de alteração? | RF-018, RF-019, RF-022 |
-| P-007 | Onde serão armazenados documentos? Quais tipos, tamanhos, versões e regras de substituição serão aceitos? Como editar e organizar anotações? | RF-020, RF-021 |
+| P-006 | Tarefas e prazos estão definidos em RN-061 a RN-068. Para a agenda: haverá horário, recorrência e lembretes próprios de compromissos? Será exigida justificativa ao alterar a data de um prazo judicial? | RF-019, RF-022 |
+| P-007 | Documentos estão definidos em RN-069 a RN-072. Como editar e organizar anotações? Haverá verificação de malware nos arquivos enviados? | RF-020, RF-021 |
 | P-008 | Quais operações exigem auditoria e justificativa? Quando usar inativação, arquivamento ou exclusão? Quais regras de restauração, retenção e manutenção se aplicam a históricos, arquivos e registros de auditoria? | RF-015, RF-018 a RF-021, RF-024 |
 | P-009 | Quais indicadores, filtros e períodos compõem o dashboard e como cada valor é calculado a partir dos registros? | RF-023 |
 | P-010 | Quais mecanismos adicionais de proteção avançada contra abuso serão aplicados ao cadastro público? Rate limit compartilhado por IP foi entregue; validação, hash, limite de corpo e esse controle inicial não representam proteção completa contra abuso distribuído. | RF-001; RNF-002 |

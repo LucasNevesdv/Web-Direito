@@ -40,6 +40,7 @@ const SIMULACOES = vi.hoisted(() => {
     limitador: {},
     limpeza: { parar: vi.fn(async () => {}) },
     processamentoSenhas: { iniciarProcessamento: vi.fn(), parar: vi.fn(async () => {}) },
+    trabalho: { tarefas: {}, documentos: { gestao: {}, limiteBytes: 1 }, processamento: { iniciar: vi.fn(), parar: vi.fn(async () => {}) } },
     comporServicosDeAutenticacao: vi.fn(async () => autenticacao),
     RepositorioCadastroEscritorioPrisma: vi.fn(function () { return repositorio; }),
     ProtecaoDeSenhasArgon2: vi.fn(function () { return protecaoDeSenhas; }),
@@ -53,6 +54,7 @@ const SIMULACOES = vi.hoisted(() => {
 
 vi.mock('../src/app.js', () => ({ criarAplicacao: SIMULACOES.criarAplicacao }));
 vi.mock('../src/infrastructure/password-services.js', () => ({ comporServicosDeSenhas: () => ({ servicos: {}, processamento: SIMULACOES.processamentoSenhas }) }));
+vi.mock('../src/infrastructure/work-services.js', () => ({ comporServicosDeTrabalho: () => SIMULACOES.trabalho }));
 vi.mock('../src/authentication.js', () => ({ comporServicosDeAutenticacao: SIMULACOES.comporServicosDeAutenticacao }));
 vi.mock('../src/rate-limiting.js', () => ({ comporLimitacaoDeRequisicoes: () => ({ limitador: SIMULACOES.limitador, iniciarLimpeza: () => SIMULACOES.limpeza }) }));
 vi.mock('../src/database.js', () => ({
@@ -127,7 +129,8 @@ describe("inicialização do backend", () => {
       SIMULACOES.repositorio, SIMULACOES.protecaoDeSenhas,
     );
     expect(SIMULACOES.comporServicosDeAutenticacao).toHaveBeenCalledWith(SIMULACOES.prisma, SIMULACOES.ambiente, SIMULACOES.protecaoDeSenhas);
-    expect(SIMULACOES.criarAplicacao).toHaveBeenCalledWith(SIMULACOES.verificador, SIMULACOES.cadastro, SIMULACOES.autenticacao, { limitador: SIMULACOES.limitador, proxiesConfiaveis: undefined }, {}, expect.objectContaining({ cadastrar: expect.any(Function), definirSituacao: expect.any(Function) }));
+    expect(SIMULACOES.criarAplicacao).toHaveBeenCalledWith(SIMULACOES.verificador, SIMULACOES.cadastro, SIMULACOES.autenticacao, { limitador: SIMULACOES.limitador, proxiesConfiaveis: undefined }, {}, expect.objectContaining({ cadastrar: expect.any(Function), definirSituacao: expect.any(Function) }), SIMULACOES.trabalho);
+    expect(SIMULACOES.trabalho.processamento.iniciar).toHaveBeenCalledOnce();
     expect(SIMULACOES.aplicacao.listen).toHaveBeenCalledWith({
       host: SIMULACOES.ambiente.HOST,
       port: SIMULACOES.ambiente.PORT,

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClienteAutenticacao } from './auth-client';
-import { ProvedorAutenticacao } from './auth-context';
+import { ClienteAutenticacao } from '../../shared/auth/auth-client';
+import { ProvedorAutenticacao } from '../../shared/auth/auth-context';
 import { PaginaSenhas } from './password-pages';
 const REQUISICAO = vi.fn<typeof fetch>();
 let cliente: ClienteAutenticacao;

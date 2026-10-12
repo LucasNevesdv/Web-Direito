@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClienteAutenticacao } from './auth-client';
-import { ProvedorAutenticacao } from './auth-context';
+import { ClienteAutenticacao } from '../../shared/auth/auth-client';
+import { ProvedorAutenticacao } from '../../shared/auth/auth-context';
 import { PaginaEquipe } from './team-page';
-import { Aplicacao } from './app';
+import { Aplicacao } from '../../app';
 
 const requisicao = vi.fn<typeof fetch>();
 const permissoes = ['EQUIPE_VISUALIZAR', 'EQUIPE_CADASTRAR_USUARIO', 'EQUIPE_ALTERAR_USUARIO', 'EQUIPE_DEFINIR_PERMISSOES', 'EQUIPE_ATIVAR_INATIVAR_USUARIO'];

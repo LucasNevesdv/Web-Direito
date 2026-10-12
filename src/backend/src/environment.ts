@@ -35,7 +35,21 @@ function possuiFormatoDeHostValido(hostInformado: string): boolean {
   );
 }
 
+function fusoHorarioValido(valor: string): boolean {
+  try { new Intl.DateTimeFormat('en-CA', { timeZone: valor }); return true; } catch { return false; }
+}
+
 const ESQUEMA_AMBIENTE = z.object({
+  FUSO_HORARIO: z.string().refine(fusoHorarioValido).default('America/Sao_Paulo'),
+  PRAZO_CRITICO_DIAS: z.coerce.number().int().min(0).max(30).default(3),
+  LEMBRETES_INTERVALO_MS: z.coerce.number().int().min(10000).max(86400000).default(300000),
+  DOCUMENTO_TAMANHO_MAXIMO_MB: z.coerce.number().int().min(1).max(500).default(25),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGIAO: z.string().trim().min(1).max(64).default('us-east-1'),
+  S3_BUCKET: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/).optional(),
+  S3_ID_ACESSO: z.string().min(1).optional(),
+  S3_SEGREDO_ACESSO: z.string().min(1).optional(),
+  S3_FORCAR_PATH_STYLE: z.enum(['true', 'false']).default('true').transform((valor) => valor === 'true'),
   EMAIL_FILA_INTERVALO_MS: z.coerce.number().int().min(100).max(3600000).default(1000),
   EMAIL_FILA_LEASE_SEGUNDOS: z.coerce.number().int().min(30).max(300).default(60),
   EMAIL_FILA_MAX_TENTATIVAS: z.coerce.number().int().min(1).max(20).default(5),
@@ -100,6 +114,7 @@ const ESQUEMA_AMBIENTE = z.object({
   if (valor.EMAIL_FILA_ATRASO_MAXIMO_SEGUNDOS < valor.EMAIL_FILA_ATRASO_INICIAL_SEGUNDOS) invalidar('EMAIL_FILA_ATRASO_MAXIMO_SEGUNDOS');
   if (valor.PROVEDOR_EMAIL === 'resend' && !valor.RESEND_API_KEY?.trim()) invalidar('RESEND_API_KEY');
   if (!!valor.SMTP_USUARIO !== !!valor.SMTP_SENHA) invalidar('SMTP_USUARIO/SMTP_SENHA');
+  if (valor.S3_BUCKET && (!valor.S3_ID_ACESSO || !valor.S3_SEGREDO_ACESSO)) invalidar('S3_ID_ACESSO/S3_SEGREDO_ACESSO');
   if (valor.NODE_ENV === 'production') {
     if (!valor.URL_FRONTEND.startsWith('https://')) invalidar('URL_FRONTEND');
     if (valor.EMAIL_REMETENTE.includes('@webdireito.local')) invalidar('EMAIL_REMETENTE');
