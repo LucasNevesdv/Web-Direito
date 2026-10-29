@@ -3,6 +3,7 @@ import type { DadosTokenAcesso } from '../../src/application/authentication/auth
 import type {
   ClienteDetalheDto,
   ClienteResumoDto,
+  ContatoClienteDto,
   FiltroClientes,
   IndicioDuplicidadeCliente,
   OperacoesClientes,
@@ -185,36 +186,55 @@ export class RepositorioClientesEmMemoria implements RepositorioClientes {
           if (c.idEscritorio !== contexto.idEscritorioAtivo) return false;
           if (entrada.ignorarIdCliente && c.id === entrada.ignorarIdCliente) return false;
 
-          const docIgual = c.documento === digitosDoc;
-          const nomeIgual = c.nome.toLowerCase() === nomeNorm;
-          const emailIgual = !!(entrada.email && c.email && c.email.toLowerCase() === entrada.email.toLowerCase());
-          const telIgual = !!(digitosTel && c.telefone && c.telefone === digitosTel);
+          const docIgual = digitosDoc.length > 0 && c.documento === digitosDoc;
+          const nomeIgual =
+            nomeNorm.length > 0 &&
+            (c.nome.toLowerCase() === nomeNorm ||
+              (c.nomeSocial && c.nomeSocial.toLowerCase() === nomeNorm));
+          const emailIgual = !!(
+            entrada.email &&
+            c.email &&
+            c.email.toLowerCase() === entrada.email.trim().toLowerCase()
+          );
+          const telIgual = !!(digitosTel && digitosTel.length > 0 && c.telefone && c.telefone === digitosTel);
 
           return docIgual || nomeIgual || emailIgual || telIgual;
         });
 
-        return candidatos.map((c) => {
-          const motivos: IndicioDuplicidadeCliente['motivos'] = [];
-          if (c.documento === digitosDoc) motivos.push('DOCUMENTO_IDENTICO');
-          if (c.nome.toLowerCase() === nomeNorm) motivos.push('NOME_IDENTICO');
-          if (entrada.email && c.email && c.email.toLowerCase() === entrada.email.toLowerCase()) {
-            motivos.push('EMAIL_IDENTICO');
-          }
-          if (digitosTel && c.telefone && c.telefone === digitosTel) {
-            motivos.push('TELEFONE_IDENTICO');
-          }
-          return {
-            id: c.id,
-            nome: c.nome,
-            nomeSocial: c.nomeSocial,
-            tipoPessoa: c.tipoPessoa,
-            documentoMascarado: c.documento.slice(0, 3) + '***',
-            email: c.email,
-            telefone: c.telefone,
-            situacao: c.situacao,
-            motivos,
-          };
-        });
+        return candidatos
+          .map((c) => {
+            const motivos: IndicioDuplicidadeCliente['motivos'] = [];
+            if (digitosDoc.length > 0 && c.documento === digitosDoc) motivos.push('DOCUMENTO_IDENTICO');
+            if (
+              nomeNorm.length > 0 &&
+              (c.nome.toLowerCase() === nomeNorm ||
+                (c.nomeSocial && c.nomeSocial.toLowerCase() === nomeNorm))
+            ) {
+              motivos.push('NOME_IDENTICO');
+            }
+            if (
+              entrada.email &&
+              c.email &&
+              c.email.toLowerCase() === entrada.email.trim().toLowerCase()
+            ) {
+              motivos.push('EMAIL_IDENTICO');
+            }
+            if (digitosTel && digitosTel.length > 0 && c.telefone && c.telefone === digitosTel) {
+              motivos.push('TELEFONE_IDENTICO');
+            }
+            return {
+              id: c.id,
+              nome: c.nome,
+              nomeSocial: c.nomeSocial,
+              tipoPessoa: c.tipoPessoa,
+              documentoMascarado: c.documento.slice(0, 3) + '***',
+              email: c.email,
+              telefone: c.telefone,
+              situacao: c.situacao,
+              motivos,
+            };
+          })
+          .filter((c) => c.motivos.length > 0);
       },
 
       validarVinculoResponsavelNoEscritorio: async (idVinculoResponsavel: string) => {
@@ -349,6 +369,139 @@ export class RepositorioClientesEmMemoria implements RepositorioClientes {
         });
 
         return buscarClientePorId(anterior.id);
+      },
+
+      adicionarContatoCliente: async (contato: ContatoCliente) => {
+        const cliente = this.clientes.find(
+          (c) => c.id === contato.idCliente && c.idEscritorio === contexto.idEscritorioAtivo,
+        );
+        if (!cliente) throw new ErroCliente('NAO_ENCONTRADO', 404);
+
+        const novoContato: ContatoArmazenado = {
+          id: contato.id,
+          idEscritorio: contexto.idEscritorioAtivo,
+          idCliente: contato.idCliente,
+          nome: contato.nome,
+          cargoOuRelacao: contato.cargoOuRelacao,
+          email: contato.email,
+          telefone: contato.telefone,
+          observacao: contato.observacao,
+          criadoEm: contato.criadoEm,
+          atualizadoEm: contato.atualizadoEm,
+        };
+        this.contatos.push(novoContato);
+
+        this.eventos.push({
+          id: randomUUID(),
+          idEscritorio: contexto.idEscritorioAtivo,
+          idCliente: contato.idCliente,
+          idAutor: contexto.idUsuario,
+          acao: 'CONTATO_ADICIONADO',
+          anterior: null,
+          atual: {
+            id: contato.id,
+            nome: contato.nome,
+            cargoOuRelacao: contato.cargoOuRelacao,
+            email: contato.email,
+            telefone: contato.telefone,
+            observacao: contato.observacao,
+          },
+          criadoEm: new Date(),
+        });
+
+        return { ...novoContato };
+      },
+
+      atualizarContatoCliente: async (anterior: ContatoClienteDto, atualizado: ContatoCliente) => {
+        const cliente = this.clientes.find(
+          (c) => c.id === atualizado.idCliente && c.idEscritorio === contexto.idEscritorioAtivo,
+        );
+        if (!cliente) throw new ErroCliente('NAO_ENCONTRADO', 404);
+
+        const idx = this.contatos.findIndex(
+          (ct) =>
+            ct.id === atualizado.id &&
+            ct.idCliente === atualizado.idCliente &&
+            ct.idEscritorio === contexto.idEscritorioAtivo,
+        );
+        if (idx === -1) throw new ErroCliente('NAO_ENCONTRADO', 404);
+
+        const ctAtualizado: ContatoArmazenado = {
+          ...this.contatos[idx]!,
+          nome: atualizado.nome,
+          cargoOuRelacao: atualizado.cargoOuRelacao,
+          email: atualizado.email,
+          telefone: atualizado.telefone,
+          observacao: atualizado.observacao,
+          atualizadoEm: new Date(),
+        };
+        this.contatos[idx] = ctAtualizado;
+
+        this.eventos.push({
+          id: randomUUID(),
+          idEscritorio: contexto.idEscritorioAtivo,
+          idCliente: atualizado.idCliente,
+          idAutor: contexto.idUsuario,
+          acao: 'CONTATO_ATUALIZADO',
+          anterior: {
+            id: anterior.id,
+            nome: anterior.nome,
+            cargoOuRelacao: anterior.cargoOuRelacao,
+            email: anterior.email,
+            telefone: anterior.telefone,
+            observacao: anterior.observacao,
+          },
+          atual: {
+            id: atualizado.id,
+            nome: atualizado.nome,
+            cargoOuRelacao: atualizado.cargoOuRelacao,
+            email: atualizado.email,
+            telefone: atualizado.telefone,
+            observacao: atualizado.observacao,
+          },
+          criadoEm: new Date(),
+        });
+
+        return { ...ctAtualizado };
+      },
+
+      removerContatoCliente: async (idCliente: string, idContato: string) => {
+        const cliente = this.clientes.find(
+          (c) => c.id === idCliente && c.idEscritorio === contexto.idEscritorioAtivo,
+        );
+        if (!cliente) throw new ErroCliente('NAO_ENCONTRADO', 404);
+
+        const idx = this.contatos.findIndex(
+          (ct) =>
+            ct.id === idContato &&
+            ct.idCliente === idCliente &&
+            ct.idEscritorio === contexto.idEscritorioAtivo,
+        );
+        if (idx === -1) throw new ErroCliente('NAO_ENCONTRADO', 404);
+
+        const removido = this.contatos.splice(idx, 1)[0]!;
+
+        this.eventos.push({
+          id: randomUUID(),
+          idEscritorio: contexto.idEscritorioAtivo,
+          idCliente,
+          idAutor: contexto.idUsuario,
+          acao: 'CONTATO_REMOVIDO',
+          anterior: {
+            id: removido.id,
+            nome: removido.nome,
+            cargoOuRelacao: removido.cargoOuRelacao,
+            email: removido.email,
+            telefone: removido.telefone,
+            observacao: removido.observacao,
+          },
+          atual: {
+            id: removido.id,
+            nome: removido.nome,
+            removido: true,
+          },
+          criadoEm: new Date(),
+        });
       },
 
       listarLinhaDoTempoCliente: async (idCliente: string) => {

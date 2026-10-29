@@ -190,4 +190,174 @@ describe('PaginaClientes (Frontend)', () => {
     expect(screen.getByText('Cliente cadastrado')).toBeTruthy();
     expect(screen.getByText(/Dr\. Roberto/)).toBeTruthy();
   });
+
+  it('permite adicionar contatos iniciais no cadastro de novo cliente (RF-019)', async () => {
+    let corpoEnviado: Record<string, unknown> | null = null;
+    const { cliente } = await criarClienteAutenticado((url, opcoes) => {
+      if (url.startsWith('/api/v1/clientes?')) {
+        return respostaJson({ clientes: [], total: 0 });
+      }
+      if (url === '/api/v1/clientes' && opcoes?.method === 'POST') {
+        corpoEnviado = JSON.parse(opcoes.body as string);
+        return respostaJson(clienteMock, 201);
+      }
+      return respostaJson({}, 404);
+    });
+
+    renderizarComCliente(cliente, <PaginaClientes />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Novo cliente' }));
+
+    fireEvent.change(screen.getByLabelText(/Nome completo/i), { target: { value: 'Empresa Teste' } });
+    fireEvent.change(screen.getByLabelText(/CPF/i), { target: { value: '11144477735' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Adicionar contato inicial' }));
+
+    fireEvent.change(screen.getByLabelText(/Nome do contato/i), { target: { value: 'Rodrigo Santos' } });
+    fireEvent.change(screen.getByLabelText(/Cargo ou Relação/i), { target: { value: 'Gerente' } });
+    const camposTelefone = screen.getAllByLabelText(/Telefone/i);
+    fireEvent.change(camposTelefone[1], { target: { value: '11988889999' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar à lista' }));
+
+    expect(screen.getByText('Rodrigo Santos')).toBeTruthy();
+    expect(screen.getByText(/Gerente/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar cliente' }));
+
+    await waitFor(() => {
+      expect(corpoEnviado).toMatchObject({
+        nome: 'Empresa Teste',
+        contatosIniciais: [
+          {
+            nome: 'Rodrigo Santos',
+            cargoOuRelacao: 'Gerente',
+            telefone: '11988889999',
+            email: null,
+            observacao: null,
+          },
+        ],
+      });
+    });
+  });
+
+  it('gerencia contatos na edição do cliente incluindo adição e exclusão (RF-019)', async () => {
+    let contatoCriado: Record<string, unknown> | null = null;
+    let contatoExcluidoId: string | null = null;
+
+    const clienteDetalheComContatos = {
+      ...clienteMock,
+      observacoesInternas: 'Anotação interna',
+      contatos: [
+        {
+          id: 'contato-1',
+          nome: 'Mariana Souza',
+          cargoOuRelacao: 'Financeiro',
+          email: 'mariana@example.test',
+          telefone: '11977778888',
+          observacao: 'Contato principal',
+          criadoEm: '2026-10-29T10:00:00Z',
+          atualizadoEm: '2026-10-29T10:00:00Z',
+        },
+      ],
+    };
+
+    const { cliente } = await criarClienteAutenticado((url, opcoes) => {
+      if (url.startsWith('/api/v1/clientes?')) {
+        return respostaJson({ clientes: [clienteMock], total: 1 });
+      }
+      if (url === '/api/v1/clientes/cliente-1' && (!opcoes?.method || opcoes.method === 'GET')) {
+        return respostaJson(clienteDetalheComContatos);
+      }
+      if (url === '/api/v1/clientes/cliente-1/contatos' && opcoes?.method === 'POST') {
+        contatoCriado = JSON.parse(opcoes.body as string);
+        return respostaJson({ id: 'contato-2', ...contatoCriado }, 201);
+      }
+      if (url === '/api/v1/clientes/cliente-1/contatos/contato-1' && opcoes?.method === 'DELETE') {
+        contatoExcluidoId = 'contato-1';
+        return respostaJson({}, 204);
+      }
+      return respostaJson({}, 404);
+    });
+
+    renderizarComCliente(cliente, <PaginaClientes />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }));
+
+    // Trocar para a aba de Contatos Relacionados
+    fireEvent.click(await screen.findByRole('button', { name: /Contatos Relacionados/i }));
+
+    expect(screen.getByText('Mariana Souza')).toBeTruthy();
+    expect(screen.getByText('Financeiro')).toBeTruthy();
+
+    // Adicionar novo contato
+    fireEvent.click(screen.getByRole('button', { name: '+ Novo contato' }));
+
+    expect(screen.getByText('Novo Contato Relacionado')).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText('Nome completo do contato'), {
+      target: { value: 'Lucas Ferreira' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('(11) 98888-7777'), {
+      target: { value: '11999990000' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar contato' }));
+
+    await waitFor(() => {
+      expect(contatoCriado).toMatchObject({
+        nome: 'Lucas Ferreira',
+        telefone: '11999990000',
+      });
+    });
+
+    // Excluir contato existente
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir' }));
+    expect(screen.getByText('Excluir Contato')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar exclusão' }));
+
+    await waitFor(() => {
+      expect(contatoExcluidoId).toBe('contato-1');
+    });
+  });
+
+  it('executa verificação manual de duplicidades pelo botão no formulário (RF-027)', async () => {
+    let corpoDuplicidade: Record<string, unknown> | null = null;
+
+    const { cliente } = await criarClienteAutenticado((url, opcoes) => {
+      if (url.startsWith('/api/v1/clientes?')) {
+        return respostaJson({ clientes: [], total: 0 });
+      }
+      if (url === '/api/v1/clientes/verificar-duplicidades' && opcoes?.method === 'POST') {
+        corpoDuplicidade = JSON.parse(opcoes.body as string);
+        return respostaJson({
+          duplicidades: [
+            {
+              id: 'c-existente',
+              nome: 'Carlos Eduardo Santos',
+              documentoMascarado: '111.***.***-35',
+              motivos: ['DOCUMENTO_IDENTICO'],
+            },
+          ],
+        });
+      }
+      return respostaJson({}, 404);
+    });
+
+    renderizarComCliente(cliente, <PaginaClientes />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Novo cliente' }));
+
+    fireEvent.change(screen.getByLabelText(/Nome completo/i), { target: { value: 'Carlos Eduardo Santos' } });
+    fireEvent.change(screen.getByLabelText(/CPF/i), { target: { value: '11144477735' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar duplicidades' }));
+
+    await waitFor(() => {
+      expect(corpoDuplicidade).toMatchObject({
+        nome: 'Carlos Eduardo Santos',
+        documento: '11144477735',
+      });
+    });
+
+    expect(await screen.findByText(/Atenção: Foram encontrados clientes semelhantes neste escritório:/i)).toBeTruthy();
+  });
 });

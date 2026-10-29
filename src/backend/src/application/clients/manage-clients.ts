@@ -1,11 +1,13 @@
 import type { TokensAcesso } from '../authentication/authentication-contracts.js';
-import { Cliente } from '../../domain/clients/client.js';
+import { Cliente, type TipoPessoaCliente } from '../../domain/clients/client.js';
 import { ContatoCliente } from '../../domain/clients/client-contact.js';
 import type {
   ClienteDetalheDto,
   ClienteResumoDto,
+  ContatoClienteDto,
   DadosCadastroCliente,
   DadosEdicaoCliente,
+  DadosMutacaoContatoCliente,
   EventoLinhaTempoClienteDto,
   FiltroClientes,
   IndicioDuplicidadeCliente,
@@ -59,6 +61,7 @@ export class GestaoClientes {
   async verificarDuplicidades(
     token: string,
     dados: {
+      tipoPessoa?: TipoPessoaCliente;
       documento: string;
       nome: string;
       email?: string | null;
@@ -67,7 +70,7 @@ export class GestaoClientes {
     },
   ): Promise<{ duplicidades: IndicioDuplicidadeCliente[] }> {
     return this.executar(token, async (clientes) => {
-      PoliticaClientes.exigir(clientes.autor, 'CLIENTE_VISUALIZAR');
+      PoliticaClientes.exigir(clientes.autor, 'CLIENTE_CADASTRAR');
       const duplicidades = await clientes.verificarDuplicidades(dados);
       return { duplicidades };
     });
@@ -259,6 +262,77 @@ export class GestaoClientes {
           atual: sanitizarPayload(e.atual) ?? e.atual,
         };
       });
+    });
+  }
+
+  async adicionarContato(
+    token: string,
+    idCliente: string,
+    dados: DadosMutacaoContatoCliente,
+  ): Promise<ContatoClienteDto> {
+    return this.executar(token, async (clientes) => {
+      PoliticaClientes.exigir(clientes.autor, 'CLIENTE_EDITAR');
+      await clientes.buscarClientePorId(idCliente);
+
+      const contato = ContatoCliente.criar({
+        idEscritorio: clientes.autor.idEscritorio,
+        idCliente,
+        nome: dados.nome,
+        cargoOuRelacao: dados.cargoOuRelacao,
+        email: dados.email,
+        telefone: dados.telefone,
+        observacao: dados.observacao,
+      });
+
+      return clientes.adicionarContatoCliente(contato);
+    });
+  }
+
+  async editarContato(
+    token: string,
+    idCliente: string,
+    idContato: string,
+    dados: DadosMutacaoContatoCliente,
+  ): Promise<ContatoClienteDto> {
+    return this.executar(token, async (clientes) => {
+      PoliticaClientes.exigir(clientes.autor, 'CLIENTE_EDITAR');
+      const cliente = await clientes.buscarClientePorId(idCliente);
+      const anterior = cliente.contatos.find((c) => c.id === idContato);
+      if (!anterior) {
+        throw new ErroCliente('NAO_ENCONTRADO', 404);
+      }
+
+      const contatoAtualizado = ContatoCliente.restaurar({
+        id: anterior.id,
+        idEscritorio: anterior.idEscritorio,
+        idCliente: anterior.idCliente,
+        nome: dados.nome,
+        cargoOuRelacao: dados.cargoOuRelacao,
+        email: dados.email,
+        telefone: dados.telefone,
+        observacao: dados.observacao,
+        criadoEm: anterior.criadoEm,
+        atualizadoEm: new Date(),
+      });
+
+      return clientes.atualizarContatoCliente(anterior, contatoAtualizado);
+    });
+  }
+
+  async removerContato(
+    token: string,
+    idCliente: string,
+    idContato: string,
+  ): Promise<void> {
+    return this.executar(token, async (clientes) => {
+      PoliticaClientes.exigir(clientes.autor, 'CLIENTE_EDITAR');
+      const cliente = await clientes.buscarClientePorId(idCliente);
+      const anterior = cliente.contatos.find((c) => c.id === idContato);
+      if (!anterior) {
+        throw new ErroCliente('NAO_ENCONTRADO', 404);
+      }
+
+      await clientes.removerContatoCliente(idCliente, idContato);
     });
   }
 }

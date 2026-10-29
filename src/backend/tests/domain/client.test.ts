@@ -223,6 +223,82 @@ describe('Entidade ContatoCliente (Domínio)', () => {
       }),
     ).toThrowError(new ErroClienteInvalido('contato'));
   });
+
+  it('atualiza dados de contato preservando id, cliente e escritório', () => {
+    const idEscritorio = randomUUID();
+    const idCliente = randomUUID();
+    const original = ContatoCliente.criar({
+      idEscritorio,
+      idCliente,
+      nome: 'Contato Inicial',
+      cargoOuRelacao: 'Diretor',
+      email: 'contato@empresa.test',
+    });
+
+    const atualizado = original.atualizar({
+      nome: 'Contato Modificado',
+      cargoOuRelacao: 'Gerente',
+      email: 'gerente@empresa.test',
+      telefone: '11987654321',
+      observacao: 'Novo responsável financeiro',
+    });
+
+    expect(atualizado.id).toBe(original.id);
+    expect(atualizado.idEscritorio).toBe(idEscritorio);
+    expect(atualizado.idCliente).toBe(idCliente);
+    expect(atualizado.nome).toBe('Contato Modificado');
+    expect(atualizado.cargoOuRelacao).toBe('Gerente');
+    expect(atualizado.email).toBe('gerente@empresa.test');
+    expect(atualizado.telefone).toBe('11987654321');
+    expect(atualizado.observacao).toBe('Novo responsável financeiro');
+    expect(atualizado.atualizadoEm.getTime()).toBeGreaterThanOrEqual(original.criadoEm.getTime());
+  });
+
+  it('rejeita atualização de contato com nome inválido ou removendo todos os meios', () => {
+    const contato = ContatoCliente.criar({
+      idEscritorio: randomUUID(),
+      idCliente: randomUUID(),
+      nome: 'Contato Teste',
+      email: 'teste@empresa.test',
+    });
+
+    expect(() =>
+      contato.atualizar({
+        nome: 'X',
+        email: 'teste@empresa.test',
+      }),
+    ).toThrowError(new ErroClienteInvalido('nome'));
+
+    expect(() =>
+      contato.atualizar({
+        nome: 'Nome Correto',
+        email: null,
+        telefone: null,
+      }),
+    ).toThrowError(new ErroClienteInvalido('contato'));
+  });
+
+  it('rejeita cargoOuRelacao ou observacao além dos limites', () => {
+    expect(() =>
+      ContatoCliente.criar({
+        idEscritorio: randomUUID(),
+        idCliente: randomUUID(),
+        nome: 'Contato Limite',
+        email: 'limite@empresa.test',
+        cargoOuRelacao: 'C'.repeat(81),
+      }),
+    ).toThrowError(new ErroClienteInvalido('contato'));
+
+    expect(() =>
+      ContatoCliente.criar({
+        idEscritorio: randomUUID(),
+        idCliente: randomUUID(),
+        nome: 'Contato Limite',
+        email: 'limite@empresa.test',
+        observacao: 'O'.repeat(501),
+      }),
+    ).toThrowError(new ErroClienteInvalido('contato'));
+  });
 });
 
 describe('Entidade EventoLinhaTempoCliente (Domínio)', () => {

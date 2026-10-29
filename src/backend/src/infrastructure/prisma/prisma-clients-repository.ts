@@ -10,6 +10,7 @@ import { registrarAtividadeDaSessao } from './session-activity.js';
 import { PAPEIS_DOMINIO } from './team-mapper.js';
 import type {
   ClienteDetalheDto,
+  ContatoClienteDto,
   FiltroClientes,
   IndicioDuplicidadeCliente,
   OperacoesClientes,
@@ -26,8 +27,11 @@ import {
   converterClienteEmDadosPrisma,
   converterRegistroPrismaEmClienteDetalhe,
   converterRegistroPrismaEmClienteResumo,
+  converterRegistroPrismaEmContatoCliente,
   converterRegistroPrismaEmEventoLinhaTempo,
+  SITUACOES_CLIENTE_DOMINIO,
   SITUACOES_CLIENTE_PRISMA,
+  TIPOS_PESSOA_DOMINIO,
   TIPOS_PESSOA_PRISMA,
 } from './client-mapper.js';
 
@@ -67,6 +71,24 @@ function snapshotCliente(cliente: {
     versao: cliente.versao,
     idVinculoResponsavel: cliente.idVinculoResponsavel ?? null,
     observacoesInternas: cliente.observacoesInternas ?? null,
+  };
+}
+
+function snapshotContato(contato: {
+  id: string;
+  nome: string;
+  cargoOuRelacao?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  observacao?: string | null;
+}): Prisma.InputJsonObject {
+  return {
+    id: contato.id,
+    nome: contato.nome,
+    cargoOuRelacao: contato.cargoOuRelacao ?? null,
+    email: contato.email ?? null,
+    telefone: contato.telefone ?? null,
+    observacao: contato.observacao ?? null,
   };
 }
 
@@ -189,16 +211,23 @@ export class RepositorioClientesPrisma implements RepositorioClientes {
               const nomeNormalizado = entrada.nome.trim();
               const digitosTelefone = entrada.telefone?.replace(/\D/g, '');
 
-              const condicoesOr: Prisma.ClientWhereInput[] = [
-                { documentNumber: digitosDocumento },
-                { name: { equals: nomeNormalizado, mode: 'insensitive' } },
-              ];
-
+              const condicoesOr: Prisma.ClientWhereInput[] = [];
+              if (digitosDocumento.length > 0) {
+                condicoesOr.push({ documentNumber: digitosDocumento });
+              }
+              if (nomeNormalizado.length > 0) {
+                condicoesOr.push({ name: { equals: nomeNormalizado, mode: 'insensitive' } });
+                condicoesOr.push({ socialName: { equals: nomeNormalizado, mode: 'insensitive' } });
+              }
               if (entrada.email && entrada.email.trim().length > 0) {
                 condicoesOr.push({ email: { equals: entrada.email.trim(), mode: 'insensitive' } });
               }
               if (digitosTelefone && digitosTelefone.length > 0) {
                 condicoesOr.push({ phone: { equals: digitosTelefone } });
+              }
+
+              if (condicoesOr.length === 0) {
+                return [];
               }
 
               const where: Prisma.ClientWhereInput = {
@@ -212,41 +241,47 @@ export class RepositorioClientesPrisma implements RepositorioClientes {
                 take: 20,
               });
 
-              return encontrados.map((c) => {
-                const motivos: IndicioDuplicidadeCliente['motivos'] = [];
-                if (c.documentNumber === digitosDocumento) {
-                  motivos.push('DOCUMENTO_IDENTICO');
-                }
-                if (c.name.trim().toLowerCase() === nomeNormalizado.toLowerCase()) {
-                  motivos.push('NOME_IDENTICO');
-                }
-                if (
-                  entrada.email &&
-                  c.email &&
-                  c.email.trim().toLowerCase() === entrada.email.trim().toLowerCase()
-                ) {
-                  motivos.push('EMAIL_IDENTICO');
-                }
-                if (
-                  digitosTelefone &&
-                  c.phone &&
-                  c.phone.replace(/\D/g, '') === digitosTelefone
-                ) {
-                  motivos.push('TELEFONE_IDENTICO');
-                }
+              return encontrados
+                .map((c) => {
+                  const motivos: IndicioDuplicidadeCliente['motivos'] = [];
+                  if (digitosDocumento.length > 0 && c.documentNumber === digitosDocumento) {
+                    motivos.push('DOCUMENTO_IDENTICO');
+                  }
+                  if (
+                    nomeNormalizado.length > 0 &&
+                    (c.name.trim().toLowerCase() === nomeNormalizado.toLowerCase() ||
+                      (c.socialName && c.socialName.trim().toLowerCase() === nomeNormalizado.toLowerCase()))
+                  ) {
+                    motivos.push('NOME_IDENTICO');
+                  }
+                  if (
+                    entrada.email &&
+                    c.email &&
+                    c.email.trim().toLowerCase() === entrada.email.trim().toLowerCase()
+                  ) {
+                    motivos.push('EMAIL_IDENTICO');
+                  }
+                  if (
+                    digitosTelefone &&
+                    c.phone &&
+                    c.phone.replace(/\D/g, '') === digitosTelefone
+                  ) {
+                    motivos.push('TELEFONE_IDENTICO');
+                  }
 
-                return {
-                  id: c.id,
-                  nome: c.name,
-                  nomeSocial: c.socialName,
-                  tipoPessoa: c.type === 'INDIVIDUAL' ? 'PESSOA_FISICA' : 'PESSOA_JURIDICA',
-                  documentoMascarado: mascararDocumento(c.documentNumber),
-                  email: c.email,
-                  telefone: c.phone,
-                  situacao: c.status === 'ACTIVE' ? 'ATIVO' : 'INATIVO',
-                  motivos,
-                };
-              });
+                  return {
+                    id: c.id,
+                    nome: c.name,
+                    nomeSocial: c.socialName,
+                    tipoPessoa: TIPOS_PESSOA_DOMINIO[c.type],
+                    documentoMascarado: mascararDocumento(c.documentNumber),
+                    email: c.email,
+                    telefone: c.phone,
+                    situacao: SITUACOES_CLIENTE_DOMINIO[c.status],
+                    motivos,
+                  };
+                })
+                .filter((c) => c.motivos.length > 0);
             },
 
             validarVinculoResponsavelNoEscritorio: async (idVinculoResponsavel: string) => {
@@ -440,6 +475,143 @@ export class RepositorioClientesPrisma implements RepositorioClientes {
               });
 
               return buscarClientePorId(anterior.id);
+            },
+
+            adicionarContatoCliente: async (contato: ContatoCliente) => {
+              const cliente = await transacao.client.findFirst({
+                where: { id: contato.idCliente, officeId: contexto.idEscritorioAtivo },
+              });
+              if (!cliente) {
+                throw new ErroCliente('NAO_ENCONTRADO', 404);
+              }
+
+              const criado = await transacao.clientContact.create({
+                data: {
+                  id: contato.id,
+                  officeId: contexto.idEscritorioAtivo,
+                  clientId: contato.idCliente,
+                  name: contato.nome,
+                  roleOrRelation: contato.cargoOuRelacao,
+                  email: contato.email,
+                  phone: contato.telefone,
+                  notes: contato.observacao,
+                  createdAt: contato.criadoEm,
+                  updatedAt: contato.atualizadoEm,
+                },
+              });
+
+              await transacao.clientTimelineEvent.create({
+                data: {
+                  id: randomUUID(),
+                  officeId: contexto.idEscritorioAtivo,
+                  clientId: contato.idCliente,
+                  actorId: autor.idUsuario,
+                  action: 'CONTATO_ADICIONADO',
+                  previous: Prisma.DbNull,
+                  current: snapshotContato(contato),
+                  createdAt: new Date(),
+                },
+              });
+
+              return converterRegistroPrismaEmContatoCliente(criado);
+            },
+
+            atualizarContatoCliente: async (anterior: ContatoClienteDto, atualizado: ContatoCliente) => {
+              const cliente = await transacao.client.findFirst({
+                where: { id: atualizado.idCliente, officeId: contexto.idEscritorioAtivo },
+              });
+              if (!cliente) {
+                throw new ErroCliente('NAO_ENCONTRADO', 404);
+              }
+
+              const agora = new Date();
+              const mudou = await transacao.clientContact.updateMany({
+                where: {
+                  id: atualizado.id,
+                  clientId: atualizado.idCliente,
+                  officeId: contexto.idEscritorioAtivo,
+                },
+                data: {
+                  name: atualizado.nome,
+                  roleOrRelation: atualizado.cargoOuRelacao,
+                  email: atualizado.email,
+                  phone: atualizado.telefone,
+                  notes: atualizado.observacao,
+                  updatedAt: agora,
+                },
+              });
+
+              if (mudou.count !== 1) {
+                throw new ErroCliente('NAO_ENCONTRADO', 404);
+              }
+
+              await transacao.clientTimelineEvent.create({
+                data: {
+                  id: randomUUID(),
+                  officeId: contexto.idEscritorioAtivo,
+                  clientId: atualizado.idCliente,
+                  actorId: autor.idUsuario,
+                  action: 'CONTATO_ATUALIZADO',
+                  previous: snapshotContato(anterior),
+                  current: snapshotContato(atualizado),
+                  createdAt: agora,
+                },
+              });
+
+              const registro = await transacao.clientContact.findUniqueOrThrow({
+                where: { id: atualizado.id },
+              });
+
+              return converterRegistroPrismaEmContatoCliente(registro);
+            },
+
+            removerContatoCliente: async (idCliente: string, idContato: string) => {
+              const cliente = await transacao.client.findFirst({
+                where: { id: idCliente, officeId: contexto.idEscritorioAtivo },
+              });
+              if (!cliente) {
+                throw new ErroCliente('NAO_ENCONTRADO', 404);
+              }
+
+              const contatoExistente = await transacao.clientContact.findFirst({
+                where: {
+                  id: idContato,
+                  clientId: idCliente,
+                  officeId: contexto.idEscritorioAtivo,
+                },
+              });
+
+              if (!contatoExistente) {
+                throw new ErroCliente('NAO_ENCONTRADO', 404);
+              }
+
+              await transacao.clientContact.delete({
+                where: { id: idContato },
+              });
+
+              await transacao.clientTimelineEvent.create({
+                data: {
+                  id: randomUUID(),
+                  officeId: contexto.idEscritorioAtivo,
+                  clientId: idCliente,
+                  actorId: autor.idUsuario,
+                  action: 'CONTATO_REMOVIDO',
+                  previous: snapshotContato({
+                    id: contatoExistente.id,
+                    nome: contatoExistente.name,
+                    cargoOuRelacao: contatoExistente.roleOrRelation,
+                    email: contatoExistente.email,
+                    telefone: contatoExistente.phone,
+                    observacao: contatoExistente.notes,
+                  }),
+                  current: {
+                    id: contatoExistente.id,
+                    nome: contatoExistente.name,
+                    removido: true,
+                  },
+                  createdAt: new Date(),
+                },
+              });
             },
 
             listarLinhaDoTempoCliente: async (idCliente: string) => {

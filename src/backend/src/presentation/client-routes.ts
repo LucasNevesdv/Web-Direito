@@ -131,6 +131,7 @@ export function registrarRotasClientes(
       async (requisicao) => {
         const dados = z
           .object({
+            tipoPessoa: TIPO_PESSOA.nullish(),
             documento: z.string().min(1).max(30),
             nome: z.string().min(1).max(256),
             email: z.string().max(254).nullish(),
@@ -141,6 +142,7 @@ export function registrarRotasClientes(
           .parse(requisicao.body);
 
         return clientes.verificarDuplicidades(token(requisicao), {
+          tipoPessoa: dados.tipoPessoa ?? undefined,
           documento: dados.documento,
           nome: dados.nome,
           email: dados.email ?? undefined,
@@ -247,6 +249,56 @@ export function registrarRotasClientes(
 
     rotas.get('/api/v1/clientes/:id/linha-do-tempo', async (requisicao) => {
       return clientes.consultarLinhaDoTempo(token(requisicao), extrairId(requisicao));
+    });
+
+    const extrairIdsContato = (req: FastifyRequest) =>
+      z
+        .object({
+          id: z.string().uuid(),
+          idContato: z.string().uuid(),
+        })
+        .strict()
+        .parse(req.params);
+
+    const CONTATO_MUTACAO_SCHEMA = z
+      .object({
+        nome: z.string().min(1).max(120),
+        cargoOuRelacao: z.string().max(80).nullish(),
+        email: z.string().max(254).nullish(),
+        telefone: z.string().max(30).nullish(),
+        observacao: z.string().max(500).nullish(),
+      })
+      .strict();
+
+    rotas.post('/api/v1/clientes/:id/contatos', { bodyLimit: 4096 }, async (requisicao, resposta) => {
+      const id = extrairId(requisicao);
+      const dados = CONTATO_MUTACAO_SCHEMA.parse(requisicao.body);
+      const contato = await clientes.adicionarContato(token(requisicao), id, {
+        nome: dados.nome,
+        cargoOuRelacao: dados.cargoOuRelacao ?? undefined,
+        email: dados.email ?? undefined,
+        telefone: dados.telefone ?? undefined,
+        observacao: dados.observacao ?? undefined,
+      });
+      return resposta.status(201).send(contato);
+    });
+
+    rotas.patch('/api/v1/clientes/:id/contatos/:idContato', { bodyLimit: 4096 }, async (requisicao) => {
+      const { id, idContato } = extrairIdsContato(requisicao);
+      const dados = CONTATO_MUTACAO_SCHEMA.parse(requisicao.body);
+      return clientes.editarContato(token(requisicao), id, idContato, {
+        nome: dados.nome,
+        cargoOuRelacao: dados.cargoOuRelacao ?? undefined,
+        email: dados.email ?? undefined,
+        telefone: dados.telefone ?? undefined,
+        observacao: dados.observacao ?? undefined,
+      });
+    });
+
+    rotas.delete('/api/v1/clientes/:id/contatos/:idContato', async (requisicao, resposta) => {
+      const { id, idContato } = extrairIdsContato(requisicao);
+      await clientes.removerContato(token(requisicao), id, idContato);
+      return resposta.status(204).send();
     });
   });
 }

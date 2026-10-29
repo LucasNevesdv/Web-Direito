@@ -32,17 +32,19 @@ export interface ClienteItem {
   atualizadoEm: string;
 }
 
+export interface ContatoItem {
+  id: string;
+  nome: string;
+  cargoOuRelacao: string | null;
+  email: string | null;
+  telefone: string | null;
+  observacao: string | null;
+}
+
 export interface ClienteDetalhe extends ClienteItem {
   endereco: Endereco | null;
   observacoesInternas: string | null;
-  contatos: Array<{
-    id: string;
-    nome: string;
-    cargoOuRelacao: string | null;
-    email: string | null;
-    telefone: string | null;
-    observacao: string | null;
-  }>;
+  contatos: ContatoItem[];
 }
 
 export interface EventoLinhaTempo {
@@ -74,6 +76,9 @@ const ROTULOS_ACOES: Record<string, string> = {
   RESPONSAVEL_ALTERADO: 'Responsável alterado',
   CLIENTE_INATIVADO: 'Cliente inativado',
   CLIENTE_REATIVADO: 'Cliente reativado',
+  CONTATO_ADICIONADO: 'Contato adicionado',
+  CONTATO_ATUALIZADO: 'Contato atualizado',
+  CONTATO_REMOVIDO: 'Contato removido',
 };
 
 const FORMULARIO_INICIAL = {
@@ -125,9 +130,40 @@ export function PaginaClientes() {
   const [editando, definirEditando] = useState<ClienteDetalhe | null>(null);
   const [form, definirForm] = useState(FORMULARIO_INICIAL);
   const [enviando, definirEnviando] = useState(false);
+  const [abaAtivaModal, definirAbaAtivaModal] = useState<'dados' | 'contatos'>('dados');
+
+  // Contatos iniciais no cadastro de novo cliente
+  const [contatosIniciais, definirContatosIniciais] = useState<
+    Array<{ nome: string; cargoOuRelacao: string; email: string; telefone: string; observacao: string }>
+  >([]);
+  const [mostrarFormContatoInicial, definirMostrarFormContatoInicial] = useState(false);
+  const [formContatoInicial, definirFormContatoInicial] = useState({
+    nome: '',
+    cargoOuRelacao: '',
+    email: '',
+    telefone: '',
+    observacao: '',
+  });
+  const [erroContatoInicial, definirErroContatoInicial] = useState('');
+
+  // Gestão de contatos do cliente em edição
+  const [modalContatoAberto, definirModalContatoAberto] = useState(false);
+  const [editandoContato, definirEditandoContato] = useState<ContatoItem | null>(null);
+  const [formContato, definirFormContato] = useState({
+    nome: '',
+    cargoOuRelacao: '',
+    email: '',
+    telefone: '',
+    observacao: '',
+  });
+  const [erroContato, definirErroContato] = useState('');
+  const [enviandoContato, definirEnviandoContato] = useState(false);
+  const [contatoParaExcluir, definirContatoParaExcluir] = useState<ContatoItem | null>(null);
 
   // Duplicidades
   const [duplicidadesAlerta, definirDuplicidadesAlerta] = useState<IndicioDuplicidade[] | null>(null);
+  const [verificandoDuplicidades, definirVerificandoDuplicidades] = useState(false);
+  const [mensagemDuplicidadeLimpa, definirMensagemDuplicidadeLimpa] = useState('');
 
   // Inativação / Reativação
   const [clienteSituacao, definirClienteSituacao] = useState<{ cliente: ClienteItem; novaSituacao: SituacaoCliente } | null>(null);
@@ -179,7 +215,11 @@ export function PaginaClientes() {
   function abrirNovo() {
     definirEditando(null);
     definirForm(FORMULARIO_INICIAL);
+    definirContatosIniciais([]);
+    definirMostrarFormContatoInicial(false);
+    definirAbaAtivaModal('dados');
     definirDuplicidadesAlerta(null);
+    definirMensagemDuplicidadeLimpa('');
     definirErro('');
     definirModalAberto(true);
   }
@@ -187,6 +227,8 @@ export function PaginaClientes() {
   async function abrirEdicao(item: ClienteItem) {
     definirErro('');
     definirDuplicidadesAlerta(null);
+    definirMensagemDuplicidadeLimpa('');
+    definirAbaAtivaModal('dados');
     const resposta = await requisitarApi<ClienteDetalhe>(cliente, `/api/v1/clientes/${item.id}`);
     if (!resposta.ok) {
       definirErro(resposta.mensagem);
@@ -211,6 +253,171 @@ export function PaginaClientes() {
       observacoesInternas: det.observacoesInternas ?? '',
     });
     definirModalAberto(true);
+  }
+
+  async function checarDuplicidadesFormulario() {
+    if (!form.documento.trim() && !form.nome.trim()) {
+      return;
+    }
+    definirVerificandoDuplicidades(true);
+    definirMensagemDuplicidadeLimpa('');
+    try {
+      const resp = await requisitarApi<{ duplicidades: IndicioDuplicidade[] }>(
+        cliente,
+        '/api/v1/clientes/verificar-duplicidades',
+        {
+          method: 'POST',
+          json: {
+            tipoPessoa: form.tipoPessoa,
+            documento: form.documento.trim(),
+            nome: form.nome.trim(),
+            email: form.email.trim() || null,
+            telefone: form.telefone.trim() || null,
+            ignorarIdCliente: editando?.id ?? null,
+          },
+        },
+      );
+      if (resp.ok) {
+        if (resp.dados.duplicidades.length > 0) {
+          definirDuplicidadesAlerta(resp.dados.duplicidades);
+        } else {
+          definirDuplicidadesAlerta(null);
+          definirMensagemDuplicidadeLimpa('Nenhuma duplicidade encontrada no escritório.');
+          setTimeout(() => definirMensagemDuplicidadeLimpa(''), 3000);
+        }
+      }
+    } finally {
+      definirVerificandoDuplicidades(false);
+    }
+  }
+
+  function adicionarContatoInicial() {
+    definirErroContatoInicial('');
+    if (formContatoInicial.nome.trim().length < 2) {
+      definirErroContatoInicial('O nome do contato deve ter pelo menos 2 caracteres.');
+      return;
+    }
+    if (!formContatoInicial.email.trim() && !formContatoInicial.telefone.trim()) {
+      definirErroContatoInicial('Informe ao menos um e-mail ou telefone para o contato.');
+      return;
+    }
+    definirContatosIniciais((prev) => [...prev, { ...formContatoInicial }]);
+    definirFormContatoInicial({ nome: '', cargoOuRelacao: '', email: '', telefone: '', observacao: '' });
+    definirMostrarFormContatoInicial(false);
+  }
+
+  function removerContatoInicial(indice: number) {
+    definirContatosIniciais((prev) => prev.filter((_, i) => i !== indice));
+  }
+
+  function abrirNovoContato() {
+    definirEditandoContato(null);
+    definirFormContato({ nome: '', cargoOuRelacao: '', email: '', telefone: '', observacao: '' });
+    definirErroContato('');
+    definirModalContatoAberto(true);
+  }
+
+  function abrirEdicaoContato(contato: ContatoItem) {
+    definirEditandoContato(contato);
+    definirFormContato({
+      nome: contato.nome,
+      cargoOuRelacao: contato.cargoOuRelacao ?? '',
+      email: contato.email ?? '',
+      telefone: contato.telefone ?? '',
+      observacao: contato.observacao ?? '',
+    });
+    definirErroContato('');
+    definirModalContatoAberto(true);
+  }
+
+  async function salvarContato() {
+    if (!editando) return;
+    if (formContato.nome.trim().length < 2) {
+      definirErroContato('O nome do contato deve ter pelo menos 2 caracteres.');
+      return;
+    }
+    if (!formContato.email.trim() && !formContato.telefone.trim()) {
+      definirErroContato('Informe ao menos um e-mail ou telefone para o contato.');
+      return;
+    }
+
+    definirEnviandoContato(true);
+    definirErroContato('');
+
+    const corpo = {
+      nome: formContato.nome.trim(),
+      cargoOuRelacao: formContato.cargoOuRelacao.trim() || null,
+      email: formContato.email.trim() || null,
+      telefone: formContato.telefone.trim() || null,
+      observacao: formContato.observacao.trim() || null,
+    };
+
+    try {
+      if (editandoContato?.id) {
+        const resp = await requisitarApi(
+          cliente,
+          `/api/v1/clientes/${editando.id}/contatos/${editandoContato.id}`,
+          {
+            method: 'PATCH',
+            json: corpo,
+          },
+        );
+        if (!resp.ok) {
+          definirErroContato(resp.mensagem);
+          return;
+        }
+        definirMensagem('Contato atualizado com sucesso.');
+      } else {
+        const resp = await requisitarApi(
+          cliente,
+          `/api/v1/clientes/${editando.id}/contatos`,
+          {
+            method: 'POST',
+            json: corpo,
+          },
+        );
+        if (!resp.ok) {
+          definirErroContato(resp.mensagem);
+          return;
+        }
+        definirMensagem('Contato adicionado com sucesso.');
+      }
+
+      const respDetalhe = await requisitarApi<ClienteDetalhe>(cliente, `/api/v1/clientes/${editando.id}`);
+      if (respDetalhe.ok) {
+        definirEditando(respDetalhe.dados);
+      }
+      definirModalContatoAberto(false);
+    } finally {
+      definirEnviandoContato(false);
+    }
+  }
+
+  async function confirmarExclusaoContato() {
+    if (!editando || !contatoParaExcluir?.id) return;
+    definirEnviandoContato(true);
+    try {
+      const resp = await requisitarApi(
+        cliente,
+        `/api/v1/clientes/${editando.id}/contatos/${contatoParaExcluir.id}`,
+        {
+          method: 'DELETE',
+        },
+      );
+      if (!resp.ok) {
+        definirErro(resp.mensagem);
+        return;
+      }
+      definirMensagem('Contato removido com sucesso.');
+      definirContatoParaExcluir(null);
+
+      const respDetalhe = await requisitarApi<ClienteDetalhe>(cliente, `/api/v1/clientes/${editando.id}`);
+      if (respDetalhe.ok) {
+        definirEditando(respDetalhe.dados);
+      }
+    } finally {
+      definirEnviandoContato(false);
+    }
   }
 
   async function abrirLinhaTempo(item: ClienteItem) {
@@ -267,6 +474,14 @@ export function PaginaClientes() {
         definirModalAberto(false);
         definirRevisao((r) => r + 1);
       } else {
+        const contatosFormatados = contatosIniciais.map((c) => ({
+          nome: c.nome.trim(),
+          cargoOuRelacao: c.cargoOuRelacao.trim() || null,
+          email: c.email.trim() || null,
+          telefone: c.telefone.trim() || null,
+          observacao: c.observacao.trim() || null,
+        }));
+
         const corpo = {
           tipoPessoa: form.tipoPessoa,
           nome: form.nome.trim(),
@@ -276,6 +491,7 @@ export function PaginaClientes() {
           telefone: form.telefone.trim() || null,
           endereco,
           observacoesInternas: form.observacoesInternas.trim() || null,
+          contatosIniciais: contatosFormatados.length > 0 ? contatosFormatados : undefined,
           confirmarDuplicidadePotencial: confirmarDuplicidade,
         };
         const resposta = await requisitarApi<ClienteDetalhe>(cliente, '/api/v1/clientes', {
@@ -523,6 +739,34 @@ export function PaginaClientes() {
               {editando ? 'Editar Cliente' : 'Novo Cliente'}
             </h2>
 
+            {/* Abas no modo de edição */}
+            {editando && (
+              <div className="flex border-b border-slate-800 gap-4">
+                <button
+                  type="button"
+                  className={`pb-2 text-sm font-medium border-b-2 transition ${
+                    abaAtivaModal === 'dados'
+                      ? 'border-cyan-400 text-cyan-300'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                  }`}
+                  onClick={() => definirAbaAtivaModal('dados')}
+                >
+                  Dados Gerais
+                </button>
+                <button
+                  type="button"
+                  className={`pb-2 text-sm font-medium border-b-2 transition ${
+                    abaAtivaModal === 'contatos'
+                      ? 'border-cyan-400 text-cyan-300'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                  }`}
+                  onClick={() => definirAbaAtivaModal('contatos')}
+                >
+                  Contatos Relacionados ({editando.contatos.length})
+                </button>
+              </div>
+            )}
+
             {/* Alerta de Possível Duplicidade */}
             {duplicidadesAlerta && duplicidadesAlerta.length > 0 && (
               <div className="rounded-xl border border-amber-600 bg-amber-950/60 p-4 space-y-3">
@@ -557,183 +801,537 @@ export function PaginaClientes() {
               </div>
             )}
 
-            <form
-              className="space-y-4"
-              onSubmit={(e: FormEvent) => {
-                e.preventDefault();
-                void salvar(false);
-              }}
-            >
-              {!editando && (
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 text-sm text-slate-300">
+            {editando && abaAtivaModal === 'contatos' ? (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-semibold text-slate-300 uppercase">
+                    Contatos Vinculados ({editando.contatos.length})
+                  </h3>
+                  <button
+                    type="button"
+                    className={BOTAO}
+                    onClick={abrirNovoContato}
+                  >
+                    + Novo contato
+                  </button>
+                </div>
+
+                {editando.contatos.length === 0 ? (
+                  <p className="text-sm text-slate-400 py-6 text-center">
+                    Nenhum contato vinculado a este cliente.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {editando.contatos.map((contato) => (
+                      <div
+                        key={contato.id}
+                        className="rounded-xl border border-slate-800 bg-slate-800/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-100">{contato.nome}</span>
+                            {contato.cargoOuRelacao && (
+                              <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">
+                                {contato.cargoOuRelacao}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-300 space-x-3">
+                            {contato.email && <span>{contato.email}</span>}
+                            {contato.telefone && <span>{contato.telefone}</span>}
+                          </div>
+                          {contato.observacao && (
+                            <p className="text-xs text-slate-400 italic">{contato.observacao}</p>
+                          )}
+                        </div>
+                        <div className="flex gap-2 self-end sm:self-center">
+                          <button
+                            type="button"
+                            className={BOTAO_SECUNDARIO}
+                            onClick={() => abrirEdicaoContato(contato)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className={BOTAO_SECUNDARIO}
+                            onClick={() => definirContatoParaExcluir(contato)}
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-4 border-t border-slate-800">
+                  <button
+                    type="button"
+                    className={BOTAO_SECUNDARIO}
+                    onClick={() => definirModalAberto(false)}
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form
+                className="space-y-4"
+                onSubmit={(e: FormEvent) => {
+                  e.preventDefault();
+                  void salvar(false);
+                }}
+              >
+                {!editando && (
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                      <input
+                        type="radio"
+                        name="tipoPessoa"
+                        value="PESSOA_FISICA"
+                        checked={form.tipoPessoa === 'PESSOA_FISICA'}
+                        onChange={() => definirForm({ ...form, tipoPessoa: 'PESSOA_FISICA' })}
+                      />
+                      Pessoa Física (PF)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                      <input
+                        type="radio"
+                        name="tipoPessoa"
+                        value="PESSOA_JURIDICA"
+                        checked={form.tipoPessoa === 'PESSOA_JURIDICA'}
+                        onChange={() => definirForm({ ...form, tipoPessoa: 'PESSOA_JURIDICA' })}
+                      />
+                      Pessoa Jurídica (PJ)
+                    </label>
+                  </div>
+                )}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="sm:col-span-2">
+                    <span className="text-xs font-semibold text-slate-300 uppercase">{rotuloNome}</span>
                     <input
-                      type="radio"
-                      name="tipoPessoa"
-                      value="PESSOA_FISICA"
-                      checked={form.tipoPessoa === 'PESSOA_FISICA'}
-                      onChange={() => definirForm({ ...form, tipoPessoa: 'PESSOA_FISICA' })}
+                      className={CAMPO}
+                      required
+                      value={form.nome}
+                      onChange={(e) => definirForm({ ...form, nome: e.target.value })}
                     />
-                    Pessoa Física (PF)
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-300">
+
+                  <label>
+                    <span className="text-xs font-semibold text-slate-300 uppercase">{rotuloNomeSocial}</span>
                     <input
-                      type="radio"
-                      name="tipoPessoa"
-                      value="PESSOA_JURIDICA"
-                      checked={form.tipoPessoa === 'PESSOA_JURIDICA'}
-                      onChange={() => definirForm({ ...form, tipoPessoa: 'PESSOA_JURIDICA' })}
+                      className={CAMPO}
+                      value={form.nomeSocial}
+                      onChange={(e) => definirForm({ ...form, nomeSocial: e.target.value })}
                     />
-                    Pessoa Jurídica (PJ)
+                  </label>
+
+                  <label>
+                    <span className="text-xs font-semibold text-slate-300 uppercase">{rotuloDocumento}</span>
+                    <input
+                      className={CAMPO}
+                      required
+                      placeholder={form.tipoPessoa === 'PESSOA_FISICA' ? '000.000.000-00' : '00.000.000/0000-00'}
+                      value={form.documento}
+                      onChange={(e) => definirForm({ ...form, documento: e.target.value })}
+                    />
+                  </label>
+
+                  <label>
+                    <span className="text-xs font-semibold text-slate-300 uppercase">E-mail</span>
+                    <input
+                      type="email"
+                      className={CAMPO}
+                      value={form.email}
+                      onChange={(e) => definirForm({ ...form, email: e.target.value })}
+                    />
+                  </label>
+
+                  <label>
+                    <span className="text-xs font-semibold text-slate-300 uppercase">Telefone</span>
+                    <input
+                      className={CAMPO}
+                      value={form.telefone}
+                      onChange={(e) => definirForm({ ...form, telefone: e.target.value })}
+                    />
+                  </label>
+
+                  <div className="sm:col-span-2 flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      className={BOTAO_SECUNDARIO}
+                      onClick={() => void checarDuplicidadesFormulario()}
+                      disabled={verificandoDuplicidades}
+                    >
+                      {verificandoDuplicidades ? 'Verificando…' : 'Verificar duplicidades'}
+                    </button>
+                    {mensagemDuplicidadeLimpa && (
+                      <span className="text-xs text-emerald-400 font-medium">
+                        {mensagemDuplicidadeLimpa}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Endereço */}
+                <div className="border-t border-slate-800 pt-3 space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-300 uppercase">Endereço</h3>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <label>
+                      <span className="text-xs text-slate-400">CEP</span>
+                      <input
+                        className={CAMPO}
+                        placeholder="00000-000"
+                        value={form.cep}
+                        onChange={(e) => definirForm({ ...form, cep: e.target.value })}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="text-xs text-slate-400">Logradouro</span>
+                      <input
+                        className={CAMPO}
+                        value={form.logradouro}
+                        onChange={(e) => definirForm({ ...form, logradouro: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span className="text-xs text-slate-400">Número</span>
+                      <input
+                        className={CAMPO}
+                        value={form.numero}
+                        onChange={(e) => definirForm({ ...form, numero: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span className="text-xs text-slate-400">Complemento</span>
+                      <input
+                        className={CAMPO}
+                        value={form.complemento}
+                        onChange={(e) => definirForm({ ...form, complemento: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span className="text-xs text-slate-400">Bairro</span>
+                      <input
+                        className={CAMPO}
+                        value={form.bairro}
+                        onChange={(e) => definirForm({ ...form, bairro: e.target.value })}
+                      />
+                    </label>
+                    <label className="sm:col-span-2">
+                      <span className="text-xs text-slate-400">Cidade</span>
+                      <input
+                        className={CAMPO}
+                        value={form.cidade}
+                        onChange={(e) => definirForm({ ...form, cidade: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span className="text-xs text-slate-400">UF</span>
+                      <input
+                        className={CAMPO}
+                        maxLength={2}
+                        placeholder="SP"
+                        value={form.uf}
+                        onChange={(e) => definirForm({ ...form, uf: e.target.value.toUpperCase() })}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Observações Internas */}
+                <div className="border-t border-slate-800 pt-3">
+                  <label>
+                    <span className="text-xs font-semibold text-slate-300 uppercase">Observações Internas</span>
+                    <textarea
+                      rows={3}
+                      className={CAMPO}
+                      placeholder="Anotações internas confidenciais sobre o cliente..."
+                      value={form.observacoesInternas}
+                      onChange={(e) => definirForm({ ...form, observacoesInternas: e.target.value })}
+                    />
                   </label>
                 </div>
-              )}
 
+                {/* Contatos Iniciais no Cadastro */}
+                {!editando && (
+                  <div className="border-t border-slate-800 pt-3 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-sm font-semibold text-slate-300 uppercase">
+                        Contatos Iniciais (opcional)
+                      </h3>
+                      {!mostrarFormContatoInicial && (
+                        <button
+                          type="button"
+                          className={BOTAO_SECUNDARIO}
+                          onClick={() => definirMostrarFormContatoInicial(true)}
+                        >
+                          + Adicionar contato inicial
+                        </button>
+                      )}
+                    </div>
+
+                    {contatosIniciais.length > 0 && (
+                      <ul className="space-y-2">
+                        {contatosIniciais.map((c, idx) => (
+                          <li
+                            key={idx}
+                            className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-800/30 p-2 text-xs text-slate-200"
+                          >
+                            <div>
+                              <strong>{c.nome}</strong>
+                              {c.cargoOuRelacao ? ` (${c.cargoOuRelacao})` : ''} —{' '}
+                              {c.email || ''} {c.telefone ? `• ${c.telefone}` : ''}
+                            </div>
+                            <button
+                              type="button"
+                              className="text-rose-400 hover:text-rose-300 font-bold px-2 py-1"
+                              onClick={() => removerContatoInicial(idx)}
+                            >
+                              Remover
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {mostrarFormContatoInicial && (
+                      <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-4 space-y-3">
+                        <h4 className="text-xs font-bold text-slate-200 uppercase">Novo Contato Inicial</h4>
+                        {erroContatoInicial && (
+                          <p className="text-xs text-rose-300 bg-rose-950/80 p-2 rounded border border-rose-800">
+                            {erroContatoInicial}
+                          </p>
+                        )}
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <label className="sm:col-span-2">
+                            <span className="text-xs text-slate-400">Nome do contato *</span>
+                            <input
+                              className={CAMPO}
+                              value={formContatoInicial.nome}
+                              onChange={(e) =>
+                                definirFormContatoInicial({ ...formContatoInicial, nome: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            <span className="text-xs text-slate-400">Cargo ou Relação</span>
+                            <input
+                              className={CAMPO}
+                              value={formContatoInicial.cargoOuRelacao}
+                              onChange={(e) =>
+                                definirFormContatoInicial({
+                                  ...formContatoInicial,
+                                  cargoOuRelacao: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            <span className="text-xs text-slate-400">E-mail</span>
+                            <input
+                              type="email"
+                              className={CAMPO}
+                              value={formContatoInicial.email}
+                              onChange={(e) =>
+                                definirFormContatoInicial({ ...formContatoInicial, email: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            <span className="text-xs text-slate-400">Telefone</span>
+                            <input
+                              className={CAMPO}
+                              value={formContatoInicial.telefone}
+                              onChange={(e) =>
+                                definirFormContatoInicial({
+                                  ...formContatoInicial,
+                                  telefone: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="sm:col-span-2">
+                            <span className="text-xs text-slate-400">Observação</span>
+                            <input
+                              className={CAMPO}
+                              value={formContatoInicial.observacao}
+                              onChange={(e) =>
+                                definirFormContatoInicial({
+                                  ...formContatoInicial,
+                                  observacao: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2">
+                          <button
+                            type="button"
+                            className={BOTAO_SECUNDARIO}
+                            onClick={() => {
+                              definirMostrarFormContatoInicial(false);
+                              definirErroContatoInicial('');
+                            }}
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            className={BOTAO}
+                            onClick={adicionarContatoInicial}
+                          >
+                            Adicionar à lista
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                  <button
+                    type="button"
+                    className={BOTAO_SECUNDARIO}
+                    onClick={() => definirModalAberto(false)}
+                    disabled={enviando}
+                  >
+                    Cancelar
+                  </button>
+                  <button type="submit" className={BOTAO} disabled={enviando}>
+                    {enviando ? 'Salvando…' : editando ? 'Salvar alterações' : 'Cadastrar cliente'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal de Adicionar / Editar Contato */}
+      {modalContatoAberto && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4"
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-700 p-6 space-y-4">
+            <h3 className="text-lg font-bold text-slate-100">
+              {editandoContato ? 'Editar Contato' : 'Novo Contato Relacionado'}
+            </h3>
+            {erroContato && (
+              <p role="alert" className="rounded-lg bg-rose-950 p-3 text-rose-300 border border-rose-800 text-sm">
+                {erroContato}
+              </p>
+            )}
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void salvarContato();
+              }}
+            >
+              <label>
+                <span className="text-xs font-semibold text-slate-300 uppercase">Nome *</span>
+                <input
+                  className={CAMPO}
+                  required
+                  placeholder="Nome completo do contato"
+                  value={formContato.nome}
+                  onChange={(e) => definirFormContato({ ...formContato, nome: e.target.value })}
+                />
+              </label>
+              <label>
+                <span className="text-xs font-semibold text-slate-300 uppercase">Cargo ou Relação</span>
+                <input
+                  className={CAMPO}
+                  placeholder="Ex.: Sócio Administrador, Cônjuge, Financeiro..."
+                  value={formContato.cargoOuRelacao}
+                  onChange={(e) => definirFormContato({ ...formContato, cargoOuRelacao: e.target.value })}
+                />
+              </label>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="sm:col-span-2">
-                  <span className="text-xs font-semibold text-slate-300 uppercase">{rotuloNome}</span>
-                  <input
-                    className={CAMPO}
-                    required
-                    value={form.nome}
-                    onChange={(e) => definirForm({ ...form, nome: e.target.value })}
-                  />
-                </label>
-
-                <label>
-                  <span className="text-xs font-semibold text-slate-300 uppercase">{rotuloNomeSocial}</span>
-                  <input
-                    className={CAMPO}
-                    value={form.nomeSocial}
-                    onChange={(e) => definirForm({ ...form, nomeSocial: e.target.value })}
-                  />
-                </label>
-
-                <label>
-                  <span className="text-xs font-semibold text-slate-300 uppercase">{rotuloDocumento}</span>
-                  <input
-                    className={CAMPO}
-                    required
-                    placeholder={form.tipoPessoa === 'PESSOA_FISICA' ? '000.000.000-00' : '00.000.000/0000-00'}
-                    value={form.documento}
-                    onChange={(e) => definirForm({ ...form, documento: e.target.value })}
-                  />
-                </label>
-
                 <label>
                   <span className="text-xs font-semibold text-slate-300 uppercase">E-mail</span>
                   <input
                     type="email"
                     className={CAMPO}
-                    value={form.email}
-                    onChange={(e) => definirForm({ ...form, email: e.target.value })}
+                    placeholder="email@exemplo.com"
+                    value={formContato.email}
+                    onChange={(e) => definirFormContato({ ...formContato, email: e.target.value })}
                   />
                 </label>
-
                 <label>
                   <span className="text-xs font-semibold text-slate-300 uppercase">Telefone</span>
                   <input
                     className={CAMPO}
-                    value={form.telefone}
-                    onChange={(e) => definirForm({ ...form, telefone: e.target.value })}
+                    placeholder="(11) 98888-7777"
+                    value={formContato.telefone}
+                    onChange={(e) => definirFormContato({ ...formContato, telefone: e.target.value })}
                   />
                 </label>
               </div>
-
-              {/* Endereço */}
-              <div className="border-t border-slate-800 pt-3 space-y-2">
-                <h3 className="text-sm font-semibold text-slate-300 uppercase">Endereço</h3>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <label>
-                    <span className="text-xs text-slate-400">CEP</span>
-                    <input
-                      className={CAMPO}
-                      placeholder="00000-000"
-                      value={form.cep}
-                      onChange={(e) => definirForm({ ...form, cep: e.target.value })}
-                    />
-                  </label>
-                  <label className="sm:col-span-2">
-                    <span className="text-xs text-slate-400">Logradouro</span>
-                    <input
-                      className={CAMPO}
-                      value={form.logradouro}
-                      onChange={(e) => definirForm({ ...form, logradouro: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span className="text-xs text-slate-400">Número</span>
-                    <input
-                      className={CAMPO}
-                      value={form.numero}
-                      onChange={(e) => definirForm({ ...form, numero: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span className="text-xs text-slate-400">Complemento</span>
-                    <input
-                      className={CAMPO}
-                      value={form.complemento}
-                      onChange={(e) => definirForm({ ...form, complemento: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span className="text-xs text-slate-400">Bairro</span>
-                    <input
-                      className={CAMPO}
-                      value={form.bairro}
-                      onChange={(e) => definirForm({ ...form, bairro: e.target.value })}
-                    />
-                  </label>
-                  <label className="sm:col-span-2">
-                    <span className="text-xs text-slate-400">Cidade</span>
-                    <input
-                      className={CAMPO}
-                      value={form.cidade}
-                      onChange={(e) => definirForm({ ...form, cidade: e.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span className="text-xs text-slate-400">UF</span>
-                    <input
-                      className={CAMPO}
-                      maxLength={2}
-                      placeholder="SP"
-                      value={form.uf}
-                      onChange={(e) => definirForm({ ...form, uf: e.target.value.toUpperCase() })}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              {/* Observações Internas */}
-              <div className="border-t border-slate-800 pt-3">
-                <label>
-                  <span className="text-xs font-semibold text-slate-300 uppercase">Observações Internas</span>
-                  <textarea
-                    rows={3}
-                    className={CAMPO}
-                    placeholder="Anotações internas confidenciais sobre o cliente..."
-                    value={form.observacoesInternas}
-                    onChange={(e) => definirForm({ ...form, observacoesInternas: e.target.value })}
-                  />
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+              <p className="text-xs text-slate-400">Informe ao menos um meio de contato (e-mail ou telefone).</p>
+              <label>
+                <span className="text-xs font-semibold text-slate-300 uppercase">Observação</span>
+                <textarea
+                  rows={2}
+                  className={CAMPO}
+                  placeholder="Informações adicionais sobre este contato..."
+                  value={formContato.observacao}
+                  onChange={(e) => definirFormContato({ ...formContato, observacao: e.target.value })}
+                />
+              </label>
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   className={BOTAO_SECUNDARIO}
-                  onClick={() => definirModalAberto(false)}
-                  disabled={enviando}
+                  onClick={() => definirModalContatoAberto(false)}
+                  disabled={enviandoContato}
                 >
                   Cancelar
                 </button>
-                <button type="submit" className={BOTAO} disabled={enviando}>
-                  {enviando ? 'Salvando…' : editando ? 'Salvar alterações' : 'Cadastrar cliente'}
+                <button type="submit" className={BOTAO} disabled={enviandoContato}>
+                  {enviandoContato ? 'Salvando…' : editandoContato ? 'Salvar contato' : 'Adicionar contato'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação de Exclusão de Contato */}
+      {contatoParaExcluir && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-700 p-6 space-y-4">
+            <h3 className="text-lg font-bold text-slate-100">Excluir Contato</h3>
+            <p className="text-sm text-slate-300">
+              Tem certeza que deseja remover o contato <strong>{contatoParaExcluir.nome}</strong> deste cliente?
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                className={BOTAO_SECUNDARIO}
+                onClick={() => definirContatoParaExcluir(null)}
+                disabled={enviandoContato}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className={BOTAO}
+                onClick={() => void confirmarExclusaoContato()}
+                disabled={enviandoContato}
+              >
+                {enviandoContato ? 'Removendo…' : 'Confirmar exclusão'}
+              </button>
+            </div>
           </div>
         </div>
       )}

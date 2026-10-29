@@ -198,6 +198,28 @@ export class ContatoCliente {
     return new ContatoCliente(estado);
   }
 
+  atualizar(dados: {
+    nome: string;
+    cargoOuRelacao?: string | null;
+    email?: string | null;
+    telefone?: string | null;
+    observacao?: string | null;
+  }): ContatoCliente {
+    const agora = new Date();
+    return new ContatoCliente({
+      id: this.#id,
+      idEscritorio: this.#idEscritorio,
+      idCliente: this.#idCliente,
+      nome: dados.nome,
+      cargoOuRelacao: dados.cargoOuRelacao,
+      email: dados.email,
+      telefone: dados.telefone,
+      observacao: dados.observacao,
+      criadoEm: new Date(this.#criadoEm),
+      atualizadoEm: agora,
+    });
+  }
+
   get id(): string { return this.#id; }
   get idEscritorio(): string { return this.#idEscritorio; }
   get idCliente(): string { return this.#idCliente; }

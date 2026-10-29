@@ -79,6 +79,7 @@ export interface OperacoesClientes {
   listarClientes(filtro: FiltroClientes): Promise<{ clientes: ClienteResumoDto[]; total: number }>;
   buscarClientePorId(idCliente: string): Promise<ClienteDetalheDto>;
   verificarDuplicidades(entrada: {
+    tipoPessoa?: TipoPessoaCliente;
     documento: string;
     nome: string;
     email?: string | null;
@@ -93,6 +94,9 @@ export interface OperacoesClientes {
     evento?: { acao: string; anterior?: Record<string, unknown> | null; atual: Record<string, unknown> },
   ): Promise<ClienteDetalheDto>;
   definirSituacao(anterior: ClienteDetalheDto, situacao: SituacaoCliente, motivo?: string | null): Promise<ClienteDetalheDto>;
+  adicionarContatoCliente(contato: ContatoCliente): Promise<ContatoClienteDto>;
+  atualizarContatoCliente(anterior: ContatoClienteDto, atualizado: ContatoCliente): Promise<ContatoClienteDto>;
+  removerContatoCliente(idCliente: string, idContato: string): Promise<void>;
   listarLinhaDoTempoCliente(idCliente: string): Promise<EventoLinhaTempoClienteDto[]>;
 }
 
@@ -130,4 +134,12 @@ export interface DadosEdicaoCliente {
   observacoesInternas?: string | null;
   idVinculoResponsavel?: string | null;
   versao: number;
+}
+
+export interface DadosMutacaoContatoCliente {
+  nome: string;
+  cargoOuRelacao?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  observacao?: string | null;
 }

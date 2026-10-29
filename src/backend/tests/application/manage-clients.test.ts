@@ -289,4 +289,183 @@ describe('Gestão de Clientes (Casos de Uso / Aplicação)', () => {
     expect(acoes).toContain('CLIENTE_INATIVADO');
     expect(acoes).toContain('CLIENTE_REATIVADO');
   });
+
+  describe('Contatos Relacionados (RF-019)', () => {
+    it('adiciona, edita e remove contatos com gravação atômica na linha do tempo', async () => {
+      const cliente = await gestao.cadastrarCliente('token-proprietario', {
+        tipoPessoa: 'PESSOA_FISICA',
+        nome: 'Cliente com Contatos',
+        documento: CPF_TESTE,
+      });
+
+      // 1. Adicionar contato
+      const contatoCriado = await gestao.adicionarContato('token-proprietario', cliente.id, {
+        nome: 'Sócio Representante',
+        cargoOuRelacao: 'Sócio',
+        email: 'socio@empresa.test',
+        telefone: '11988887777',
+        observacao: 'Contato principal',
+      });
+
+      expect(contatoCriado.id).toBeDefined();
+      expect(contatoCriado.nome).toBe('Sócio Representante');
+      expect(contatoCriado.cargoOuRelacao).toBe('Sócio');
+
+      // Verifica detalhe do cliente contendo o contato
+      const detalheAposAdd = await gestao.consultarCliente('token-proprietario', cliente.id);
+      expect(detalheAposAdd.contatos).toHaveLength(1);
+      expect(detalheAposAdd.contatos[0]!.id).toBe(contatoCriado.id);
+
+      // 2. Editar contato
+      const contatoAtualizado = await gestao.editarContato(
+        'token-proprietario',
+        cliente.id,
+        contatoCriado.id,
+        {
+          nome: 'Sócio Administrador',
+          cargoOuRelacao: 'Diretor Geral',
+          email: 'diretor@empresa.test',
+          telefone: '11988887777',
+        },
+      );
+
+      expect(contatoAtualizado.nome).toBe('Sócio Administrador');
+      expect(contatoAtualizado.cargoOuRelacao).toBe('Diretor Geral');
+
+      // 3. Remover contato
+      await gestao.removerContato('token-proprietario', cliente.id, contatoCriado.id);
+
+      const detalheAposRemocao = await gestao.consultarCliente('token-proprietario', cliente.id);
+      expect(detalheAposRemocao.contatos).toHaveLength(0);
+
+      // 4. Linha do tempo gravou CONTATO_ADICIONADO, CONTATO_ATUALIZADO e CONTATO_REMOVIDO
+      const linhaTempo = await gestao.consultarLinhaDoTempo('token-proprietario', cliente.id);
+      const acoes = linhaTempo.map((e) => e.acao);
+      expect(acoes).toContain('CONTATO_ADICIONADO');
+      expect(acoes).toContain('CONTATO_ATUALIZADO');
+      expect(acoes).toContain('CONTATO_REMOVIDO');
+    });
+
+    it('bloqueia operações de contatos em cliente de outro escritório (404 / RNF-001)', async () => {
+      const clienteA = await gestao.cadastrarCliente('token-proprietario', {
+        tipoPessoa: 'PESSOA_FISICA',
+        nome: 'Cliente do Escritório A',
+        documento: CPF_TESTE,
+      });
+
+      const contato = await gestao.adicionarContato('token-proprietario', clienteA.id, {
+        nome: 'Contato A',
+        email: 'contato@a.test',
+      });
+
+      // Tentativa do Escritório B de adicionar contato no cliente do Escritório A
+      await expect(
+        gestao.adicionarContato('token-escritorio-b', clienteA.id, {
+          nome: 'Invasor B',
+          email: 'b@b.test',
+        }),
+      ).rejects.toMatchObject({
+        codigo: 'NAO_ENCONTRADO',
+        situacao: 404,
+      });
+
+      // Tentativa do Escritório B de editar contato do Escritório A
+      await expect(
+        gestao.editarContato('token-escritorio-b', clienteA.id, contato.id, {
+          nome: 'Novo Nome',
+          email: 'b@b.test',
+        }),
+      ).rejects.toMatchObject({
+        codigo: 'NAO_ENCONTRADO',
+        situacao: 404,
+      });
+
+      // Tentativa do Escritório B de remover contato do Escritório A
+      await expect(
+        gestao.removerContato('token-escritorio-b', clienteA.id, contato.id),
+      ).rejects.toMatchObject({
+        codigo: 'NAO_ENCONTRADO',
+        situacao: 404,
+      });
+    });
+
+    it('rejeita contato inexistente com 404', async () => {
+      const cliente = await gestao.cadastrarCliente('token-proprietario', {
+        tipoPessoa: 'PESSOA_FISICA',
+        nome: 'Cliente Teste',
+        documento: CPF_TESTE,
+      });
+
+      await expect(
+        gestao.editarContato('token-proprietario', cliente.id, randomUUID(), {
+          nome: 'Contato Fantasma',
+          email: 'fantasma@test.com',
+        }),
+      ).rejects.toMatchObject({
+        codigo: 'NAO_ENCONTRADO',
+        situacao: 404,
+      });
+
+      await expect(
+        gestao.removerContato('token-proprietario', cliente.id, randomUUID()),
+      ).rejects.toMatchObject({
+        codigo: 'NAO_ENCONTRADO',
+        situacao: 404,
+      });
+    });
+  });
+
+  describe('Detecção de Duplicidades (RF-027)', () => {
+    it('verificarDuplicidades identifica documento, nome, email e telefone no escritório', async () => {
+      await gestao.cadastrarCliente('token-proprietario', {
+        tipoPessoa: 'PESSOA_FISICA',
+        nome: 'Renata Albuquerque',
+        documento: CPF_TESTE,
+        email: 'renata@albuquerque.adv.br',
+        telefone: '11977776666',
+      });
+
+      // 1. Duplicidade exata de documento
+      const dupDoc = await gestao.verificarDuplicidades('token-proprietario', {
+        documento: CPF_TESTE,
+        nome: 'Outra Pessoa',
+      });
+      expect(dupDoc.duplicidades).toHaveLength(1);
+      expect(dupDoc.duplicidades[0]!.motivos).toContain('DOCUMENTO_IDENTICO');
+
+      // 2. Duplicidade por nome idêntico
+      const dupNome = await gestao.verificarDuplicidades('token-proprietario', {
+        documento: CNPJ_TESTE,
+        nome: '  Renata Albuquerque  ',
+      });
+      expect(dupNome.duplicidades).toHaveLength(1);
+      expect(dupNome.duplicidades[0]!.motivos).toContain('NOME_IDENTICO');
+
+      // 3. Duplicidade por e-mail
+      const dupEmail = await gestao.verificarDuplicidades('token-proprietario', {
+        documento: CNPJ_TESTE,
+        nome: 'Nome Diferente',
+        email: 'RENATA@ALBUQUERQUE.ADV.BR',
+      });
+      expect(dupEmail.duplicidades).toHaveLength(1);
+      expect(dupEmail.duplicidades[0]!.motivos).toContain('EMAIL_IDENTICO');
+
+      // 4. Duplicidade por telefone
+      const dupTel = await gestao.verificarDuplicidades('token-proprietario', {
+        documento: CNPJ_TESTE,
+        nome: 'Nome Diferente',
+        telefone: '(11) 97777-6666',
+      });
+      expect(dupTel.duplicidades).toHaveLength(1);
+      expect(dupTel.duplicidades[0]!.motivos).toContain('TELEFONE_IDENTICO');
+
+      // 5. Isolamento: Escritório B não vê clientes do Escritório A na verificação
+      const dupEscritorioB = await gestao.verificarDuplicidades('token-escritorio-b', {
+        documento: CPF_TESTE,
+        nome: 'Renata Albuquerque',
+        email: 'renata@albuquerque.adv.br',
+      });
+      expect(dupEscritorioB.duplicidades).toHaveLength(0);
+    });
+  });
 });
