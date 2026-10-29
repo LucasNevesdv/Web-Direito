@@ -14,7 +14,9 @@ export type CampoClienteInvalido =
   | 'versao'
   | 'criadoEm'
   | 'atualizadoEm'
-  | 'contato';
+  | 'contato'
+  | 'acao'
+  | 'atual';
 
 export class ErroClienteInvalido extends Error {
   readonly codigo = 'CLIENTE_INVALIDO';

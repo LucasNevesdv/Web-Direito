@@ -49,10 +49,10 @@ export class EventoLinhaTempoCliente {
       throw new ErroClienteInvalido('id');
     }
     if (typeof estado.acao !== 'string' || estado.acao.trim().length === 0 || estado.acao.length > 40) {
-      throw new ErroClienteInvalido('contato');
+      throw new ErroClienteInvalido('acao');
     }
     if (typeof estado.atual !== 'object' || estado.atual === null) {
-      throw new ErroClienteInvalido('contato');
+      throw new ErroClienteInvalido('atual');
     }
     if (!(estado.criadoEm instanceof Date) || !Number.isFinite(estado.criadoEm.getTime())) {
       throw new ErroClienteInvalido('criadoEm');
