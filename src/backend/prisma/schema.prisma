@@ -38,6 +38,9 @@ model Office {
   deadlines     JudicialDeadline[]
   notifications Notification[]
   documents     Document[]
+  clients       Client[]
+  clientContacts ClientContact[]
+  clientTimelineEvents ClientTimelineEvent[]
 
   @@map("offices")
 }
@@ -89,6 +92,7 @@ model User {
   documentsInactivated Document[]                @relation("DocumentInactivatedBy")
   documentVersions     DocumentVersion[]
   documentEvents       DocumentEvent[]
+  clientTimelineEvents ClientTimelineEvent[] @relation("ClientTimelineActor")
 
   @@map("users")
 }
@@ -157,6 +161,7 @@ model Membership {
   version     Int                 @default(0)
   updatedAt   DateTime            @default(now()) @map("updated_at") @db.Timestamptz(3)
   history     MembershipHistory[]
+  clientsResponsible Client[]     @relation("ClientResponsibleMembership")
 
   @@unique([officeId, userId])
   @@index([userId])
@@ -493,4 +498,91 @@ model DocumentEvent {
 
   @@index([documentId, createdAt])
   @@map("document_events")
+}
+
+enum ClientType {
+  INDIVIDUAL
+  LEGAL_ENTITY
+
+  @@map("client_type")
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+
+  @@map("client_status")
+}
+
+model Client {
+  id                      String                @id @db.Uuid
+  officeId                String                @map("office_id") @db.Uuid
+  type                    ClientType
+  name                    String                @db.VarChar(150)
+  socialName              String?               @map("social_name") @db.VarChar(150)
+  documentNumber          String                @map("document_number") @db.VarChar(14)
+  email                   String?               @db.VarChar(254)
+  phone                   String?               @db.VarChar(20)
+  addressZipCode          String?               @map("address_zip_code") @db.Char(8)
+  addressStreet           String?               @map("address_street") @db.VarChar(160)
+  addressNumber           String?               @map("address_number") @db.VarChar(20)
+  addressComplement       String?               @map("address_complement") @db.VarChar(80)
+  addressNeighborhood     String?               @map("address_neighborhood") @db.VarChar(80)
+  addressCity             String?               @map("address_city") @db.VarChar(80)
+  addressState            String?               @map("address_state") @db.Char(2)
+  internalNotes           String?               @map("internal_notes") @db.Text
+  responsibleMembershipId String?               @map("responsible_membership_id") @db.Uuid
+  status                  ClientStatus          @default(ACTIVE)
+  version                 Int                   @default(0)
+  createdAt               DateTime              @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime              @map("updated_at") @db.Timestamptz(3)
+
+  office                  Office                @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  responsibleMembership   Membership?           @relation("ClientResponsibleMembership", fields: [responsibleMembershipId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contacts                ClientContact[]
+  timelineEvents          ClientTimelineEvent[]
+
+  @@unique([officeId, documentNumber])
+  @@index([officeId, status, name])
+  @@index([officeId, email])
+  @@index([officeId, phone])
+  @@index([officeId, responsibleMembershipId])
+  @@map("clients")
+}
+
+model ClientContact {
+  id             String   @id @db.Uuid
+  officeId       String   @map("office_id") @db.Uuid
+  clientId       String   @map("client_id") @db.Uuid
+  name           String   @db.VarChar(120)
+  roleOrRelation String?  @map("role_or_relation") @db.VarChar(80)
+  email          String?  @db.VarChar(254)
+  phone          String?  @db.VarChar(20)
+  notes          String?  @db.VarChar(500)
+  createdAt      DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime @map("updated_at") @db.Timestamptz(3)
+
+  office         Office   @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([officeId, clientId, createdAt])
+  @@map("client_contacts")
+}
+
+model ClientTimelineEvent {
+  id        String   @id @db.Uuid
+  officeId  String   @map("office_id") @db.Uuid
+  clientId  String   @map("client_id") @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  action    String   @db.VarChar(40)
+  previous  Json?
+  current   Json
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+
+  office    Office   @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor     User     @relation("ClientTimelineActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([officeId, clientId, createdAt])
+  @@map("client_timeline_events")
 }

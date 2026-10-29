@@ -12,6 +12,8 @@ import { ProtecaoDeSenhasArgon2 } from './infrastructure/security/argon2-passwor
 import { criarEncerramento } from './shutdown.js';
 import { comporLimitacaoDeRequisicoes } from './rate-limiting.js';
 import { comporServicosDeTrabalho } from './infrastructure/work-services.js';
+import { GestaoClientes } from './application/clients/manage-clients.js';
+import { RepositorioClientesPrisma } from './infrastructure/prisma/prisma-clients-repository.js';
 
 let prisma: ReturnType<typeof criarClientePrisma> | undefined;
 let aplicacao: ReturnType<typeof criarAplicacao> | undefined;
@@ -47,10 +49,12 @@ try {
   const limitacaoRequisicoes = comporLimitacaoDeRequisicoes(prisma, ambiente);
   const senhas = comporServicosDeSenhas(prisma, ambiente, protecaoDeSenhas, autenticacao);
   processamentoSenhas = senhas.processamento;
-  const equipe = new GestaoEquipe(new RepositorioEquipePrisma(prisma), new TokensAcessoJose(ambiente.AUTH_JWT_SECRET, ambiente.AUTH_JWT_ISSUER, ambiente.AUTH_JWT_AUDIENCE, ambiente.AUTH_ACCESS_TTL_SECONDS), protecaoDeSenhas);
+  const tokensAcesso = new TokensAcessoJose(ambiente.AUTH_JWT_SECRET, ambiente.AUTH_JWT_ISSUER, ambiente.AUTH_JWT_AUDIENCE, ambiente.AUTH_ACCESS_TTL_SECONDS);
+  const equipe = new GestaoEquipe(new RepositorioEquipePrisma(prisma), tokensAcesso, protecaoDeSenhas);
   const trabalho = comporServicosDeTrabalho(prisma, ambiente);
   processamentoLembretes = trabalho.processamento;
-  aplicacao = criarAplicacao(criarVerificadorSaudePrisma(prisma), cadastro, autenticacao, { limitador: limitacaoRequisicoes.limitador, proxiesConfiaveis: ambiente.TRUST_PROXY }, senhas.servicos, equipe, trabalho);
+  const clientes = new GestaoClientes(new RepositorioClientesPrisma(prisma), tokensAcesso);
+  aplicacao = criarAplicacao(criarVerificadorSaudePrisma(prisma), cadastro, autenticacao, { limitador: limitacaoRequisicoes.limitador, proxiesConfiaveis: ambiente.TRUST_PROXY }, senhas.servicos, equipe, trabalho, clientes);
   await aplicacao.listen({
     host: ambiente.HOST,
     port: ambiente.PORT,

@@ -12,6 +12,7 @@ describe('fronteiras de persistência multiempresa', () => {
     expect(readdirSync(new URL('../src/infrastructure/prisma/', import.meta.url)).filter(n => n.startsWith('prisma-')).sort()).toEqual([
       'prisma-authentication-repository.ts', // Global: autenticação por identidade e sessão.
       'prisma-business-links.ts', // Negócio: resolvedores recebem o escritório da sessão.
+      'prisma-clients-repository.ts', // Negócio: escopo obrigatório e unicidade por escritório (RF-028).
       'prisma-document-repository.ts', // Negócio: escopo obrigatório; ver work-tenant-boundaries.
       'prisma-office-registration-repository.ts', // Público: criação atômica de um novo tenant.
       'prisma-offices-repository.ts', // Raiz de tenant, interno e sem endpoint de leitura.

@@ -5,6 +5,7 @@ import { PaginaPainel } from './features/dashboard/dashboard-page';
 import { PaginaTarefas } from './features/tasks/tasks-page';
 import { PaginaPrazos } from './features/tasks/deadlines-page';
 import { PaginaDocumentos } from './features/documents/documents-page';
+import { PaginaClientes } from './features/clients/clients-page';
 import { PaginaLogin } from './features/auth/login-page';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { ProvedorAutenticacao, useAutenticacao } from './shared/auth/auth-context';
@@ -52,6 +53,7 @@ function Rotas() {
   if (caminho === '/seguranca/sessoes' && situacao === 'autenticado') return <PaginaSessoes key={contexto} />;
   if (caminho === '/equipe' && situacao === 'autenticado') return <PaginaEquipe key={contexto} />;
   if (caminho === '/painel' && situacao === 'autenticado') return <PaginaPainel key={contexto} />;
+  if (caminho === '/clientes' && situacao === 'autenticado') return <PaginaClientes key={contexto} />;
   if (caminho === '/tarefas' && situacao === 'autenticado') return <PaginaTarefas key={contexto} />;
   if (caminho === '/prazos' && situacao === 'autenticado') return <PaginaPrazos key={contexto} />;
   if (caminho === '/documentos' && situacao === 'autenticado') return <PaginaDocumentos key={contexto} />;

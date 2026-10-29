@@ -1,0 +1,846 @@
+import { useEffect, useState, type FormEvent } from 'react';
+import { dataHoraBrasileira, requisitarApi } from '../../shared/api';
+import { useAutenticacao } from '../../shared/auth/auth-context';
+import { BOTAO, BOTAO_SECUNDARIO, CAMPO, CARTAO, Pagina } from '../../shared/ui';
+
+export type TipoPessoa = 'PESSOA_FISICA' | 'PESSOA_JURIDICA';
+export type SituacaoCliente = 'ATIVO' | 'INATIVO';
+
+export interface Endereco {
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+}
+
+export interface ClienteItem {
+  id: string;
+  tipoPessoa: TipoPessoa;
+  nome: string;
+  nomeSocial: string | null;
+  documento: string;
+  email: string | null;
+  telefone: string | null;
+  situacao: SituacaoCliente;
+  idVinculoResponsavel: string | null;
+  nomeResponsavel?: string | null;
+  versao: number;
+  criadoEm: string;
+  atualizadoEm: string;
+}
+
+export interface ClienteDetalhe extends ClienteItem {
+  endereco: Endereco | null;
+  observacoesInternas: string | null;
+  contatos: Array<{
+    id: string;
+    nome: string;
+    cargoOuRelacao: string | null;
+    email: string | null;
+    telefone: string | null;
+    observacao: string | null;
+  }>;
+}
+
+export interface EventoLinhaTempo {
+  id: string;
+  idAutor: string;
+  nomeAutor?: string;
+  acao: string;
+  motivo?: string | null;
+  anterior: Record<string, unknown> | null;
+  atual: Record<string, unknown>;
+  criadoEm: string;
+}
+
+export interface IndicioDuplicidade {
+  id: string;
+  nome: string;
+  nomeSocial: string | null;
+  tipoPessoa: TipoPessoa;
+  documentoMascarado: string;
+  email: string | null;
+  telefone: string | null;
+  situacao: SituacaoCliente;
+  motivos: Array<'DOCUMENTO_IDENTICO' | 'NOME_IDENTICO' | 'EMAIL_IDENTICO' | 'TELEFONE_IDENTICO'>;
+}
+
+const ROTULOS_ACOES: Record<string, string> = {
+  CLIENTE_CRIADO: 'Cliente cadastrado',
+  CLIENTE_ATUALIZADO: 'Dados atualizados',
+  RESPONSAVEL_ALTERADO: 'Responsável alterado',
+  CLIENTE_INATIVADO: 'Cliente inativado',
+  CLIENTE_REATIVADO: 'Cliente reativado',
+};
+
+const FORMULARIO_INICIAL = {
+  tipoPessoa: 'PESSOA_FISICA' as TipoPessoa,
+  nome: '',
+  nomeSocial: '',
+  documento: '',
+  email: '',
+  telefone: '',
+  cep: '',
+  logradouro: '',
+  numero: '',
+  complemento: '',
+  bairro: '',
+  cidade: '',
+  uf: '',
+  observacoesInternas: '',
+};
+
+function formatarDocumento(doc: string, tipo: TipoPessoa): string {
+  const d = doc.replace(/\D/g, '');
+  if (tipo === 'PESSOA_FISICA' && d.length === 11) {
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+  if (tipo === 'PESSOA_JURIDICA' && d.length === 14) {
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  }
+  return doc;
+}
+
+export function PaginaClientes() {
+  const { cliente, identidade } = useAutenticacao();
+  const papel = identidade?.escritorio.papel ?? '';
+  const podeInativar = papel === 'PROPRIETARIO' || papel === 'ADMINISTRADOR' || papel === 'ADVOGADO';
+
+  const [clientes, definirClientes] = useState<ClienteItem[]>([]);
+  const [total, definirTotal] = useState(0);
+  const [pagina, definirPagina] = useState(1);
+  const [pesquisa, definirPesquisa] = useState('');
+  const [filtroSituacao, definirFiltroSituacao] = useState<string>('');
+  const [filtroTipo, definirFiltroTipo] = useState<string>('');
+  const [revisao, definirRevisao] = useState(0);
+  const [carregando, definirCarregando] = useState(true);
+  const [mensagem, definirMensagem] = useState('');
+  const [erro, definirErro] = useState('');
+
+  // Modais e formulários
+  const [modalAberto, definirModalAberto] = useState(false);
+  const [editando, definirEditando] = useState<ClienteDetalhe | null>(null);
+  const [form, definirForm] = useState(FORMULARIO_INICIAL);
+  const [enviando, definirEnviando] = useState(false);
+
+  // Duplicidades
+  const [duplicidadesAlerta, definirDuplicidadesAlerta] = useState<IndicioDuplicidade[] | null>(null);
+
+  // Inativação / Reativação
+  const [clienteSituacao, definirClienteSituacao] = useState<{ cliente: ClienteItem; novaSituacao: SituacaoCliente } | null>(null);
+  const [motivoSituacao, definirMotivoSituacao] = useState('');
+
+  // Linha do tempo
+  const [linhaTempoCliente, definirLinhaTempoCliente] = useState<{ id: string; nome: string } | null>(null);
+  const [eventosLinhaTempo, definirEventosLinhaTempo] = useState<EventoLinhaTempo[]>([]);
+  const [carregandoLinhaTempo, definirCarregandoLinhaTempo] = useState(false);
+
+  // Carregar lista de clientes
+  useEffect(() => {
+    const controle = new AbortController();
+    definirCarregando(true);
+    definirErro('');
+
+    const parametros = new URLSearchParams({
+      pagina: String(pagina),
+      tamanhoPagina: '10',
+      pesquisa: pesquisa.trim(),
+    });
+    if (filtroSituacao) parametros.set('situacao', filtroSituacao);
+    if (filtroTipo) parametros.set('tipoPessoa', filtroTipo);
+
+    void requisitarApi<{ clientes: ClienteItem[]; total: number }>(
+      cliente,
+      `/api/v1/clientes?${parametros.toString()}`,
+      { signal: controle.signal },
+    )
+      .then((resposta) => {
+        if (controle.signal.aborted) return;
+        if (resposta.ok) {
+          definirClientes(resposta.dados.clientes);
+          definirTotal(resposta.dados.total);
+        } else {
+          definirErro(resposta.mensagem);
+        }
+      })
+      .catch(() => {
+        if (!controle.signal.aborted) definirErro('Não foi possível carregar os clientes.');
+      })
+      .finally(() => {
+        if (!controle.signal.aborted) definirCarregando(false);
+      });
+
+    return () => controle.abort();
+  }, [cliente, pagina, pesquisa, filtroSituacao, filtroTipo, revisao]);
+
+  function abrirNovo() {
+    definirEditando(null);
+    definirForm(FORMULARIO_INICIAL);
+    definirDuplicidadesAlerta(null);
+    definirErro('');
+    definirModalAberto(true);
+  }
+
+  async function abrirEdicao(item: ClienteItem) {
+    definirErro('');
+    definirDuplicidadesAlerta(null);
+    const resposta = await requisitarApi<ClienteDetalhe>(cliente, `/api/v1/clientes/${item.id}`);
+    if (!resposta.ok) {
+      definirErro(resposta.mensagem);
+      return;
+    }
+    const det = resposta.dados;
+    definirEditando(det);
+    definirForm({
+      tipoPessoa: det.tipoPessoa,
+      nome: det.nome,
+      nomeSocial: det.nomeSocial ?? '',
+      documento: det.documento,
+      email: det.email ?? '',
+      telefone: det.telefone ?? '',
+      cep: det.endereco?.cep ?? '',
+      logradouro: det.endereco?.logradouro ?? '',
+      numero: det.endereco?.numero ?? '',
+      complemento: det.endereco?.complemento ?? '',
+      bairro: det.endereco?.bairro ?? '',
+      cidade: det.endereco?.cidade ?? '',
+      uf: det.endereco?.uf ?? '',
+      observacoesInternas: det.observacoesInternas ?? '',
+    });
+    definirModalAberto(true);
+  }
+
+  async function abrirLinhaTempo(item: ClienteItem) {
+    definirLinhaTempoCliente({ id: item.id, nome: item.nome });
+    definirCarregandoLinhaTempo(true);
+    definirEventosLinhaTempo([]);
+    const resposta = await requisitarApi<EventoLinhaTempo[]>(cliente, `/api/v1/clientes/${item.id}/linha-do-tempo`);
+    definirCarregandoLinhaTempo(false);
+    if (resposta.ok) {
+      definirEventosLinhaTempo(resposta.dados);
+    } else {
+      definirErro(resposta.mensagem);
+    }
+  }
+
+  async function salvar(confirmarDuplicidade = false) {
+    definirEnviando(true);
+    definirErro('');
+
+    const endereco =
+      form.cep || form.logradouro || form.numero || form.complemento || form.bairro || form.cidade || form.uf
+        ? {
+            cep: form.cep.trim() || null,
+            logradouro: form.logradouro.trim() || null,
+            numero: form.numero.trim() || null,
+            complemento: form.complemento.trim() || null,
+            bairro: form.bairro.trim() || null,
+            cidade: form.cidade.trim() || null,
+            uf: form.uf.trim() || null,
+          }
+        : null;
+
+    try {
+      if (editando) {
+        const corpo = {
+          nome: form.nome.trim(),
+          nomeSocial: form.nomeSocial.trim() || null,
+          documento: form.documento.trim(),
+          email: form.email.trim() || null,
+          telefone: form.telefone.trim() || null,
+          endereco,
+          observacoesInternas: form.observacoesInternas.trim() || null,
+          versao: editando.versao,
+        };
+        const resposta = await requisitarApi<ClienteDetalhe>(cliente, `/api/v1/clientes/${editando.id}`, {
+          method: 'PATCH',
+          json: corpo,
+        });
+        if (!resposta.ok) {
+          definirErro(resposta.mensagem);
+          return;
+        }
+        definirMensagem('Cliente atualizado com sucesso.');
+        definirModalAberto(false);
+        definirRevisao((r) => r + 1);
+      } else {
+        const corpo = {
+          tipoPessoa: form.tipoPessoa,
+          nome: form.nome.trim(),
+          nomeSocial: form.nomeSocial.trim() || null,
+          documento: form.documento.trim(),
+          email: form.email.trim() || null,
+          telefone: form.telefone.trim() || null,
+          endereco,
+          observacoesInternas: form.observacoesInternas.trim() || null,
+          confirmarDuplicidadePotencial: confirmarDuplicidade,
+        };
+        const resposta = await requisitarApi<ClienteDetalhe>(cliente, '/api/v1/clientes', {
+          method: 'POST',
+          json: corpo,
+        });
+
+        if (resposta.status === 409 && (resposta.dados as unknown as { erro?: string })?.erro === 'POSSIVEL_DUPLICIDADE') {
+          definirDuplicidadesAlerta((resposta.dados as unknown as { duplicidades: IndicioDuplicidade[] }).duplicidades);
+          return;
+        }
+
+        if (!resposta.ok) {
+          definirErro(resposta.mensagem);
+          return;
+        }
+
+        definirMensagem('Cliente cadastrado com sucesso.');
+        definirModalAberto(false);
+        definirRevisao((r) => r + 1);
+      }
+    } finally {
+      definirEnviando(false);
+    }
+  }
+
+  async function confirmarAlteracaoSituacao() {
+    if (!clienteSituacao) return;
+    definirEnviando(true);
+    definirErro('');
+
+    const { cliente: c, novaSituacao } = clienteSituacao;
+    const acao = novaSituacao === 'ATIVO' ? 'ativar' : 'inativar';
+
+    const resposta = await requisitarApi(cliente, `/api/v1/clientes/${c.id}/${acao}`, {
+      method: 'POST',
+      json: {
+        versao: c.versao,
+        motivo: motivoSituacao.trim() || null,
+      },
+    });
+
+    definirEnviando(false);
+    if (!resposta.ok) {
+      definirErro(resposta.mensagem);
+      return;
+    }
+
+    definirMensagem(`Cliente ${novaSituacao === 'ATIVO' ? 'reativado' : 'inativado'} com sucesso.`);
+    definirClienteSituacao(null);
+    definirMotivoSituacao('');
+    definirRevisao((r) => r + 1);
+  }
+
+  const rotuloNome = form.tipoPessoa === 'PESSOA_FISICA' ? 'Nome completo *' : 'Razão social *';
+  const rotuloNomeSocial = form.tipoPessoa === 'PESSOA_FISICA' ? 'Nome social (opcional)' : 'Nome fantasia (opcional)';
+  const rotuloDocumento = form.tipoPessoa === 'PESSOA_FISICA' ? 'CPF *' : 'CNPJ *';
+
+  return (
+    <Pagina caminho="/clientes" titulo="Gestão de Clientes">
+      {mensagem && (
+        <p role="status" className="rounded-lg bg-emerald-950 p-3 text-emerald-300 border border-emerald-800">
+          {mensagem}
+        </p>
+      )}
+      {erro && (
+        <p role="alert" className="rounded-lg bg-rose-950 p-3 text-rose-300 border border-rose-800">
+          {erro}
+        </p>
+      )}
+
+      {/* Barra de filtros e pesquisa */}
+      <section className="grid gap-3 md:grid-cols-5 items-end">
+        <label className="md:col-span-2">
+          <span className="text-sm font-medium text-slate-300">Pesquisar</span>
+          <input
+            className={CAMPO}
+            placeholder="Nome, CPF/CNPJ, e-mail ou telefone..."
+            value={pesquisa}
+            onChange={(e) => {
+              definirPagina(1);
+              definirPesquisa(e.target.value);
+            }}
+          />
+        </label>
+
+        <label>
+          <span className="text-sm font-medium text-slate-300">Tipo</span>
+          <select
+            className={CAMPO}
+            value={filtroTipo}
+            onChange={(e) => {
+              definirPagina(1);
+              definirFiltroTipo(e.target.value);
+            }}
+          >
+            <option value="">Todos</option>
+            <option value="PESSOA_FISICA">Pessoa Física</option>
+            <option value="PESSOA_JURIDICA">Pessoa Jurídica</option>
+          </select>
+        </label>
+
+        <label>
+          <span className="text-sm font-medium text-slate-300">Situação</span>
+          <select
+            className={CAMPO}
+            value={filtroSituacao}
+            onChange={(e) => {
+              definirPagina(1);
+              definirFiltroSituacao(e.target.value);
+            }}
+          >
+            <option value="">Todas</option>
+            <option value="ATIVO">Ativos</option>
+            <option value="INATIVO">Inativos</option>
+          </select>
+        </label>
+
+        <div className="flex justify-end">
+          <button type="button" className={BOTAO} onClick={abrirNovo}>
+            Novo cliente
+          </button>
+        </div>
+      </section>
+
+      {/* Tabela de clientes */}
+      <section className={CARTAO}>
+        {carregando ? (
+          <p className="text-slate-400 py-6 text-center">Carregando clientes…</p>
+        ) : clientes.length === 0 ? (
+          <p className="text-slate-400 py-6 text-center">Nenhum cliente encontrado.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-700 text-slate-400 uppercase text-xs">
+                <tr>
+                  <th className="pb-3">Nome / Razão Social</th>
+                  <th className="pb-3">Documento</th>
+                  <th className="pb-3">Contato</th>
+                  <th className="pb-3">Situação</th>
+                  <th className="pb-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {clientes.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-800/40 transition">
+                    <td className="py-3 pr-4">
+                      <div className="font-semibold text-slate-100">{c.nome}</div>
+                      {c.nomeSocial && <div className="text-xs text-slate-400">{c.nomeSocial}</div>}
+                    </td>
+                    <td className="py-3 pr-4 whitespace-nowrap text-slate-300 font-mono text-xs">
+                      {formatarDocumento(c.documento, c.tipoPessoa)}
+                    </td>
+                    <td className="py-3 pr-4 text-xs text-slate-300">
+                      {c.email && <div>{c.email}</div>}
+                      {c.telefone && <div>{c.telefone}</div>}
+                      {!c.email && !c.telefone && <span className="text-slate-500">—</span>}
+                    </td>
+                    <td className="py-3 pr-4 whitespace-nowrap">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                          c.situacao === 'ATIVO'
+                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                            : 'bg-slate-800 text-slate-400 border border-slate-700'
+                        }`}
+                      >
+                        {c.situacao === 'ATIVO' ? 'Ativo' : 'Inativo'}
+                      </span>
+                    </td>
+                    <td className="py-3 text-right whitespace-nowrap space-x-2">
+                      <button
+                        type="button"
+                        className={BOTAO_SECUNDARIO}
+                        onClick={() => void abrirEdicao(c)}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className={BOTAO_SECUNDARIO}
+                        onClick={() => void abrirLinhaTempo(c)}
+                      >
+                        Histórico
+                      </button>
+                      {podeInativar && (
+                        <button
+                          type="button"
+                          className={BOTAO_SECUNDARIO}
+                          onClick={() =>
+                            definirClienteSituacao({
+                              cliente: c,
+                              novaSituacao: c.situacao === 'ATIVO' ? 'INATIVO' : 'ATIVO',
+                            })
+                          }
+                        >
+                          {c.situacao === 'ATIVO' ? 'Inativar' : 'Reativar'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Paginação */}
+        {total > 10 && (
+          <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-4 text-sm text-slate-400">
+            <span>
+              Total: {total} {total === 1 ? 'cliente' : 'clientes'}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={BOTAO_SECUNDARIO}
+                disabled={pagina <= 1}
+                onClick={() => definirPagina((p) => Math.max(1, p - 1))}
+              >
+                Anterior
+              </button>
+              <span className="self-center px-2">Página {pagina}</span>
+              <button
+                type="button"
+                className={BOTAO_SECUNDARIO}
+                disabled={pagina * 10 >= total}
+                onClick={() => definirPagina((p) => p + 1)}
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Modal de Cadastro / Edição */}
+      {modalAberto && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 overflow-y-auto"
+        >
+          <div className="w-full max-w-2xl rounded-2xl bg-slate-900 border border-slate-700 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-slate-100">
+              {editando ? 'Editar Cliente' : 'Novo Cliente'}
+            </h2>
+
+            {/* Alerta de Possível Duplicidade */}
+            {duplicidadesAlerta && duplicidadesAlerta.length > 0 && (
+              <div className="rounded-xl border border-amber-600 bg-amber-950/60 p-4 space-y-3">
+                <p className="font-semibold text-amber-200">
+                  Atenção: Foram encontrados clientes semelhantes neste escritório:
+                </p>
+                <ul className="text-sm text-amber-300 list-disc pl-5 space-y-1">
+                  {duplicidadesAlerta.map((dup) => (
+                    <li key={dup.id}>
+                      <strong>{dup.nome}</strong> ({dup.documentoMascarado}) — Motivo(s):{' '}
+                      {dup.motivos.join(', ')}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    className={BOTAO}
+                    onClick={() => void salvar(true)}
+                    disabled={enviando}
+                  >
+                    Confirmar cadastro mesmo assim
+                  </button>
+                  <button
+                    type="button"
+                    className={BOTAO_SECUNDARIO}
+                    onClick={() => definirDuplicidadesAlerta(null)}
+                  >
+                    Voltar e revisar dados
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <form
+              className="space-y-4"
+              onSubmit={(e: FormEvent) => {
+                e.preventDefault();
+                void salvar(false);
+              }}
+            >
+              {!editando && (
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 text-sm text-slate-300">
+                    <input
+                      type="radio"
+                      name="tipoPessoa"
+                      value="PESSOA_FISICA"
+                      checked={form.tipoPessoa === 'PESSOA_FISICA'}
+                      onChange={() => definirForm({ ...form, tipoPessoa: 'PESSOA_FISICA' })}
+                    />
+                    Pessoa Física (PF)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-300">
+                    <input
+                      type="radio"
+                      name="tipoPessoa"
+                      value="PESSOA_JURIDICA"
+                      checked={form.tipoPessoa === 'PESSOA_JURIDICA'}
+                      onChange={() => definirForm({ ...form, tipoPessoa: 'PESSOA_JURIDICA' })}
+                    />
+                    Pessoa Jurídica (PJ)
+                  </label>
+                </div>
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="sm:col-span-2">
+                  <span className="text-xs font-semibold text-slate-300 uppercase">{rotuloNome}</span>
+                  <input
+                    className={CAMPO}
+                    required
+                    value={form.nome}
+                    onChange={(e) => definirForm({ ...form, nome: e.target.value })}
+                  />
+                </label>
+
+                <label>
+                  <span className="text-xs font-semibold text-slate-300 uppercase">{rotuloNomeSocial}</span>
+                  <input
+                    className={CAMPO}
+                    value={form.nomeSocial}
+                    onChange={(e) => definirForm({ ...form, nomeSocial: e.target.value })}
+                  />
+                </label>
+
+                <label>
+                  <span className="text-xs font-semibold text-slate-300 uppercase">{rotuloDocumento}</span>
+                  <input
+                    className={CAMPO}
+                    required
+                    placeholder={form.tipoPessoa === 'PESSOA_FISICA' ? '000.000.000-00' : '00.000.000/0000-00'}
+                    value={form.documento}
+                    onChange={(e) => definirForm({ ...form, documento: e.target.value })}
+                  />
+                </label>
+
+                <label>
+                  <span className="text-xs font-semibold text-slate-300 uppercase">E-mail</span>
+                  <input
+                    type="email"
+                    className={CAMPO}
+                    value={form.email}
+                    onChange={(e) => definirForm({ ...form, email: e.target.value })}
+                  />
+                </label>
+
+                <label>
+                  <span className="text-xs font-semibold text-slate-300 uppercase">Telefone</span>
+                  <input
+                    className={CAMPO}
+                    value={form.telefone}
+                    onChange={(e) => definirForm({ ...form, telefone: e.target.value })}
+                  />
+                </label>
+              </div>
+
+              {/* Endereço */}
+              <div className="border-t border-slate-800 pt-3 space-y-2">
+                <h3 className="text-sm font-semibold text-slate-300 uppercase">Endereço</h3>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <label>
+                    <span className="text-xs text-slate-400">CEP</span>
+                    <input
+                      className={CAMPO}
+                      placeholder="00000-000"
+                      value={form.cep}
+                      onChange={(e) => definirForm({ ...form, cep: e.target.value })}
+                    />
+                  </label>
+                  <label className="sm:col-span-2">
+                    <span className="text-xs text-slate-400">Logradouro</span>
+                    <input
+                      className={CAMPO}
+                      value={form.logradouro}
+                      onChange={(e) => definirForm({ ...form, logradouro: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    <span className="text-xs text-slate-400">Número</span>
+                    <input
+                      className={CAMPO}
+                      value={form.numero}
+                      onChange={(e) => definirForm({ ...form, numero: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    <span className="text-xs text-slate-400">Complemento</span>
+                    <input
+                      className={CAMPO}
+                      value={form.complemento}
+                      onChange={(e) => definirForm({ ...form, complemento: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    <span className="text-xs text-slate-400">Bairro</span>
+                    <input
+                      className={CAMPO}
+                      value={form.bairro}
+                      onChange={(e) => definirForm({ ...form, bairro: e.target.value })}
+                    />
+                  </label>
+                  <label className="sm:col-span-2">
+                    <span className="text-xs text-slate-400">Cidade</span>
+                    <input
+                      className={CAMPO}
+                      value={form.cidade}
+                      onChange={(e) => definirForm({ ...form, cidade: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    <span className="text-xs text-slate-400">UF</span>
+                    <input
+                      className={CAMPO}
+                      maxLength={2}
+                      placeholder="SP"
+                      value={form.uf}
+                      onChange={(e) => definirForm({ ...form, uf: e.target.value.toUpperCase() })}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Observações Internas */}
+              <div className="border-t border-slate-800 pt-3">
+                <label>
+                  <span className="text-xs font-semibold text-slate-300 uppercase">Observações Internas</span>
+                  <textarea
+                    rows={3}
+                    className={CAMPO}
+                    placeholder="Anotações internas confidenciais sobre o cliente..."
+                    value={form.observacoesInternas}
+                    onChange={(e) => definirForm({ ...form, observacoesInternas: e.target.value })}
+                  />
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  className={BOTAO_SECUNDARIO}
+                  onClick={() => definirModalAberto(false)}
+                  disabled={enviando}
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className={BOTAO} disabled={enviando}>
+                  {enviando ? 'Salvando…' : editando ? 'Salvar alterações' : 'Cadastrar cliente'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Inativação / Reativação */}
+      {clienteSituacao && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-700 p-6 space-y-4">
+            <h2 className="text-lg font-bold text-slate-100">
+              {clienteSituacao.novaSituacao === 'ATIVO' ? 'Reativar Cliente' : 'Inativar Cliente'}
+            </h2>
+            <p className="text-sm text-slate-300">
+              Tem certeza que deseja {clienteSituacao.novaSituacao === 'ATIVO' ? 'reativar' : 'inativar'} o cliente{' '}
+              <strong>{clienteSituacao.cliente.nome}</strong>?
+            </p>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-slate-400">Motivo (opcional):</span>
+              <input
+                className={CAMPO}
+                placeholder="Ex.: Encerramento de contrato, cliente solicitou..."
+                value={motivoSituacao}
+                onChange={(e) => definirMotivoSituacao(e.target.value)}
+              />
+            </label>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                className={BOTAO_SECUNDARIO}
+                onClick={() => {
+                  definirClienteSituacao(null);
+                  definirMotivoSituacao('');
+                }}
+                disabled={enviando}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className={BOTAO}
+                onClick={() => void confirmarAlteracaoSituacao()}
+                disabled={enviando}
+              >
+                {enviando ? 'Processando…' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal / Gaveta de Linha do Tempo */}
+      {linhaTempoCliente && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+        >
+          <div className="w-full max-w-xl rounded-2xl bg-slate-900 border border-slate-700 p-6 space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-100">Linha do Tempo</h2>
+                <p className="text-xs text-slate-400">{linhaTempoCliente.nome}</p>
+              </div>
+              <button
+                type="button"
+                className={BOTAO_SECUNDARIO}
+                onClick={() => definirLinhaTempoCliente(null)}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-4 flex-1 pr-1">
+              {carregandoLinhaTempo ? (
+                <p className="text-slate-400 text-center py-6">Carregando histórico…</p>
+              ) : eventosLinhaTempo.length === 0 ? (
+                <p className="text-slate-400 text-center py-6">Nenhum evento registrado.</p>
+              ) : (
+                <ol className="relative border-l border-slate-700 ml-3 space-y-6">
+                  {eventosLinhaTempo.map((ev) => (
+                    <li key={ev.id} className="ml-6">
+                      <span className="absolute -left-2.5 flex items-center justify-center w-5 h-5 bg-cyan-950 border border-cyan-400 rounded-full">
+                        <span className="w-2 h-2 bg-cyan-300 rounded-full" />
+                      </span>
+                      <div className="text-sm font-semibold text-slate-100">
+                        {ROTULOS_ACOES[ev.acao] ?? ev.acao}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        {dataHoraBrasileira(ev.criadoEm)}
+                        {ev.nomeAutor ? ` por ${ev.nomeAutor}` : ''}
+                      </div>
+                      {ev.motivo && (
+                        <div className="text-xs text-slate-300 mt-1 bg-slate-800/60 p-2 rounded border border-slate-700">
+                          Motivo: {ev.motivo}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </Pagina>
+  );
+}
