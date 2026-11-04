@@ -494,3 +494,21 @@ model DocumentEvent {
   @@index([documentId, createdAt])
   @@map("document_events")
 }
+
+model AuditLog {
+  id         String   @id @db.Uuid
+  officeId   String?  @map("office_id") @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(48)
+  entityType String   @map("entity_type") @db.VarChar(32)
+  entityId   String?  @map("entity_id") @db.Uuid
+  previous   Json?
+  current    Json?
+  metadata   Json?
+  createdAt  DateTime @map("created_at") @db.Timestamptz(3)
+
+  @@index([officeId, createdAt(sort: Desc)])
+  @@index([officeId, actorId, createdAt])
+  @@index([officeId, entityType, entityId])
+  @@map("audit_logs")
+}
