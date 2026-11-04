@@ -41,6 +41,13 @@ model Office {
   clients       Client[]
   clientContacts ClientContact[]
   clientTimelineEvents ClientTimelineEvent[]
+  legalCases    LegalCase[]
+  caseClients   CaseClient[]
+  caseTeamMembers CaseTeamMember[]
+  caseParties   CaseParty[]
+  legalProcesses LegalProcess[]
+  processMovements ProcessMovement[]
+  caseTimelineEvents CaseTimelineEvent[]
 
   @@map("offices")
 }
@@ -93,6 +100,8 @@ model User {
   documentVersions     DocumentVersion[]
   documentEvents       DocumentEvent[]
   clientTimelineEvents ClientTimelineEvent[] @relation("ClientTimelineActor")
+  processMovements     ProcessMovement[]     @relation("ProcessMovementActor")
+  caseTimelineEvents   CaseTimelineEvent[]   @relation("CaseTimelineActor")
 
   @@map("users")
 }
@@ -160,8 +169,10 @@ model Membership {
   permissions String[]            @default([])
   version     Int                 @default(0)
   updatedAt   DateTime            @default(now()) @map("updated_at") @db.Timestamptz(3)
-  history     MembershipHistory[]
-  clientsResponsible Client[]     @relation("ClientResponsibleMembership")
+  history              MembershipHistory[]
+  clientsResponsible  Client[]            @relation("ClientResponsibleMembership")
+  casesResponsible    LegalCase[]         @relation("CaseResponsibleMembership")
+  caseTeamMembers     CaseTeamMember[]
 
   @@unique([officeId, userId])
   @@index([userId])
@@ -541,6 +552,7 @@ model Client {
   responsibleMembership   Membership?           @relation("ClientResponsibleMembership", fields: [responsibleMembershipId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   contacts                ClientContact[]
   timelineEvents          ClientTimelineEvent[]
+  cases                   CaseClient[]
 
   @@unique([officeId, documentNumber])
   @@index([officeId, status, name])
@@ -585,4 +597,200 @@ model ClientTimelineEvent {
 
   @@index([officeId, clientId, createdAt])
   @@map("client_timeline_events")
+}
+
+enum CaseNature {
+  JUDICIAL
+  EXTRAJUDICIAL
+  ADMINISTRATIVE
+  ADVISORY
+
+  @@map("case_nature")
+}
+
+enum CasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+
+  @@map("case_priority")
+}
+
+enum CaseStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+  ARCHIVED
+
+  @@map("case_status")
+}
+
+enum ProcessRelationType {
+  MAIN
+  APPEAL
+  INCIDENTAL
+  EXECUTION
+
+  @@map("process_relation_type")
+}
+
+enum ProcessInstance {
+  FIRST_INSTANCE
+  SECOND_INSTANCE
+  SUPERIOR_COURT
+  ADMINISTRATIVE
+
+  @@map("process_instance")
+}
+
+model LegalCase {
+  id                      String              @id @db.Uuid
+  officeId                String              @map("office_id") @db.Uuid
+  title                   String              @db.VarChar(160)
+  description             String?             @db.Text
+  nature                  CaseNature
+  legalArea               String              @map("legal_area") @db.VarChar(40)
+  priority                CasePriority        @default(MEDIUM)
+  status                  CaseStatus          @default(ACTIVE)
+  responsibleMembershipId String?             @map("responsible_membership_id") @db.Uuid
+  claimAmountCents        BigInt?             @map("claim_amount_cents")
+  involvedAmountCents     BigInt?             @map("involved_amount_cents")
+  lastActivityAt          DateTime            @map("last_activity_at") @db.Timestamptz(3)
+  version                 Int                 @default(0)
+  createdAt               DateTime            @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime            @map("updated_at") @db.Timestamptz(3)
+
+  office                  Office              @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  responsibleMembership   Membership?         @relation("CaseResponsibleMembership", fields: [responsibleMembershipId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  clients                 CaseClient[]
+  teamMembers             CaseTeamMember[]
+  parties                 CaseParty[]
+  processes               LegalProcess[]
+  movements               ProcessMovement[]
+  timelineEvents          CaseTimelineEvent[]
+
+  @@index([officeId, status, lastActivityAt])
+  @@index([officeId, status, responsibleMembershipId])
+  @@index([officeId, legalArea, status])
+  @@index([officeId, priority, status])
+  @@map("legal_cases")
+}
+
+model CaseClient {
+  officeId  String    @map("office_id") @db.Uuid
+  caseId    String    @map("case_id") @db.Uuid
+  clientId  String    @map("client_id") @db.Uuid
+  createdAt DateTime  @map("created_at") @db.Timestamptz(3)
+
+  office    Office    @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  legalCase LegalCase @relation(fields: [caseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([caseId, clientId])
+  @@index([officeId, clientId])
+  @@index([officeId, caseId])
+  @@map("case_clients")
+}
+
+model CaseTeamMember {
+  officeId     String     @map("office_id") @db.Uuid
+  caseId       String     @map("case_id") @db.Uuid
+  membershipId String     @map("membership_id") @db.Uuid
+  createdAt    DateTime   @map("created_at") @db.Timestamptz(3)
+
+  office       Office     @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  legalCase    LegalCase  @relation(fields: [caseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([caseId, membershipId])
+  @@index([officeId, membershipId])
+  @@map("case_team_members")
+}
+
+model CaseParty {
+  id             String    @id @db.Uuid
+  officeId       String    @map("office_id") @db.Uuid
+  caseId         String    @map("case_id") @db.Uuid
+  partyRole      String    @map("party_role") @db.VarChar(40)
+  name           String    @db.VarChar(150)
+  documentNumber String?   @map("document_number") @db.VarChar(14)
+  oab            String?   @db.VarChar(20)
+  contactInfo    String?   @map("contact_info") @db.VarChar(200)
+  notes          String?   @db.VarChar(500)
+  createdAt      DateTime  @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @map("updated_at") @db.Timestamptz(3)
+
+  office         Office    @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  legalCase      LegalCase @relation(fields: [caseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([officeId, caseId, createdAt])
+  @@map("case_parties")
+}
+
+model LegalProcess {
+  id              String              @id @db.Uuid
+  officeId        String              @map("office_id") @db.Uuid
+  caseId          String              @map("case_id") @db.Uuid
+  cnjNumber       String              @map("cnj_number") @db.Char(20)
+  relationType    ProcessRelationType @default(MAIN) @map("relation_type")
+  court           String              @db.VarChar(60)
+  district        String?             @db.VarChar(120)
+  chamber         String?             @db.VarChar(120)
+  instance        ProcessInstance
+  proceduralPhase String              @map("procedural_phase") @db.VarChar(40)
+  version         Int                 @default(0)
+  createdAt       DateTime            @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @map("updated_at") @db.Timestamptz(3)
+
+  office          Office              @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  legalCase       LegalCase           @relation(fields: [caseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  movements       ProcessMovement[]
+  timelineEvents  CaseTimelineEvent[]
+
+  @@unique([officeId, caseId, cnjNumber])
+  @@index([officeId, cnjNumber])
+  @@index([officeId, caseId, createdAt])
+  @@map("legal_processes")
+}
+
+model ProcessMovement {
+  id          String       @id @db.Uuid
+  officeId    String       @map("office_id") @db.Uuid
+  caseId      String       @map("case_id") @db.Uuid
+  processId   String       @map("process_id") @db.Uuid
+  actorId     String       @map("actor_id") @db.Uuid
+  occurredAt  DateTime     @map("occurred_at") @db.Timestamptz(3)
+  description String       @db.Text
+  createdAt   DateTime     @map("created_at") @db.Timestamptz(3)
+
+  office      Office       @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  legalCase   LegalCase    @relation(fields: [caseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  process     LegalProcess @relation(fields: [processId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor       User         @relation("ProcessMovementActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([officeId, processId, occurredAt])
+  @@index([officeId, caseId, occurredAt])
+  @@map("process_movements")
+}
+
+model CaseTimelineEvent {
+  id        String        @id @db.Uuid
+  officeId  String        @map("office_id") @db.Uuid
+  caseId    String        @map("case_id") @db.Uuid
+  processId String?       @map("process_id") @db.Uuid
+  actorId   String        @map("actor_id") @db.Uuid
+  action    String        @db.VarChar(40)
+  previous  Json?
+  current   Json
+  createdAt DateTime      @map("created_at") @db.Timestamptz(3)
+
+  office    Office        @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  legalCase LegalCase     @relation(fields: [caseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  process   LegalProcess? @relation(fields: [processId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor     User          @relation("CaseTimelineActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([officeId, caseId, createdAt])
+  @@index([officeId, processId, createdAt])
+  @@map("case_timeline_events")
 }

@@ -49,7 +49,36 @@ export const RESOLVEDORES_VINCULO: Record<TipoVinculo, ResolvedorVinculo> = {
       }));
     },
   },
-  CASO: SEM_REGISTROS,
+  CASO: {
+    existe: async (transacao, idEscritorio, id) => {
+      const caso = await transacao.legalCase.findFirst({
+        where: { id, officeId: idEscritorio },
+        select: { id: true },
+      });
+      return Boolean(caso);
+    },
+    pesquisar: async (transacao, idEscritorio, pesquisa, limite) => {
+      const termo = pesquisa.trim();
+      const casos = await transacao.legalCase.findMany({
+        where: {
+          officeId: idEscritorio,
+          status: 'ACTIVE',
+          ...(termo.length > 0 ? { title: { contains: termo, mode: 'insensitive' } } : {}),
+        },
+        select: {
+          id: true,
+          title: true,
+        },
+        take: Math.min(Math.max(limite, 1), 50),
+        orderBy: { title: 'asc' },
+      });
+
+      return casos.map((c) => ({
+        id: c.id,
+        rotulo: c.title,
+      }));
+    },
+  },
   PROCESSO: SEM_REGISTROS,
 };
 

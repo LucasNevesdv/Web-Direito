@@ -8,6 +8,7 @@ import {
 import { validarContextoDoEscritorio } from '../../application/authentication/office-context.js';
 import { registrarAtividadeDaSessao } from './session-activity.js';
 import { PAPEIS_DOMINIO } from './team-mapper.js';
+import { SITUACOES_CASO_DOMINIO } from './case-mapper.js';
 import type {
   ClienteDetalheDto,
   ContatoClienteDto,
@@ -702,8 +703,30 @@ export class RepositorioClientesPrisma implements RepositorioClientes {
                 take: 100,
               });
 
+              const casosPrisma = await transacao.caseClient.findMany({
+                where: {
+                  clientId: idCliente,
+                  officeId: contexto.idEscritorioAtivo,
+                },
+                select: {
+                  legalCase: {
+                    select: {
+                      id: true,
+                      title: true,
+                      status: true,
+                    },
+                  },
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 100,
+              });
+
               return {
-                casos: [],
+                casos: casosPrisma.map((c) => ({
+                  id: c.legalCase.id,
+                  titulo: c.legalCase.title,
+                  situacao: SITUACOES_CASO_DOMINIO[c.legalCase.status] ?? c.legalCase.status,
+                })),
                 processos: [],
                 documentos: documentosPrisma.map((d) => ({
                   id: d.id,

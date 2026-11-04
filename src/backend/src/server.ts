@@ -14,6 +14,8 @@ import { comporLimitacaoDeRequisicoes } from './rate-limiting.js';
 import { comporServicosDeTrabalho } from './infrastructure/work-services.js';
 import { GestaoClientes } from './application/clients/manage-clients.js';
 import { RepositorioClientesPrisma } from './infrastructure/prisma/prisma-clients-repository.js';
+import { GestaoCasosProcessos } from './application/cases/manage-cases.js';
+import { RepositorioCasosPrisma } from './infrastructure/prisma/prisma-cases-repository.js';
 
 let prisma: ReturnType<typeof criarClientePrisma> | undefined;
 let aplicacao: ReturnType<typeof criarAplicacao> | undefined;
@@ -54,7 +56,8 @@ try {
   const trabalho = comporServicosDeTrabalho(prisma, ambiente);
   processamentoLembretes = trabalho.processamento;
   const clientes = new GestaoClientes(new RepositorioClientesPrisma(prisma), tokensAcesso);
-  aplicacao = criarAplicacao(criarVerificadorSaudePrisma(prisma), cadastro, autenticacao, { limitador: limitacaoRequisicoes.limitador, proxiesConfiaveis: ambiente.TRUST_PROXY }, senhas.servicos, equipe, trabalho, clientes);
+  const casos = new GestaoCasosProcessos(new RepositorioCasosPrisma(prisma), tokensAcesso);
+  aplicacao = criarAplicacao(criarVerificadorSaudePrisma(prisma), cadastro, autenticacao, { limitador: limitacaoRequisicoes.limitador, proxiesConfiaveis: ambiente.TRUST_PROXY }, senhas.servicos, equipe, trabalho, clientes, casos);
   await aplicacao.listen({
     host: ambiente.HOST,
     port: ambiente.PORT,
