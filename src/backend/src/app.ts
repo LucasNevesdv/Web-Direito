@@ -5,6 +5,8 @@ import type { GestaoTarefas } from './application/tasks/manage-tasks.js';
 import type { GestaoDocumentos } from './application/documents/manage-documents.js';
 import { registrarRotasTarefas } from './presentation/task-routes.js';
 import { registrarRotasDocumentos } from './presentation/document-routes.js';
+import type { GestaoAdministracao } from './application/administration/manage-administration.js';
+import { registrarRotasAdministracao } from './presentation/administration-routes.js';
 import { registrarRotasSenhas, type ServicosRotasSenhas } from './presentation/password-routes.js';
 import { LIMITADOR_REQUISICOES_INDISPONIVEL, type LimitadorRequisicoes } from './application/security/rate-limiter.js';
 import type { CadastroDeEscritorioComProprietario } from './application/onboarding/register-office-with-owner.js';
@@ -20,6 +22,7 @@ export function criarAplicacao(
   senhas?: ServicosRotasSenhas,
   equipe?: GestaoEquipe,
   trabalho?: { tarefas: GestaoTarefas; documentos: { gestao: GestaoDocumentos; limiteBytes: number } },
+  administracao?: GestaoAdministracao,
 ) {
   const aplicacao = Fastify({ logger: false, trustProxy: seguranca.proxiesConfiaveis ?? false });
 
@@ -44,6 +47,7 @@ export function criarAplicacao(
     registrarRotasTarefas(aplicacao, trabalho.tarefas, autenticacao.origemFrontend);
     registrarRotasDocumentos(aplicacao, trabalho.documentos.gestao, autenticacao.origemFrontend, trabalho.documentos.limiteBytes);
   }
+  if (autenticacao && administracao) registrarRotasAdministracao(aplicacao, administracao, autenticacao.origemFrontend);
 
   return aplicacao;
 }

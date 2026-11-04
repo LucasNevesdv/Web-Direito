@@ -10,6 +10,7 @@ describe('fronteiras de persistência multiempresa', () => {
     // Inventário exige revisão de novos adaptadores; não prova isolamento por texto.
     // A prova comportamental abaixo executa as operações sobre delegates instrumentados.
     expect(readdirSync(new URL('../src/infrastructure/prisma/', import.meta.url)).filter(n => n.startsWith('prisma-')).sort()).toEqual([
+      'prisma-administration-repository.ts', // Negócio: escopo obrigatório pelo escritório da sessão; ver audit-admin.check.
       'prisma-authentication-repository.ts', // Global: autenticação por identidade e sessão.
       'prisma-business-links.ts', // Negócio: resolvedores recebem o escritório da sessão.
       'prisma-document-repository.ts', // Negócio: escopo obrigatório; ver work-tenant-boundaries.
