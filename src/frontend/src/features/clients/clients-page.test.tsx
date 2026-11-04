@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { criarClienteAutenticado, renderizarComCliente, respostaJson } from '../../shared/testing';
 import { PaginaClientes, type ClienteItem } from './clients-page';
@@ -359,5 +359,117 @@ describe('PaginaClientes (Frontend)', () => {
     });
 
     expect(await screen.findByText(/Atenção: Foram encontrados clientes semelhantes neste escritório:/i)).toBeTruthy();
+  });
+
+  it('abre modal de vínculos e exibe documentos, tarefas e prazos (RF-029 / RF-030)', async () => {
+    let consultouVinculos = false;
+
+    const { cliente } = await criarClienteAutenticado((url) => {
+      if (url.startsWith('/api/v1/clientes?')) {
+        return respostaJson({ clientes: [clienteMock], total: 1 });
+      }
+      if (url === '/api/v1/clientes/cliente-1/vinculos') {
+        consultouVinculos = true;
+        return respostaJson({
+          casos: [],
+          processos: [],
+          documentos: [
+            {
+              id: 'doc-1',
+              nome: 'Contrato de Prestação.pdf',
+              categoria: 'CONTRATO',
+              criadoEm: '2026-10-30T10:00:00Z',
+            },
+          ],
+          tarefas: [
+            {
+              id: 'tarefa-1',
+              titulo: 'Protocolar petição inicial',
+              situacao: 'PENDENTE',
+              prazo: '2026-11-15',
+            },
+          ],
+          compromissos: [
+            {
+              id: 'prazo-1',
+              descricao: 'Prazo da Contestação',
+              data: '2026-11-20',
+              situacao: 'PENDENTE',
+            },
+          ],
+        });
+      }
+      return respostaJson({}, 404);
+    });
+
+    renderizarComCliente(cliente, <PaginaClientes />);
+
+    expect(await screen.findByText('Carlos Eduardo Santos')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vínculos' }));
+
+    expect(screen.getByText('Vínculos do Cliente')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(consultouVinculos).toBe(true);
+    });
+
+    expect(await screen.findByText('Contrato de Prestação.pdf')).toBeTruthy();
+    expect(screen.getByText('Contrato')).toBeTruthy();
+    expect(screen.getByText('Protocolar petição inicial')).toBeTruthy();
+    expect(screen.getByText('Prazo da Contestação')).toBeTruthy();
+    expect(screen.getByText('Nenhum caso ou processo vinculado a este cliente.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar' }));
+    expect(screen.queryByText('Vínculos do Cliente')).toBeNull();
+  });
+
+  it('permite alternar para a aba Vínculos dentro do modal de edição (RF-029 / RF-030)', async () => {
+    let consultouVinculos = false;
+
+    const { cliente } = await criarClienteAutenticado((url) => {
+      if (url.startsWith('/api/v1/clientes?')) {
+        return respostaJson({ clientes: [clienteMock], total: 1 });
+      }
+      if (url === '/api/v1/clientes/cliente-1') {
+        return respostaJson({
+          ...clienteMock,
+          endereco: null,
+          observacoesInternas: null,
+          contatos: [],
+        });
+      }
+      if (url === '/api/v1/clientes/cliente-1/vinculos') {
+        consultouVinculos = true;
+        return respostaJson({
+          casos: [],
+          processos: [],
+          documentos: [],
+          tarefas: [],
+          compromissos: [],
+        });
+      }
+      return respostaJson({}, 404);
+    });
+
+    renderizarComCliente(cliente, <PaginaClientes />);
+
+    expect(await screen.findByText('Carlos Eduardo Santos')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+
+    expect(await screen.findByText('Editar Cliente')).toBeTruthy();
+
+    const modal = screen.getByRole('dialog');
+    const abaVinculos = within(modal).getByRole('button', { name: 'Vínculos' });
+    fireEvent.click(abaVinculos);
+
+    await waitFor(() => {
+      expect(consultouVinculos).toBe(true);
+    });
+
+    expect(await screen.findByText('Nenhum documento vinculado a este cliente.')).toBeTruthy();
+    expect(screen.getByText('Nenhuma tarefa vinculada a este cliente.')).toBeTruthy();
+    expect(screen.getByText('Nenhum prazo judicial vinculado a este cliente.')).toBeTruthy();
   });
 });

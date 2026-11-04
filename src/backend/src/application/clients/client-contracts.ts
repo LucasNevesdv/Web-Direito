@@ -53,6 +53,47 @@ export interface EventoLinhaTempoClienteDto {
   criadoEm: Date;
 }
 
+export interface CasoVinculadoClienteDto {
+  id: string;
+  titulo: string;
+  situacao: string;
+}
+
+export interface ProcessoVinculadoClienteDto {
+  id: string;
+  numeroCnj: string;
+  tribunal?: string | null;
+}
+
+export interface DocumentoVinculadoClienteDto {
+  id: string;
+  nome: string;
+  categoria: string;
+  criadoEm: Date;
+}
+
+export interface TarefaVinculadaClienteDto {
+  id: string;
+  titulo: string;
+  situacao: string;
+  prazo?: string | null;
+}
+
+export interface CompromissoVinculadoClienteDto {
+  id: string;
+  descricao: string;
+  data: string;
+  situacao: string;
+}
+
+export interface VinculosRelacionadosClienteDto {
+  casos: CasoVinculadoClienteDto[];
+  processos: ProcessoVinculadoClienteDto[];
+  documentos: DocumentoVinculadoClienteDto[];
+  tarefas: TarefaVinculadaClienteDto[];
+  compromissos: CompromissoVinculadoClienteDto[];
+}
+
 export interface FiltroClientes {
   pagina: number;
   tamanhoPagina: number;
@@ -98,6 +139,7 @@ export interface OperacoesClientes {
   atualizarContatoCliente(anterior: ContatoClienteDto, atualizado: ContatoCliente): Promise<ContatoClienteDto>;
   removerContatoCliente(idCliente: string, idContato: string): Promise<void>;
   listarLinhaDoTempoCliente(idCliente: string): Promise<EventoLinhaTempoClienteDto[]>;
+  listarVinculosRelacionados(idCliente: string): Promise<VinculosRelacionadosClienteDto>;
 }
 
 export interface RepositorioClientes {

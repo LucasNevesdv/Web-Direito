@@ -75,6 +75,25 @@ describe('tarefas', () => {
     const tarefa = await c.gestao.criarTarefa('token', c.dadosTarefa);
     expect(tarefa).toMatchObject({ titulo: 'Protocolar petição', situacao: 'PENDENTE', prioridade: 'ALTA', prazoInterno: '2026-10-12', revisor: { id: membros.outro } });
   });
+  it('cria tarefa vinculada a cliente existente no mesmo escritório e rejeita cliente de outro escritório (RF-029/030)', async () => {
+    const c = preparar();
+    const idClienteMesmoEscritorio = randomUUID();
+    const idClienteOutroEscritorio = randomUUID();
+    c.operacoes.vinculos.existe = vi.fn(async (vinculo) => vinculo.tipo === 'CLIENTE' && vinculo.id === idClienteMesmoEscritorio);
+
+    const tarefa = await c.gestao.criarTarefa('token', {
+      ...c.dadosTarefa,
+      vinculo: { tipo: 'CLIENTE', id: idClienteMesmoEscritorio },
+    });
+    expect(tarefa.vinculo).toEqual({ tipo: 'CLIENTE', id: idClienteMesmoEscritorio });
+
+    await expect(
+      c.gestao.criarTarefa('token', {
+        ...c.dadosTarefa,
+        vinculo: { tipo: 'CLIENTE', id: idClienteOutroEscritorio },
+      }),
+    ).rejects.toMatchObject({ codigo: 'VINCULO_NAO_ENCONTRADO' });
+  });
   it.each([
     [{ idResponsavel: membros.inativo }, 'RESPONSAVEL_INVALIDO'], [{ idRevisor: membros.autor }, 'DADOS_INVALIDOS'],
     [{ prazoInterno: '2026-02-30' }, 'DADOS_INVALIDOS'], [{ titulo: 'ab' }, 'DADOS_INVALIDOS'],

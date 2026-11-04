@@ -8,6 +8,7 @@ import type {
   IndicioDuplicidadeCliente,
   OperacoesClientes,
   RepositorioClientes,
+  VinculosRelacionadosClienteDto,
 } from '../../src/application/clients/client-contracts.js';
 import {
   ErroCliente,
@@ -75,6 +76,7 @@ interface MembroArmazenado {
   nome: string;
   papel: PapelVinculoEscritorio;
   ativo: boolean;
+  permissoes?: string[];
 }
 
 export class RepositorioClientesEmMemoria implements RepositorioClientes {
@@ -82,9 +84,71 @@ export class RepositorioClientesEmMemoria implements RepositorioClientes {
   readonly contatos: ContatoArmazenado[] = [];
   readonly eventos: EventoArmazenado[] = [];
   readonly membros: MembroArmazenado[] = [];
+  readonly documentos: Array<{
+    id: string;
+    idEscritorio: string;
+    idCliente: string;
+    nome: string;
+    categoria: string;
+    ativo: boolean;
+    criadoEm: Date;
+  }> = [];
+  readonly tarefas: Array<{
+    id: string;
+    idEscritorio: string;
+    idCliente: string;
+    titulo: string;
+    situacao: string;
+    prazo?: string | null;
+  }> = [];
+  readonly compromissos: Array<{
+    id: string;
+    idEscritorio: string;
+    idCliente: string;
+    descricao: string;
+    data: string;
+    situacao: string;
+  }> = [];
 
   adicionarMembro(membro: MembroArmazenado) {
     this.membros.push(membro);
+  }
+
+  adicionarDocumento(doc: {
+    id: string;
+    idEscritorio: string;
+    idCliente: string;
+    nome: string;
+    categoria: string;
+    ativo: boolean;
+    criadoEm?: Date;
+  }) {
+    this.documentos.push({
+      ...doc,
+      criadoEm: doc.criadoEm ?? new Date(),
+    });
+  }
+
+  adicionarTarefa(tarefa: {
+    id: string;
+    idEscritorio: string;
+    idCliente: string;
+    titulo: string;
+    situacao: string;
+    prazo?: string | null;
+  }) {
+    this.tarefas.push(tarefa);
+  }
+
+  adicionarCompromisso(compromisso: {
+    id: string;
+    idEscritorio: string;
+    idCliente: string;
+    descricao: string;
+    data: string;
+    situacao: string;
+  }) {
+    this.compromissos.push(compromisso);
   }
 
   async executar<T>(
@@ -100,7 +164,7 @@ export class RepositorioClientesEmMemoria implements RepositorioClientes {
       idUsuario: contexto.idUsuario,
       idEscritorio: contexto.idEscritorioAtivo,
       papel,
-      permissoes: papel === 'PROPRIETARIO' ? [...PERMISSOES_CLIENTE] : ['CLIENTE_VISUALIZAR', 'CLIENTE_CADASTRAR', 'CLIENTE_EDITAR'],
+      permissoes: autorMembro?.permissoes ?? (papel === 'PROPRIETARIO' ? [...PERMISSOES_CLIENTE] : ['CLIENTE_VISUALIZAR', 'CLIENTE_CADASTRAR', 'CLIENTE_EDITAR']),
     };
 
     const buscarClientePorId = async (idCliente: string): Promise<ClienteDetalheDto> => {
@@ -520,6 +584,48 @@ export class RepositorioClientesEmMemoria implements RepositorioClientes {
           atual: e.atual,
           criadoEm: e.criadoEm,
         }));
+      },
+
+      listarVinculosRelacionados: async (idCliente: string): Promise<VinculosRelacionadosClienteDto> => {
+        const cliente = this.clientes.find(
+          (c) => c.id === idCliente && c.idEscritorio === contexto.idEscritorioAtivo,
+        );
+        if (!cliente) throw new ErroCliente('NAO_ENCONTRADO', 404);
+
+        const docs = this.documentos
+          .filter((d) => d.idCliente === idCliente && d.idEscritorio === contexto.idEscritorioAtivo && d.ativo)
+          .map((d) => ({
+            id: d.id,
+            nome: d.nome,
+            categoria: d.categoria,
+            criadoEm: d.criadoEm,
+          }));
+
+        const tarefas = this.tarefas
+          .filter((t) => t.idCliente === idCliente && t.idEscritorio === contexto.idEscritorioAtivo)
+          .map((t) => ({
+            id: t.id,
+            titulo: t.titulo,
+            situacao: t.situacao,
+            prazo: t.prazo ?? null,
+          }));
+
+        const compromissos = this.compromissos
+          .filter((c) => c.idCliente === idCliente && c.idEscritorio === contexto.idEscritorioAtivo)
+          .map((c) => ({
+            id: c.id,
+            descricao: c.descricao,
+            situacao: c.situacao,
+            data: c.data,
+          }));
+
+        return {
+          casos: [],
+          processos: [],
+          documentos: docs,
+          tarefas,
+          compromissos,
+        };
       },
     };
 

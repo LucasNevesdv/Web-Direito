@@ -70,6 +70,75 @@ export interface IndicioDuplicidade {
   motivos: Array<'DOCUMENTO_IDENTICO' | 'NOME_IDENTICO' | 'EMAIL_IDENTICO' | 'TELEFONE_IDENTICO'>;
 }
 
+export interface CasoVinculado {
+  id: string;
+  titulo: string;
+  situacao: string;
+}
+
+export interface ProcessoVinculado {
+  id: string;
+  numeroCnj: string;
+  tribunal?: string | null;
+}
+
+export interface DocumentoVinculado {
+  id: string;
+  nome: string;
+  categoria: string;
+  criadoEm: string;
+}
+
+export interface TarefaVinculada {
+  id: string;
+  titulo: string;
+  situacao: string;
+  prazo?: string | null;
+}
+
+export interface CompromissoVinculado {
+  id: string;
+  descricao: string;
+  data: string;
+  situacao: string;
+}
+
+export interface VinculosCliente {
+  casos: CasoVinculado[];
+  processos: ProcessoVinculado[];
+  documentos: DocumentoVinculado[];
+  tarefas: TarefaVinculada[];
+  compromissos: CompromissoVinculado[];
+}
+
+const ROTULOS_CATEGORIA_DOC: Record<string, string> = {
+  CONTRATO: 'Contrato',
+  PROCURACAO: 'Procuração',
+  PETICAO: 'Petição',
+  DECISAO: 'Decisão',
+  PROVA: 'Prova',
+  DOCUMENTO_PESSOAL: 'Doc. Pessoal',
+  COMPROVANTE: 'Comprovante',
+  OUTRO: 'Outro',
+};
+
+const ROTULOS_SITUACAO_VINCULO: Record<string, string> = {
+  PENDENTE: 'Pendente',
+  EM_ANDAMENTO: 'Em andamento',
+  CONCLUIDA: 'Concluída',
+  CUMPRIDO: 'Cumprido',
+  CANCELADA: 'Cancelada',
+  CANCELADO: 'Cancelado',
+};
+
+function formatarDataCivil(dataIso: string): string {
+  const partes = dataIso.split('-');
+  if (partes.length === 3) {
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+  }
+  return dataIso;
+}
+
 const ROTULOS_ACOES: Record<string, string> = {
   CLIENTE_CRIADO: 'Cliente cadastrado',
   CLIENTE_ATUALIZADO: 'Dados atualizados',
@@ -109,6 +178,178 @@ function formatarDocumento(doc: string, tipo: TipoPessoa): string {
   return doc;
 }
 
+function renderConteudoVinculos(vinculos: VinculosCliente | null, carregando: boolean, erro: string) {
+  if (carregando) {
+    return <p className="text-slate-400 text-center py-6">Carregando vínculos do cliente…</p>;
+  }
+  if (erro) {
+    return <p className="rounded-lg bg-rose-950 p-3 text-rose-300 text-sm border border-rose-800">{erro}</p>;
+  }
+  if (!vinculos) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Documentos (RF-029) */}
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+          <span>Documentos</span>
+          <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
+            {vinculos.documentos.length}
+          </span>
+        </h3>
+        {vinculos.documentos.length === 0 ? (
+          <p className="text-xs text-slate-500 italic bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+            Nenhum documento vinculado a este cliente.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {vinculos.documentos.map((doc) => (
+              <li
+                key={doc.id}
+                className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/60 text-sm"
+              >
+                <div className="space-y-0.5">
+                  <p className="font-medium text-slate-100">{doc.nome}</p>
+                  <p className="text-xs text-slate-400">Criado em {dataHoraBrasileira(doc.criadoEm)}</p>
+                </div>
+                <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-cyan-950 text-cyan-300 border border-cyan-800">
+                  {ROTULOS_CATEGORIA_DOC[doc.categoria] ?? doc.categoria}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Tarefas (RF-030) */}
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+          <span>Tarefas</span>
+          <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
+            {vinculos.tarefas.length}
+          </span>
+        </h3>
+        {vinculos.tarefas.length === 0 ? (
+          <p className="text-xs text-slate-500 italic bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+            Nenhuma tarefa vinculada a este cliente.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {vinculos.tarefas.map((tar) => (
+              <li
+                key={tar.id}
+                className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/60 text-sm"
+              >
+                <div className="space-y-0.5">
+                  <p className="font-medium text-slate-100">{tar.titulo}</p>
+                  <p className="text-xs text-slate-400">
+                    Prazo: {tar.prazo ? formatarDataCivil(tar.prazo) : 'Sem prazo'}
+                  </p>
+                </div>
+                <span
+                  className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                    tar.situacao === 'CONCLUIDA'
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                      : tar.situacao === 'EM_ANDAMENTO'
+                      ? 'bg-blue-950 text-blue-300 border border-blue-800'
+                      : tar.situacao === 'CANCELADA'
+                      ? 'bg-slate-800 text-slate-400 border border-slate-700'
+                      : 'bg-amber-950 text-amber-300 border border-amber-800'
+                  }`}
+                >
+                  {ROTULOS_SITUACAO_VINCULO[tar.situacao] ?? tar.situacao}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Compromissos e Prazos Judiciais (RF-030) */}
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+          <span>Compromissos e Prazos Judiciais</span>
+          <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
+            {vinculos.compromissos.length}
+          </span>
+        </h3>
+        {vinculos.compromissos.length === 0 ? (
+          <p className="text-xs text-slate-500 italic bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+            Nenhum prazo judicial vinculado a este cliente.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {vinculos.compromissos.map((comp) => (
+              <li
+                key={comp.id}
+                className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/60 text-sm"
+              >
+                <div className="space-y-0.5">
+                  <p className="font-medium text-slate-100">{comp.descricao}</p>
+                  <p className="text-xs text-slate-400">Data limite: {formatarDataCivil(comp.data)}</p>
+                </div>
+                <span
+                  className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                    comp.situacao === 'CUMPRIDO'
+                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                      : comp.situacao === 'CANCELADO'
+                      ? 'bg-slate-800 text-slate-400 border border-slate-700'
+                      : 'bg-amber-950 text-amber-300 border border-amber-800'
+                  }`}
+                >
+                  {ROTULOS_SITUACAO_VINCULO[comp.situacao] ?? comp.situacao}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Casos e Processos (RF-030) */}
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center justify-between">
+          <span>Casos e Processos</span>
+          <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded">
+            {vinculos.casos.length + vinculos.processos.length}
+          </span>
+        </h3>
+        {vinculos.casos.length === 0 && vinculos.processos.length === 0 ? (
+          <p className="text-xs text-slate-500 italic bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+            Nenhum caso ou processo vinculado a este cliente.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {vinculos.casos.map((caso) => (
+              <div
+                key={caso.id}
+                className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/60 text-sm"
+              >
+                <p className="font-medium text-slate-100">{caso.titulo}</p>
+                <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                  {caso.situacao}
+                </span>
+              </div>
+            ))}
+            {vinculos.processos.map((proc) => (
+              <div
+                key={proc.id}
+                className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-slate-700/60 text-sm"
+              >
+                <div>
+                  <p className="font-mono text-slate-100">{proc.numeroCnj}</p>
+                  {proc.tribunal && <p className="text-xs text-slate-400">{proc.tribunal}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export function PaginaClientes() {
   const { cliente, identidade } = useAutenticacao();
   const papel = identidade?.escritorio.papel ?? '';
@@ -130,7 +371,13 @@ export function PaginaClientes() {
   const [editando, definirEditando] = useState<ClienteDetalhe | null>(null);
   const [form, definirForm] = useState(FORMULARIO_INICIAL);
   const [enviando, definirEnviando] = useState(false);
-  const [abaAtivaModal, definirAbaAtivaModal] = useState<'dados' | 'contatos'>('dados');
+  const [abaAtivaModal, definirAbaAtivaModal] = useState<'dados' | 'contatos' | 'vinculos'>('dados');
+
+  // Vínculos
+  const [vinculosClienteModal, definirVinculosClienteModal] = useState<{ id: string; nome: string } | null>(null);
+  const [vinculosDados, definirVinculosDados] = useState<VinculosCliente | null>(null);
+  const [carregandoVinculos, definirCarregandoVinculos] = useState(false);
+  const [erroVinculos, definirErroVinculos] = useState('');
 
   // Contatos iniciais no cadastro de novo cliente
   const [contatosIniciais, definirContatosIniciais] = useState<
@@ -218,6 +465,8 @@ export function PaginaClientes() {
     definirContatosIniciais([]);
     definirMostrarFormContatoInicial(false);
     definirAbaAtivaModal('dados');
+    definirVinculosDados(null);
+    definirErroVinculos('');
     definirDuplicidadesAlerta(null);
     definirMensagemDuplicidadeLimpa('');
     definirErro('');
@@ -229,6 +478,8 @@ export function PaginaClientes() {
     definirDuplicidadesAlerta(null);
     definirMensagemDuplicidadeLimpa('');
     definirAbaAtivaModal('dados');
+    definirVinculosDados(null);
+    definirErroVinculos('');
     const resposta = await requisitarApi<ClienteDetalhe>(cliente, `/api/v1/clientes/${item.id}`);
     if (!resposta.ok) {
       definirErro(resposta.mensagem);
@@ -418,6 +669,29 @@ export function PaginaClientes() {
     } finally {
       definirEnviandoContato(false);
     }
+  }
+
+  async function carregarVinculos(idCliente: string) {
+    definirCarregandoVinculos(true);
+    definirErroVinculos('');
+    try {
+      const resposta = await requisitarApi<VinculosCliente>(cliente, `/api/v1/clientes/${idCliente}/vinculos`);
+      if (resposta.ok) {
+        definirVinculosDados(resposta.dados);
+      } else {
+        definirErroVinculos(resposta.mensagem || 'Não foi possível carregar os vínculos.');
+      }
+    } catch {
+      definirErroVinculos('Não foi possível carregar os vínculos.');
+    } finally {
+      definirCarregandoVinculos(false);
+    }
+  }
+
+  async function abrirVinculos(item: ClienteItem) {
+    definirVinculosClienteModal({ id: item.id, nome: item.nome });
+    definirVinculosDados(null);
+    await carregarVinculos(item.id);
   }
 
   async function abrirLinhaTempo(item: ClienteItem) {
@@ -672,6 +946,13 @@ export function PaginaClientes() {
                       <button
                         type="button"
                         className={BOTAO_SECUNDARIO}
+                        onClick={() => void abrirVinculos(c)}
+                      >
+                        Vínculos
+                      </button>
+                      <button
+                        type="button"
+                        className={BOTAO_SECUNDARIO}
                         onClick={() => void abrirLinhaTempo(c)}
                       >
                         Histórico
@@ -763,6 +1044,20 @@ export function PaginaClientes() {
                   onClick={() => definirAbaAtivaModal('contatos')}
                 >
                   Contatos Relacionados ({editando.contatos.length})
+                </button>
+                <button
+                  type="button"
+                  className={`pb-2 text-sm font-medium border-b-2 transition ${
+                    abaAtivaModal === 'vinculos'
+                      ? 'border-cyan-400 text-cyan-300'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                  }`}
+                  onClick={() => {
+                    definirAbaAtivaModal('vinculos');
+                    void carregarVinculos(editando.id);
+                  }}
+                >
+                  Vínculos
                 </button>
               </div>
             )}
@@ -865,6 +1160,19 @@ export function PaginaClientes() {
                   </div>
                 )}
 
+                <div className="flex justify-end pt-4 border-t border-slate-800">
+                  <button
+                    type="button"
+                    className={BOTAO_SECUNDARIO}
+                    onClick={() => definirModalAberto(false)}
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            ) : editando && abaAtivaModal === 'vinculos' ? (
+              <div className="space-y-4">
+                {renderConteudoVinculos(vinculosDados, carregandoVinculos, erroVinculos)}
                 <div className="flex justify-end pt-4 border-t border-slate-800">
                   <button
                     type="button"
@@ -1435,6 +1743,39 @@ export function PaginaClientes() {
                   ))}
                 </ol>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Vínculos do Cliente (RF-029 / RF-030) */}
+      {vinculosClienteModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+        >
+          <div className="w-full max-w-2xl rounded-2xl bg-slate-900 border border-slate-700 p-6 space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-100">Vínculos do Cliente</h2>
+                <p className="text-xs text-slate-400">{vinculosClienteModal.nome}</p>
+              </div>
+              <button
+                type="button"
+                className={BOTAO_SECUNDARIO}
+                onClick={() => {
+                  definirVinculosClienteModal(null);
+                  definirVinculosDados(null);
+                  definirErroVinculos('');
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-4 flex-1 pr-1">
+              {renderConteudoVinculos(vinculosDados, carregandoVinculos, erroVinculos)}
             </div>
           </div>
         </div>

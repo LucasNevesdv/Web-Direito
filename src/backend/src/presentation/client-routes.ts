@@ -251,6 +251,10 @@ export function registrarRotasClientes(
       return clientes.consultarLinhaDoTempo(token(requisicao), extrairId(requisicao));
     });
 
+    rotas.get('/api/v1/clientes/:id/vinculos', async (requisicao) => {
+      return clientes.consultarVinculos(token(requisicao), extrairId(requisicao));
+    });
+
     const extrairIdsContato = (req: FastifyRequest) =>
       z
         .object({

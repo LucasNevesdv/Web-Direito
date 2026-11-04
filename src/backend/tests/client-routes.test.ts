@@ -10,6 +10,7 @@ import type {
   ClienteResumoDto,
   ContatoClienteDto,
   EventoLinhaTempoClienteDto,
+  VinculosRelacionadosClienteDto,
   OperacoesClientes,
   RepositorioClientes,
 } from '../src/application/clients/client-contracts.js';
@@ -72,6 +73,35 @@ function prepararCenarioRotas() {
     criadoEm: new Date(),
   };
 
+  const vinculosMock: VinculosRelacionadosClienteDto = {
+    casos: [],
+    processos: [],
+    documentos: [
+      {
+        id: randomUUID(),
+        nome: 'Procuracao.pdf',
+        categoria: 'PROCURACAO',
+        criadoEm: new Date('2026-10-30T10:00:00Z'),
+      },
+    ],
+    tarefas: [
+      {
+        id: randomUUID(),
+        titulo: 'Revisar minuta',
+        situacao: 'PENDENTE',
+        prazo: '2026-11-15',
+      },
+    ],
+    compromissos: [
+      {
+        id: randomUUID(),
+        descricao: 'Prazo Contestação',
+        data: '2026-11-20',
+        situacao: 'PENDENTE',
+      },
+    ],
+  };
+
   const operacoes: OperacoesClientes = {
     autor: {
       idUsuario,
@@ -119,6 +149,7 @@ function prepararCenarioRotas() {
     })),
     removerContatoCliente: vi.fn(async () => {}),
     listarLinhaDoTempoCliente: vi.fn(async () => [eventoLinhaTempo]),
+    listarVinculosRelacionados: vi.fn(async () => vinculosMock),
   };
 
   const repositorio: RepositorioClientes = {
@@ -467,6 +498,72 @@ describe('Rotas HTTP de Clientes (/api/v1/clientes)', () => {
       });
 
       expect(resposta.statusCode).toBe(204);
+    });
+  });
+
+  describe('GET /api/v1/clientes/:id/vinculos', () => {
+    it('retorna 200 com os vínculos consolidados do cliente (RF-029 / RF-030)', async () => {
+      const { app, idCliente } = prepararCenarioRotas();
+
+      const resposta = await app.inject({
+        method: 'GET',
+        url: `/api/v1/clientes/${idCliente}/vinculos`,
+        headers: {
+          authorization: 'Bearer token-valido',
+        },
+      });
+
+      expect(resposta.statusCode).toBe(200);
+      expect(resposta.headers['cache-control']).toBe('no-store');
+      const dados = resposta.json();
+      expect(dados.documentos).toHaveLength(1);
+      expect(dados.documentos[0].nome).toBe('Procuracao.pdf');
+      expect(dados.tarefas).toHaveLength(1);
+      expect(dados.tarefas[0].titulo).toBe('Revisar minuta');
+      expect(dados.compromissos).toHaveLength(1);
+      expect(dados.compromissos[0].descricao).toBe('Prazo Contestação');
+      expect(dados.casos).toEqual([]);
+      expect(dados.processos).toEqual([]);
+    });
+
+    it('retorna 404 quando o cliente não é encontrado no escritório', async () => {
+      const { app } = prepararCenarioRotas();
+
+      const resposta = await app.inject({
+        method: 'GET',
+        url: `/api/v1/clientes/${randomUUID()}/vinculos`,
+        headers: {
+          authorization: 'Bearer token-valido',
+        },
+      });
+
+      expect(resposta.statusCode).toBe(404);
+      expect(resposta.json()).toMatchObject({ erro: 'NAO_ENCONTRADO' });
+    });
+
+    it('retorna 401 sem header de autorização', async () => {
+      const { app, idCliente } = prepararCenarioRotas();
+
+      const resposta = await app.inject({
+        method: 'GET',
+        url: `/api/v1/clientes/${idCliente}/vinculos`,
+      });
+
+      expect(resposta.statusCode).toBe(401);
+    });
+
+    it('retorna 400 se id do cliente não for UUID válido', async () => {
+      const { app } = prepararCenarioRotas();
+
+      const resposta = await app.inject({
+        method: 'GET',
+        url: '/api/v1/clientes/id-invalido/vinculos',
+        headers: {
+          authorization: 'Bearer token-valido',
+        },
+      });
+
+      expect(resposta.statusCode).toBe(400);
     });
   });
 });

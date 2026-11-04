@@ -468,4 +468,104 @@ describe('Gestão de Clientes (Casos de Uso / Aplicação)', () => {
       expect(dupEscritorioB.duplicidades).toHaveLength(0);
     });
   });
+
+  describe('consultarVinculos (RF-029 / RF-030)', () => {
+    it('retorna os vínculos consolidados do cliente com documentos, tarefas e prazos', async () => {
+      const cliente = await gestao.cadastrarCliente('token-proprietario', {
+        tipoPessoa: 'PESSOA_FISICA',
+        nome: 'Cliente Com Vinculos',
+        documento: CPF_TESTE,
+      });
+
+      repo.adicionarDocumento({
+        id: randomUUID(),
+        idEscritorio: idEscritorioA,
+        idCliente: cliente.id,
+        nome: 'Contrato de Honorários.pdf',
+        categoria: 'CONTRATO',
+        ativo: true,
+      });
+
+      repo.adicionarTarefa({
+        id: randomUUID(),
+        idEscritorio: idEscritorioA,
+        idCliente: cliente.id,
+        titulo: 'Protocolar procuração',
+        situacao: 'PENDENTE',
+        prazo: '2026-11-20',
+      });
+
+      repo.adicionarCompromisso({
+        id: randomUUID(),
+        idEscritorio: idEscritorioA,
+        idCliente: cliente.id,
+        descricao: 'Audiência de Conciliação',
+        situacao: 'PENDENTE',
+        data: '2026-11-25',
+      });
+
+      const vinculos = await gestao.consultarVinculos('token-proprietario', cliente.id);
+
+      expect(vinculos.documentos).toHaveLength(1);
+      expect(vinculos.documentos[0]!.nome).toBe('Contrato de Honorários.pdf');
+      expect(vinculos.documentos[0]!.categoria).toBe('CONTRATO');
+
+      expect(vinculos.tarefas).toHaveLength(1);
+      expect(vinculos.tarefas[0]!.titulo).toBe('Protocolar procuração');
+      expect(vinculos.tarefas[0]!.prazo).toBe('2026-11-20');
+
+      expect(vinculos.compromissos).toHaveLength(1);
+      expect(vinculos.compromissos[0]!.descricao).toBe('Audiência de Conciliação');
+      expect(vinculos.compromissos[0]!.data).toBe('2026-11-25');
+
+      expect(vinculos.casos).toEqual([]);
+      expect(vinculos.processos).toEqual([]);
+    });
+
+    it('impede que Escritório B consulte vínculos de cliente do Escritório A (RN-001 / RNF-001)', async () => {
+      const cliente = await gestao.cadastrarCliente('token-proprietario', {
+        tipoPessoa: 'PESSOA_FISICA',
+        nome: 'Cliente Escritório A',
+        documento: CPF_TESTE,
+      });
+
+      await expect(
+        gestao.consultarVinculos('token-escritorio-b', cliente.id),
+      ).rejects.toMatchObject({
+        codigo: 'NAO_ENCONTRADO',
+        situacao: 404,
+      });
+    });
+
+    it('exige permissão CLIENTE_VISUALIZAR para consultar vínculos', async () => {
+      const cliente = await gestao.cadastrarCliente('token-proprietario', {
+        tipoPessoa: 'PESSOA_FISICA',
+        nome: 'Cliente Permissao',
+        documento: CPF_TESTE,
+      });
+
+      tokens.validarTokenDeAcesso = vi.fn(async () => ({
+        idUsuario: randomUUID(),
+        idEscritorioAtivo: idEscritorioA,
+        idSessao: randomUUID(),
+        papel: 'SECRETARIO' as const,
+      }));
+
+      repo.adicionarMembro({
+        id: randomUUID(),
+        idEscritorio: idEscritorioA,
+        nome: 'Membro Sem Permissao',
+        papel: 'SECRETARIO',
+        ativo: true,
+        permissoes: [],
+      });
+
+      await expect(
+        gestao.consultarVinculos('token-secretario', cliente.id),
+      ).rejects.toMatchObject({
+        codigo: 'PROIBIDO',
+        situacao: 403,
+      });
+    });
+  });
 });

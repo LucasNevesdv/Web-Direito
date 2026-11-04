@@ -1,18 +1,57 @@
 import type { Prisma } from '@prisma/client';
 import type { CatalogoVinculos, OpcaoVinculo, TipoVinculo, Vinculo } from '../../application/links/business-links.js';
-import { TIPOS_VINCULO } from '../../application/links/business-links.js';
 
 export type ResolvedorVinculo = {
   existe(transacao: Prisma.TransactionClient, idEscritorio: string, id: string): Promise<boolean>;
   pesquisar(transacao: Prisma.TransactionClient, idEscritorio: string, pesquisa: string, limite: number): Promise<Array<{ id: string; rotulo: string }>>;
 };
 
-// Clientes, casos e processos ainda não possuem tabelas: nenhum vínculo é aceito até seus módulos
-// registrarem aqui um resolvedor que consulte por ID e escritório.
 const SEM_REGISTROS: ResolvedorVinculo = { existe: async () => false, pesquisar: async () => [] };
-export const RESOLVEDORES_VINCULO: Record<TipoVinculo, ResolvedorVinculo> = Object.fromEntries(
-  TIPOS_VINCULO.map((tipo) => [tipo, SEM_REGISTROS]),
-) as Record<TipoVinculo, ResolvedorVinculo>;
+
+export const RESOLVEDORES_VINCULO: Record<TipoVinculo, ResolvedorVinculo> = {
+  CLIENTE: {
+    existe: async (transacao, idEscritorio, id) => {
+      const cliente = await transacao.client.findFirst({
+        where: { id, officeId: idEscritorio },
+        select: { id: true },
+      });
+      return Boolean(cliente);
+    },
+    pesquisar: async (transacao, idEscritorio, pesquisa, limite) => {
+      const termo = pesquisa.trim();
+      const termoDigitos = termo.replace(/\D/g, '');
+      const condicoesOu: Prisma.ClientWhereInput[] = [
+        { name: { contains: termo, mode: 'insensitive' } },
+        { socialName: { contains: termo, mode: 'insensitive' } },
+      ];
+      if (termoDigitos.length > 0) {
+        condicoesOu.push({ documentNumber: { contains: termoDigitos } });
+      }
+
+      const clientes = await transacao.client.findMany({
+        where: {
+          officeId: idEscritorio,
+          status: 'ACTIVE',
+          ...(termo.length > 0 ? { OR: condicoesOu } : {}),
+        },
+        select: {
+          id: true,
+          name: true,
+          socialName: true,
+        },
+        take: Math.min(Math.max(limite, 1), 50),
+        orderBy: { name: 'asc' },
+      });
+
+      return clientes.map((c) => ({
+        id: c.id,
+        rotulo: c.socialName ? `${c.name} (${c.socialName})` : c.name,
+      }));
+    },
+  },
+  CASO: SEM_REGISTROS,
+  PROCESSO: SEM_REGISTROS,
+};
 
 export function criarCatalogoVinculos(transacao: Prisma.TransactionClient, idEscritorio: string,
   resolvedores: Record<TipoVinculo, ResolvedorVinculo> = RESOLVEDORES_VINCULO): CatalogoVinculos {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Prisma, type PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient, type DocumentCategory, type TaskStatus, type DeadlineStatus } from '@prisma/client';
 import type { DadosTokenAcesso } from '../../application/authentication/authentication-contracts.js';
 import {
   ErroTokenAcessoInvalido,
@@ -15,6 +15,7 @@ import type {
   IndicioDuplicidadeCliente,
   OperacoesClientes,
   RepositorioClientes,
+  VinculosRelacionadosClienteDto,
 } from '../../application/clients/client-contracts.js';
 import {
   ErroCliente,
@@ -91,6 +92,30 @@ function snapshotContato(contato: {
     observacao: contato.observacao ?? null,
   };
 }
+
+const CATEGORIAS_DOCUMENTO_DOMINIO: Record<DocumentCategory, string> = {
+  CONTRACT: 'CONTRATO',
+  POWER_OF_ATTORNEY: 'PROCURACAO',
+  PETITION: 'PETICAO',
+  DECISION: 'DECISAO',
+  EVIDENCE: 'PROVA',
+  PERSONAL_DOCUMENT: 'DOCUMENTO_PESSOAL',
+  RECEIPT: 'COMPROVANTE',
+  OTHER: 'OUTRO',
+};
+
+const SITUACOES_TAREFA_DOMINIO: Record<TaskStatus, string> = {
+  PENDING: 'PENDENTE',
+  IN_PROGRESS: 'EM_ANDAMENTO',
+  DONE: 'CONCLUIDA',
+  CANCELED: 'CANCELADA',
+};
+
+const SITUACOES_PRAZO_DOMINIO: Record<DeadlineStatus, string> = {
+  PENDING: 'PENDENTE',
+  FULFILLED: 'CUMPRIDO',
+  CANCELED: 'CANCELADO',
+};
 
 export class RepositorioClientesPrisma implements RepositorioClientes {
   constructor(private readonly prisma: PrismaClient) {}
@@ -626,6 +651,79 @@ export class RepositorioClientesPrisma implements RepositorioClientes {
               });
 
               return registros.map(converterRegistroPrismaEmEventoLinhaTempo);
+            },
+
+            listarVinculosRelacionados: async (idCliente: string): Promise<VinculosRelacionadosClienteDto> => {
+              const podeVerConfidenciais = ['PROPRIETARIO', 'ADMINISTRADOR', 'ADVOGADO'].includes(autor.papel);
+              const documentosPrisma = await transacao.document.findMany({
+                where: {
+                  clientId: idCliente,
+                  officeId: contexto.idEscritorioAtivo,
+                  active: true,
+                  ...(podeVerConfidenciais ? {} : { OR: [{ confidential: false }, { creatorId: autor.idUsuario }] }),
+                },
+                select: {
+                  id: true,
+                  name: true,
+                  category: true,
+                  createdAt: true,
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 100,
+              });
+
+              const tarefasPrisma = await transacao.task.findMany({
+                where: {
+                  clientId: idCliente,
+                  officeId: contexto.idEscritorioAtivo,
+                },
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  internalDueDate: true,
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 100,
+              });
+
+              const prazosPrisma = await transacao.judicialDeadline.findMany({
+                where: {
+                  clientId: idCliente,
+                  officeId: contexto.idEscritorioAtivo,
+                },
+                select: {
+                  id: true,
+                  description: true,
+                  status: true,
+                  dueDate: true,
+                },
+                orderBy: { dueDate: 'asc' },
+                take: 100,
+              });
+
+              return {
+                casos: [],
+                processos: [],
+                documentos: documentosPrisma.map((d) => ({
+                  id: d.id,
+                  nome: d.name,
+                  categoria: CATEGORIAS_DOCUMENTO_DOMINIO[d.category] ?? d.category,
+                  criadoEm: d.createdAt,
+                })),
+                tarefas: tarefasPrisma.map((t) => ({
+                  id: t.id,
+                  titulo: t.title,
+                  situacao: SITUACOES_TAREFA_DOMINIO[t.status] ?? t.status,
+                  prazo: t.internalDueDate ? t.internalDueDate.toISOString().slice(0, 10) : null,
+                })),
+                compromissos: prazosPrisma.map((p) => ({
+                  id: p.id,
+                  descricao: p.description,
+                  situacao: SITUACOES_PRAZO_DOMINIO[p.status] ?? p.status,
+                  data: p.dueDate.toISOString().slice(0, 10),
+                })),
+              };
             },
           });
         },

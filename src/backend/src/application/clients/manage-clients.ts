@@ -13,6 +13,7 @@ import type {
   IndicioDuplicidadeCliente,
   OperacoesClientes,
   RepositorioClientes,
+  VinculosRelacionadosClienteDto,
 } from './client-contracts.js';
 import { ErroCliente, PoliticaClientes } from './client-policy.js';
 
@@ -262,6 +263,14 @@ export class GestaoClientes {
           atual: sanitizarPayload(e.atual) ?? e.atual,
         };
       });
+    });
+  }
+
+  async consultarVinculos(token: string, idCliente: string): Promise<VinculosRelacionadosClienteDto> {
+    return this.executar(token, async (clientes) => {
+      PoliticaClientes.exigir(clientes.autor, 'CLIENTE_VISUALIZAR');
+      await clientes.buscarClientePorId(idCliente);
+      return clientes.listarVinculosRelacionados(idCliente);
     });
   }
 
