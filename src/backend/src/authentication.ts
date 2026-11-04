@@ -12,6 +12,7 @@ import { TokensAcessoJose } from './infrastructure/security/jose-access-tokens.j
 import { GestaoSessoes } from './application/authentication/manage-sessions.js';
 import { RepositorioGestaoSessoesPrisma } from './infrastructure/prisma/prisma-session-management-repository.js';
 import { TokensSelecaoCriptograficos } from './infrastructure/security/crypto-office-selection.js';
+import { AuditoriaAutenticacaoPrisma } from './infrastructure/prisma/prisma-login-audit.js';
 
 export async function comporServicosDeAutenticacao(prisma: PrismaClient, ambiente: Ambiente, protecaoDeSenhas: ProtecaoDeSenhas) {
   const repositorioAutenticacao = new RepositorioAutenticacaoPrisma(prisma);
@@ -27,7 +28,7 @@ export async function comporServicosDeAutenticacao(prisma: PrismaClient, ambient
     autenticacao: new AutenticacaoDeUsuario(repositorioAutenticacao, protecaoDeSenhas, tokensAcesso, tokensRenovacao, {
       hashSenhaReferencia, validadeAcessoSegundos: ambiente.AUTH_ACCESS_TTL_SECONDS,
       validadeRenovacaoSegundos: ambiente.AUTH_REFRESH_TTL_SECONDS,
-    }, undefined, gestaoSessoes),
+    }, undefined, gestaoSessoes, new AuditoriaAutenticacaoPrisma(prisma)),
     consultaIdentidade,
     renovacao: new RenovacaoDeSessao(repositorioAutenticacao, tokensRenovacao, tokensAcesso, ambiente.AUTH_ACCESS_TTL_SECONDS),
     encerramento: new EncerramentoDeSessao(repositorioAutenticacao, tokensRenovacao),

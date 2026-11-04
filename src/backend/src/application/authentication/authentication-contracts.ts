@@ -1,4 +1,4 @@
-import type { Sessao } from '../../domain/sessions/session.js';
+import type { MetadadosSessao, Sessao } from '../../domain/sessions/session.js';
 import type { Usuario } from '../../domain/users/user.js';
 import type { PapelVinculoEscritorio } from '../../domain/memberships/membership.js';
 
@@ -46,4 +46,10 @@ export function extrairIdentidadePublicaDoVinculo(usuarioComVinculos: UsuarioCom
     usuario: { id: usuarioComVinculos.usuario.id, nome: usuarioComVinculos.usuario.nome, email: usuarioComVinculos.usuario.email },
     escritorio: { id: vinculo.escritorio.id, nome: vinculo.escritorio.nome, papel: vinculo.papel },
   };
+}
+
+export type MotivoFalhaLogin = 'CREDENCIAIS_INVALIDAS' | 'USUARIO_INATIVO' | 'ESCRITORIO_INATIVO';
+// Registra tentativas recusadas sem gravar o e-mail ou a senha informados.
+export interface AuditoriaAutenticacao {
+  registrarFalhaDeLogin(falha: { idUsuario: string | null; motivo: MotivoFalhaLogin; metadados?: MetadadosSessao }): Promise<void>;
 }

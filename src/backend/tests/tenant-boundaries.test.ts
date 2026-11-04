@@ -13,6 +13,7 @@ describe('fronteiras de persistência multiempresa', () => {
       'prisma-authentication-repository.ts', // Global: autenticação por identidade e sessão.
       'prisma-business-links.ts', // Negócio: resolvedores recebem o escritório da sessão.
       'prisma-document-repository.ts', // Negócio: escopo obrigatório; ver work-tenant-boundaries.
+      'prisma-login-audit.ts', // Global: falha de login antes de haver sessão; escritórios vêm dos vínculos do próprio usuário.
       'prisma-office-registration-repository.ts', // Público: criação atômica de um novo tenant.
       'prisma-offices-repository.ts', // Raiz de tenant, interno e sem endpoint de leitura.
       'prisma-password-repository.ts', // Global: credencial da conta autenticada/token de recuperação.
