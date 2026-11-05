@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { GestaoCasosProcessos } from '../../src/application/cases/manage-cases.js';
 import { RepositorioCasosEmMemoria } from '../support/in-memory-cases-repository.js';
+import { Processo } from '../../src/domain/cases/legal-process.js';
 import type { TokensAcesso, DadosTokenAcesso } from '../../src/application/authentication/authentication-contracts.js';
 
 class TokensAcessoSimulado implements TokensAcesso {
@@ -113,6 +114,7 @@ describe('Gestão de Casos e Processos — Application (Slice 1)', () => {
         'CASO_CADASTRAR',
         'CASO_EDITAR',
         'CASO_ARQUIVAR_REABRIR',
+        'CASO_REGISTRAR_MOVIMENTACAO',
       ],
     });
 
@@ -480,6 +482,323 @@ describe('Gestão de Casos e Processos — Application (Slice 1)', () => {
 
       expect(listagemB.casos).toHaveLength(0);
       expect(listagemB.total).toBe(0);
+    });
+  });
+
+  describe('Processos Vinculados (1:N) e Movimentações Manuais (Slice 2 — RF-038..RF-044, RF-045)', () => {
+    function gerarCnj(seq: number): string {
+      const s = String(seq).padStart(7, '0');
+      const dd = Processo.calcularDigitoVerificador(s, 2024, 8, 26, 100);
+      return `${s}-${dd}.2024.8.26.0100`;
+    }
+
+    it('cadastra processo vinculado a um caso ativo com sucesso (RF-038..RF-042)', async () => {
+      const caso = await gestao.cadastrarCaso(tokenAdvogadoA, {
+        titulo: 'Ação Ordinária de Reparação',
+        natureza: 'JUDICIAL',
+        areaJuridica: 'CIVEL',
+        idsClientes: [idCliente1A],
+      });
+
+      const cnj = gerarCnj(101);
+      const processo = await gestao.cadastrarProcessoNoCaso(tokenAdvogadoA, caso.id, {
+        numeroCnj: cnj,
+        relacaoComCaso: 'PRINCIPAL',
+        tribunal: 'TJSP',
+        comarca: 'São Paulo',
+        vara: '2ª Vara Cível',
+        instancia: 'PRIMEIRA_INSTANCIA',
+        faseProcessual: 'CONHECIMENTO',
+      });
+
+      expect(processo.id).toBeDefined();
+      expect(processo.idCaso).toBe(caso.id);
+      expect(processo.numeroCnj).toBe(Processo.normalizarNumeroCnj(cnj));
+      expect(processo.numeroCnjFormatado).toBe(cnj);
+      expect(processo.tribunal).toBe('TJSP');
+      expect(processo.comarca).toBe('São Paulo');
+      expect(processo.vara).toBe('2ª Vara Cível');
+
+      // Verifica que o caso detalhado agora tem o processo e a quantidade é 1
+      const casoAtualizado = await gestao.consultarCasoPorId(tokenAdvogadoA, caso.id);
+      expect(casoAtualizado.processos).toHaveLength(1);
+      expect(casoAtualizado.quantidadeProcessos).toBe(1);
+      expect(casoAtualizado.processos[0].numeroCnj).toBe(Processo.normalizarNumeroCnj(cnj));
+
+      // Verifica que evento PROCESSO_CADASTRADO foi gravado na linha do tempo
+      const timeline = await gestao.consultarLinhaDoTempo(tokenAdvogadoA, caso.id);
+      expect(timeline.some((e) => e.acao === 'PROCESSO_CADASTRADO' && e.idProcesso === processo.id)).toBe(true);
+    });
+
+    it('permite múltiplos processos relacionados ao mesmo caso (1:N — RF-042)', async () => {
+      const caso = await gestao.cadastrarCaso(tokenAdvogadoA, {
+        titulo: 'Caso com Múltiplas Instâncias',
+        natureza: 'JUDICIAL',
+        areaJuridica: 'TRABALHISTA',
+        idsClientes: [idCliente1A],
+      });
+
+      const cnj1 = gerarCnj(201);
+      const cnj2 = gerarCnj(202);
+
+      await gestao.cadastrarProcessoNoCaso(tokenAdvogadoA, caso.id, {
+        numeroCnj: cnj1,
+        relacaoComCaso: 'PRINCIPAL',
+        tribunal: 'TRT-2',
+        instancia: 'PRIMEIRA_INSTANCIA',
+        faseProcessual: 'CONHECIMENTO',
+      });
+
+      await gestao.cadastrarProcessoNoCaso(tokenAdvogadoA, caso.id, {
+        numeroCnj: cnj2,
+        relacaoComCaso: 'RECURSO',
+        tribunal: 'TRT-2 - 1ª Turma',
+        instancia: 'SEGUNDA_INSTANCIA',
+        faseProcessual: 'RECURSAL',
+      });
+
+      const casoComProcs = await gestao.consultarCasoPorId(tokenAdvogadoA, caso.id);
+      expect(casoComProcs.processos).toHaveLength(2);
+      expect(casoComProcs.quantidadeProcessos).toBe(2);
+      expect(casoComProcs.processos.map((p) => p.relacaoComCaso)).toEqual(
+        expect.arrayContaining(['PRINCIPAL', 'RECURSO']),
+      );
+    });
+
+    it('impede cadastrar o mesmo CNJ duas vezes no mesmo caso (409 CNJ_JA_VINCULADO_NO_CASO)', async () => {
+      const caso = await gestao.cadastrarCaso(tokenAdvogadoA, {
+        titulo: 'Caso Duplicação CNJ',
+        natureza: 'JUDICIAL',
+        areaJuridica: 'CIVEL',
+        idsClientes: [idCliente1A],
+      });
+
+      const cnj = gerarCnj(301);
+      await gestao.cadastrarProcessoNoCaso(tokenAdvogadoA, caso.id, {
+        numeroCnj: cnj,
+        tribunal: 'TJSP',
+        instancia: 'PRIMEIRA_INSTANCIA',
+        faseProcessual: 'CONHECIMENTO',
+      });
+
+      await expect(
+        gestao.cadastrarProcessoNoCaso(tokenAdvogadoA, caso.id, {
+          numeroCnj: cnj,
+          tribunal: 'TJSP',
+          instancia: 'PRIMEIRA_INSTANCIA',
+          faseProcessual: 'CONHECIMENTO',
+        }),
+      ).rejects.toMatchObject({
+        codigo: 'CNJ_JA_VINCULADO_NO_CASO',
+        situacao: 409,
+      });
+    });
+
+    it('bloqueia inclusão de processo em caso arquivado (409 CASO_ARQUIVADO_SOMENTE_LEITURA)', async () => {
+      const caso = await gestao.cadastrarCaso(tokenAdvogadoA, {
+        titulo: 'Caso a Arquivar',
+        natureza: 'JUDICIAL',
+        areaJuridica: 'CIVEL',
+        idsClientes: [idCliente1A],
+      });
+
+      await gestao.arquivarCaso(tokenAdvogadoA, caso.id, { versao: caso.versao });
+
+      const cnj = gerarCnj(401);
+      await expect(
+        gestao.cadastrarProcessoNoCaso(tokenAdvogadoA, caso.id, {
+          numeroCnj: cnj,
+          tribunal: 'TJSP',
+          instancia: 'PRIMEIRA_INSTANCIA',
+          faseProcessual: 'CONHECIMENTO',
+        }),
+      ).rejects.toMatchObject({
+        codigo: 'CASO_ARQUIVADO_SOMENTE_LEITURA',
+        situacao: 409,
+      });
+    });
+
+    it('edita processo e atualiza fase processual com CAS (RF-040..RF-042)', async () => {
+      const caso = await gestao.cadastrarCaso(tokenAdvogadoA, {
+        titulo: 'Caso Edição Processual',
+        natureza: 'JUDICIAL',
+        areaJuridica: 'CIVEL',
+        idsClientes: [idCliente1A],
+      });
+
+      const cnj = gerarCnj(501);
+      const proc = await gestao.cadastrarProcessoNoCaso(tokenAdvogadoA, caso.id, {
+        numeroCnj: cnj,
+        tribunal: 'TJSP',
+        instancia: 'PRIMEIRA_INSTANCIA',
+        faseProcessual: 'CONHECIMENTO',
+      });
+
+      // Conflito de versão CAS
+      await expect(
+        gestao.editarProcessoDoCaso(tokenAdvogadoA, caso.id, proc.id, {
+          tribunal: 'TJSP - Modificado',
+          versao: 99,
+        }),
+      ).rejects.toMatchObject({
+        codigo: 'CONFLITO',
+        situacao: 409,
+      });
+
+      // Edição bem-sucedida mudando de fase
+      const editado = await gestao.editarProcessoDoCaso(tokenAdvogadoA, caso.id, proc.id, {
+        faseProcessual: 'RECURSAL',
+        instancia: 'SEGUNDA_INSTANCIA',
+        versao: proc.versao,
+      });
+
+      expect(editado.versao).toBe(1);
+      expect(editado.faseProcessual).toBe('RECURSAL');
+      expect(editado.instancia).toBe('SEGUNDA_INSTANCIA');
+
+      const timeline = await gestao.consultarLinhaDoTempo(tokenAdvogadoA, caso.id);
+      expect(timeline.some((e) => e.acao === 'FASE_PROCESSUAL_ALTERADA')).toBe(true);
+    });
+
+    it('registra movimentação manual e lista histórico (RF-043)', async () => {
+      const caso = await gestao.cadastrarCaso(tokenAdvogadoA, {
+        titulo: 'Caso com Andamentos',
+        natureza: 'JUDICIAL',
+        areaJuridica: 'CIVEL',
+        idsClientes: [idCliente1A],
+      });
+
+      const cnj = gerarCnj(601);
+      const proc = await gestao.cadastrarProcessoNoCaso(tokenAdvogadoA, caso.id, {
+        numeroCnj: cnj,
+        tribunal: 'TJSP',
+        instancia: 'PRIMEIRA_INSTANCIA',
+        faseProcessual: 'CONHECIMENTO',
+      });
+
+      const dataMov = new Date('2024-06-15T10:00:00Z');
+      const mov = await gestao.registrarMovimentacaoManual(tokenAdvogadoA, caso.id, proc.id, {
+        ocorridaEm: dataMov,
+        descricao: 'Sentença proferida julgando o pedido procedente.',
+      });
+
+      expect(mov.id).toBeDefined();
+      expect(mov.idProcesso).toBe(proc.id);
+      expect(mov.descricao).toBe('Sentença proferida julgando o pedido procedente.');
+
+      // Listar movimentações
+      const listagem = await gestao.listarMovimentacoesProcesso(tokenAdvogadoA, caso.id, proc.id);
+      expect(listagem.movimentacoes).toHaveLength(1);
+      expect(listagem.total).toBe(1);
+      expect(listagem.movimentacoes[0].descricao).toBe(mov.descricao);
+
+      // Linha do tempo registra MOVIMENTACAO_REGISTRADA
+      const timeline = await gestao.consultarLinhaDoTempo(tokenAdvogadoA, caso.id);
+      expect(timeline.some((e) => e.acao === 'MOVIMENTACAO_REGISTRADA')).toBe(true);
+    });
+
+    it('busca casos por número CNJ na listagem (RF-045)', async () => {
+      const caso = await gestao.cadastrarCaso(tokenAdvogadoA, {
+        titulo: 'Caso de Teste Busca CNJ',
+        natureza: 'JUDICIAL',
+        areaJuridica: 'CIVEL',
+        idsClientes: [idCliente1A],
+      });
+
+      const cnj = gerarCnj(701);
+      await gestao.cadastrarProcessoNoCaso(tokenAdvogadoA, caso.id, {
+        numeroCnj: cnj,
+        tribunal: 'TJSP',
+        instancia: 'PRIMEIRA_INSTANCIA',
+        faseProcessual: 'CONHECIMENTO',
+      });
+
+      // Busca por CNJ com filtro dedicado
+      const buscaPorCnj = await gestao.listarCasos(tokenAdvogadoA, {
+        pagina: 1,
+        tamanhoPagina: 20,
+        numeroCnj: cnj,
+      });
+      expect(buscaPorCnj.casos).toHaveLength(1);
+      expect(buscaPorCnj.casos[0].id).toBe(caso.id);
+
+      // Busca por CNJ no campo de pesquisa textual geral
+      const buscaPesquisa = await gestao.listarCasos(tokenAdvogadoA, {
+        pagina: 1,
+        tamanhoPagina: 20,
+        pesquisa: cnj,
+      });
+      expect(buscaPesquisa.casos).toHaveLength(1);
+      expect(buscaPesquisa.casos[0].id).toBe(caso.id);
+    });
+
+    it('garante isolamento multi-tenant intransponível em processos e movimentações (RNF-001, RN-004)', async () => {
+      const casoA = await gestao.cadastrarCaso(tokenAdvogadoA, {
+        titulo: 'Caso Isolado Escritório A',
+        natureza: 'JUDICIAL',
+        areaJuridica: 'CIVEL',
+        idsClientes: [idCliente1A],
+      });
+
+      const cnjA = gerarCnj(801);
+      const procA = await gestao.cadastrarProcessoNoCaso(tokenAdvogadoA, casoA.id, {
+        numeroCnj: cnjA,
+        tribunal: 'TJSP',
+        instancia: 'PRIMEIRA_INSTANCIA',
+        faseProcessual: 'CONHECIMENTO',
+      });
+
+      // Escritório B tenta adicionar processo ao caso do Escritório A -> 404
+      const cnjB = gerarCnj(802);
+      await expect(
+        gestao.cadastrarProcessoNoCaso(tokenAdvogadoB, casoA.id, {
+          numeroCnj: cnjB,
+          tribunal: 'TJSP',
+          instancia: 'PRIMEIRA_INSTANCIA',
+          faseProcessual: 'CONHECIMENTO',
+        }),
+      ).rejects.toMatchObject({
+        codigo: 'NAO_ENCONTRADO',
+        situacao: 404,
+      });
+
+      // Escritório B tenta consultar processo do Escritório A -> 404
+      await expect(
+        gestao.consultarProcessoPorId(tokenAdvogadoB, casoA.id, procA.id),
+      ).rejects.toMatchObject({
+        codigo: 'NAO_ENCONTRADO',
+        situacao: 404,
+      });
+
+      // Escritório B tenta editar processo do Escritório A -> 404
+      await expect(
+        gestao.editarProcessoDoCaso(tokenAdvogadoB, casoA.id, procA.id, {
+          tribunal: 'Hacked',
+          versao: procA.versao,
+        }),
+      ).rejects.toMatchObject({
+        codigo: 'NAO_ENCONTRADO',
+        situacao: 404,
+      });
+
+      // Escritório B tenta registrar movimentação no processo do Escritório A -> 404
+      await expect(
+        gestao.registrarMovimentacaoManual(tokenAdvogadoB, casoA.id, procA.id, {
+          ocorridaEm: new Date(),
+          descricao: 'Movimentação indevida',
+        }),
+      ).rejects.toMatchObject({
+        codigo: 'NAO_ENCONTRADO',
+        situacao: 404,
+      });
+
+      // Escritório B busca por CNJ de A na listagem -> 0 resultados
+      const buscaB = await gestao.listarCasos(tokenAdvogadoB, {
+        pagina: 1,
+        tamanhoPagina: 10,
+        numeroCnj: cnjA,
+      });
+      expect(buscaB.casos).toHaveLength(0);
     });
   });
 });

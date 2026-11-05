@@ -11,11 +11,19 @@ import type {
   ClienteResumoCasoDto,
   EventoLinhaTempoCasoDto,
   MembroEquipeResumoCasoDto,
+  MovimentacaoProcessoDto,
   ParteEnvolvidaDto,
+  ProcessoDetalheDto,
   ProcessoResumoCasoDto,
 } from '../../application/cases/case-contracts.js';
 import type { NaturezaCaso, PrioridadeCaso, SituacaoCaso } from '../../domain/cases/legal-case.js';
 import type { TipoParticipacaoCaso } from '../../domain/cases/case-party.js';
+import {
+  Processo,
+  type FaseProcessual,
+  type InstanciaProcesso,
+  type RelacaoProcessoCaso,
+} from '../../domain/cases/legal-process.js';
 import { PAPEIS_DOMINIO } from './team-mapper.js';
 
 export type CaseNature = 'JUDICIAL' | 'EXTRAJUDICIAL' | 'ADMINISTRATIVE' | 'ADVISORY';
@@ -72,6 +80,17 @@ export interface LegalProcess {
   updatedAt: Date;
 }
 
+export interface ProcessMovement {
+  id: string;
+  officeId: string;
+  caseId: string;
+  processId: string;
+  actorId: string;
+  occurredAt: Date;
+  description: string;
+  createdAt: Date;
+}
+
 export interface CaseTimelineEvent {
   id: string;
   officeId: string;
@@ -126,18 +145,32 @@ export const SITUACOES_CASO_PRISMA: Record<SituacaoCaso, CaseStatus> = {
   ARQUIVADO: 'ARCHIVED',
 };
 
-export const RELACOES_PROCESSO_DOMINIO: Record<ProcessRelationType, string> = {
+export const RELACOES_PROCESSO_DOMINIO: Record<ProcessRelationType, RelacaoProcessoCaso> = {
   MAIN: 'PRINCIPAL',
   APPEAL: 'RECURSO',
   INCIDENTAL: 'INCIDENTE',
   EXECUTION: 'EXECUCAO_CUMPRIMENTO',
 };
 
-export const INSTANCIAS_PROCESSO_DOMINIO: Record<ProcessInstance, string> = {
+export const RELACOES_PROCESSO_PRISMA: Record<RelacaoProcessoCaso, ProcessRelationType> = {
+  PRINCIPAL: 'MAIN',
+  RECURSO: 'APPEAL',
+  INCIDENTE: 'INCIDENTAL',
+  EXECUCAO_CUMPRIMENTO: 'EXECUTION',
+};
+
+export const INSTANCIAS_PROCESSO_DOMINIO: Record<ProcessInstance, InstanciaProcesso> = {
   FIRST_INSTANCE: 'PRIMEIRA_INSTANCIA',
   SECOND_INSTANCE: 'SEGUNDA_INSTANCIA',
   SUPERIOR_COURT: 'TRIBUNAL_SUPERIOR',
   ADMINISTRATIVE: 'ADMINISTRATIVA',
+};
+
+export const INSTANCIAS_PROCESSO_PRISMA: Record<InstanciaProcesso, ProcessInstance> = {
+  PRIMEIRA_INSTANCIA: 'FIRST_INSTANCE',
+  SEGUNDA_INSTANCIA: 'SECOND_INSTANCE',
+  TRIBUNAL_SUPERIOR: 'SUPERIOR_COURT',
+  ADMINISTRATIVA: 'ADMINISTRATIVE',
 };
 
 type TipoClientePrisma = ClientType;
@@ -203,10 +236,49 @@ export function converterRegistroPrismaEmProcessoResumo(registro: LegalProcess):
   return {
     id: registro.id,
     numeroCnj: registro.cnjNumber,
+    numeroCnjFormatado: Processo.formatarNumeroCnj(registro.cnjNumber),
     relacaoComCaso: RELACOES_PROCESSO_DOMINIO[registro.relationType] ?? registro.relationType,
     tribunal: registro.court,
+    comarca: registro.district,
+    vara: registro.chamber,
     instancia: INSTANCIAS_PROCESSO_DOMINIO[registro.instance] ?? registro.instance,
     faseProcessual: registro.proceduralPhase,
+    versao: registro.version,
+  };
+}
+
+export function converterRegistroPrismaEmProcessoDetalhe(registro: LegalProcess): ProcessoDetalheDto {
+  return {
+    id: registro.id,
+    idEscritorio: registro.officeId,
+    idCaso: registro.caseId,
+    numeroCnj: registro.cnjNumber,
+    numeroCnjFormatado: Processo.formatarNumeroCnj(registro.cnjNumber),
+    relacaoComCaso: RELACOES_PROCESSO_DOMINIO[registro.relationType] ?? 'PRINCIPAL',
+    tribunal: registro.court,
+    comarca: registro.district,
+    vara: registro.chamber,
+    instancia: INSTANCIAS_PROCESSO_DOMINIO[registro.instance] ?? 'PRIMEIRA_INSTANCIA',
+    faseProcessual: registro.proceduralPhase as FaseProcessual,
+    versao: registro.version,
+    criadoEm: registro.createdAt,
+    atualizadoEm: registro.updatedAt,
+  };
+}
+
+export function converterRegistroPrismaEmMovimentacaoProcesso(
+  registro: ProcessMovement & { actor?: { name: string } | null },
+): MovimentacaoProcessoDto {
+  return {
+    id: registro.id,
+    idEscritorio: registro.officeId,
+    idCaso: registro.caseId,
+    idProcesso: registro.processId,
+    idAutor: registro.actorId,
+    nomeAutor: registro.actor?.name,
+    ocorridaEm: registro.occurredAt,
+    descricao: registro.description,
+    criadoEm: registro.createdAt,
   };
 }
 

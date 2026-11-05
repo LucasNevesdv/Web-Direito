@@ -2,7 +2,22 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { criarClienteAutenticado, renderizarComCliente, respostaJson } from '../../shared/testing';
-import { PaginaCasos, type CasoItem, type CasoDetalhe } from './cases-page';
+import { PaginaCasos, type CasoItem, type CasoDetalhe, type ProcessoResumo, type MovimentacaoProcessoItem } from './cases-page';
+
+function gerarCnjValido(seq = 1, ano = 2026): { formatado: string; digitos: string } {
+  const s = String(seq).padStart(7, '0');
+  const a = String(ano);
+  const j = '8';
+  const tr = '26';
+  const o = '0100';
+  const base = `${s}${a}${j}${tr}${o}00`;
+  const resto = BigInt(base) % 97n;
+  const dd = (98n - resto).toString().padStart(2, '0');
+  return {
+    digitos: `${s}${dd}${a}${j}${tr}${o}`,
+    formatado: `${s}-${dd}.${a}.${j}.${tr}.${o}`,
+  };
+}
 
 const casoMock: CasoItem = {
   id: 'caso-1',
@@ -248,6 +263,245 @@ describe('PaginaCasos (Frontend)', () => {
 
     await waitFor(() => {
       expect(arquivou).toBe(true);
+    });
+  });
+
+  it('exibe processos vinculados e permite ver movimentações (RF-038..RF-043)', async () => {
+    const cnj1 = gerarCnjValido(1);
+    const processoMock: ProcessoResumo = {
+      id: 'proc-1',
+      numeroCnj: cnj1.digitos,
+      numeroCnjFormatado: cnj1.formatado,
+      relacaoComCaso: 'PRINCIPAL',
+      tribunal: 'TJSP',
+      comarca: 'São Paulo',
+      vara: '1ª Vara Cível',
+      instancia: 'PRIMEIRA_INSTANCIA',
+      faseProcessual: 'CONHECIMENTO',
+      versao: 0,
+    };
+
+    const movMock: MovimentacaoProcessoItem = {
+      id: 'mov-1',
+      idEscritorio: 'escritorio-1',
+      idCaso: 'caso-1',
+      idProcesso: 'proc-1',
+      idAutor: 'user-1',
+      nomeAutor: 'Dra. Alice',
+      ocorridaEm: '2026-11-05T10:00:00Z',
+      descricao: 'Juntada de petição inicial e documentos comprobatórios.',
+      criadoEm: '2026-11-05T10:00:00Z',
+    };
+
+    const casoComProcesso: CasoDetalhe = {
+      ...casoDetalheMock,
+      processos: [processoMock],
+    };
+
+    const { cliente } = await criarClienteAutenticado((url) => {
+      if (url.startsWith('/api/v1/casos?')) {
+        return respostaJson({ casos: [{ ...casoMock, quantidadeProcessos: 1 }], total: 1 });
+      }
+      if (url === '/api/v1/casos/caso-1') {
+        return respostaJson(casoComProcesso);
+      }
+      if (url === '/api/v1/casos/caso-1/processos/proc-1/movimentacoes') {
+        return respostaJson({ movimentacoes: [movMock], total: 1 });
+      }
+      return respostaJson({ clientes: [], membros: [] });
+    });
+
+    renderizarComCliente(cliente, <PaginaCasos />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes' }));
+    expect(await screen.findByText('Dossiê sobre cobrança de valores em aberto.')).toBeTruthy();
+
+    // Navega para aba de processos
+    fireEvent.click(await screen.findByRole('button', { name: /Processos \(1\)/i }));
+    expect(await screen.findByText(cnj1.formatado)).toBeTruthy();
+    expect(screen.getByText('Principal')).toBeTruthy();
+    expect(screen.getByText('1ª Instância')).toBeTruthy();
+    expect(screen.getByText('Conhecimento')).toBeTruthy();
+    expect(screen.getByText('TJSP')).toBeTruthy();
+    expect(screen.getByText('São Paulo')).toBeTruthy();
+    expect(screen.getByText('1ª Vara Cível')).toBeTruthy();
+
+    // Clica para ver movimentações
+    fireEvent.click(screen.getByRole('button', { name: 'Ver movimentações' }));
+    expect(await screen.findByText('Juntada de petição inicial e documentos comprobatórios.')).toBeTruthy();
+  });
+
+  it('permite vincular novo processo com validação Mod 97-10 em tempo real (RF-038..RF-042)', async () => {
+    let corpoEnviado: unknown = null;
+    const cnjNovo = gerarCnjValido(2);
+    const { cliente } = await criarClienteAutenticado((url, opcoes) => {
+      if (url.startsWith('/api/v1/casos?')) {
+        return respostaJson({ casos: [casoMock], total: 1 });
+      }
+      if (url === '/api/v1/casos/caso-1') {
+        return respostaJson(casoDetalheMock);
+      }
+      if (url === '/api/v1/casos/caso-1/processos' && opcoes?.method === 'POST') {
+        corpoEnviado = JSON.parse(opcoes.body as string);
+        return respostaJson({
+          id: 'proc-novo',
+          numeroCnj: cnjNovo.digitos,
+          numeroCnjFormatado: cnjNovo.formatado,
+          relacaoComCaso: 'PRINCIPAL',
+          tribunal: 'TJSP',
+          comarca: 'São Paulo',
+          vara: '2ª Vara Cível',
+          instancia: 'PRIMEIRA_INSTANCIA',
+          faseProcessual: 'CONHECIMENTO',
+          versao: 0,
+        }, 201);
+      }
+      return respostaJson({ clientes: [], membros: [] });
+    });
+
+    renderizarComCliente(cliente, <PaginaCasos />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Processos \(0\)/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Vincular processo' }));
+    expect(await screen.findByText('Vincular Processo ao Caso')).toBeTruthy();
+
+    // Digita CNJ com formatação e validação Mod 97
+    const inputCnj = screen.getByLabelText(/Número CNJ/i);
+    fireEvent.change(inputCnj, { target: { value: cnjNovo.digitos } });
+    expect(await screen.findByText(/Número CNJ válido \(Mod 97-10\)/i)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/Tribunal \*/i), { target: { value: 'TJSP' } });
+    fireEvent.change(screen.getByLabelText(/Comarca \/ Foro/i), { target: { value: 'São Paulo' } });
+    fireEvent.change(screen.getByLabelText(/Vara \/ Câmara/i), { target: { value: '2ª Vara Cível' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar processo' }));
+
+    await waitFor(() => {
+      expect(corpoEnviado).toMatchObject({
+        numeroCnj: cnjNovo.digitos,
+        relacaoComCaso: 'PRINCIPAL',
+        tribunal: 'TJSP',
+        comarca: 'São Paulo',
+        vara: '2ª Vara Cível',
+        instancia: 'PRIMEIRA_INSTANCIA',
+        faseProcessual: 'CONHECIMENTO',
+      });
+    });
+  });
+
+  it('permite registrar movimentação manual no processo vinculado (RF-043)', async () => {
+    let corpoEnviado: unknown = null;
+    const cnj1 = gerarCnjValido(1);
+    const processoMock: ProcessoResumo = {
+      id: 'proc-1',
+      numeroCnj: cnj1.digitos,
+      numeroCnjFormatado: cnj1.formatado,
+      relacaoComCaso: 'PRINCIPAL',
+      tribunal: 'TJSP',
+      instancia: 'PRIMEIRA_INSTANCIA',
+      faseProcessual: 'CONHECIMENTO',
+      versao: 0,
+    };
+
+    const casoComProcesso: CasoDetalhe = {
+      ...casoDetalheMock,
+      processos: [processoMock],
+    };
+
+    const { cliente } = await criarClienteAutenticado((url, opcoes) => {
+      if (url.startsWith('/api/v1/casos?')) {
+        return respostaJson({ casos: [{ ...casoMock, quantidadeProcessos: 1 }], total: 1 });
+      }
+      if (url === '/api/v1/casos/caso-1') {
+        return respostaJson(casoComProcesso);
+      }
+      if (url === '/api/v1/casos/caso-1/processos/proc-1/movimentacoes' && opcoes?.method === 'POST') {
+        corpoEnviado = JSON.parse(opcoes.body as string);
+        return respostaJson({
+          id: 'mov-1',
+          idEscritorio: 'escritorio-1',
+          idCaso: 'caso-1',
+          idProcesso: 'proc-1',
+          idAutor: 'user-1',
+          ocorridaEm: '2026-11-05T12:00:00.000Z',
+          descricao: 'Decisão interlocutória deferindo tutela de urgência.',
+          criadoEm: '2026-11-05T12:00:00.000Z',
+        }, 201);
+      }
+      if (url === '/api/v1/casos/caso-1/processos/proc-1/movimentacoes') {
+        return respostaJson({ movimentacoes: [], total: 0 });
+      }
+      if (url === '/api/v1/casos/caso-1/linha-do-tempo') {
+        return respostaJson([]);
+      }
+      return respostaJson({ clientes: [], membros: [] });
+    });
+
+    renderizarComCliente(cliente, <PaginaCasos />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Processos \(1\)/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Movimentação' }));
+    expect(await screen.findByText('Registrar Movimentação Manual')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/Descrição da Movimentação \*/i), {
+      target: { value: 'Decisão interlocutória deferindo tutela de urgência.' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar movimentação' }));
+
+    await waitFor(() => {
+      expect(corpoEnviado).toMatchObject({
+        descricao: 'Decisão interlocutória deferindo tutela de urgência.',
+      });
+    });
+  });
+
+  it('permite filtrar linha do tempo por processo vinculado (RF-044)', async () => {
+    let urlLinhaTempoChamada = '';
+    const cnj1 = gerarCnjValido(1);
+    const processoMock: ProcessoResumo = {
+      id: 'proc-1',
+      numeroCnj: cnj1.digitos,
+      numeroCnjFormatado: cnj1.formatado,
+      relacaoComCaso: 'PRINCIPAL',
+      tribunal: 'TJSP',
+      instancia: 'PRIMEIRA_INSTANCIA',
+      faseProcessual: 'CONHECIMENTO',
+    };
+
+    const casoComProcesso: CasoDetalhe = {
+      ...casoDetalheMock,
+      processos: [processoMock],
+    };
+
+    const { cliente } = await criarClienteAutenticado((url) => {
+      if (url.startsWith('/api/v1/casos?')) {
+        return respostaJson({ casos: [{ ...casoMock, quantidadeProcessos: 1 }], total: 1 });
+      }
+      if (url === '/api/v1/casos/caso-1') {
+        return respostaJson(casoComProcesso);
+      }
+      if (url.startsWith('/api/v1/casos/caso-1/linha-do-tempo')) {
+        urlLinhaTempoChamada = url;
+        return respostaJson([]);
+      }
+      return respostaJson({ clientes: [], membros: [] });
+    });
+
+    renderizarComCliente(cliente, <PaginaCasos />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ver detalhes' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Linha do Tempo' }));
+
+    const selectFiltro = await screen.findByLabelText(/Filtrar por processo:/i);
+    fireEvent.change(selectFiltro, { target: { value: 'proc-1' } });
+
+    await waitFor(() => {
+      expect(urlLinhaTempoChamada).toBe('/api/v1/casos/caso-1/linha-do-tempo?idProcesso=proc-1');
     });
   });
 });

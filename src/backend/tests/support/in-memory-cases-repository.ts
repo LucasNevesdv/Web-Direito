@@ -5,13 +5,17 @@ import type {
   CasoResumoDto,
   EventoLinhaTempoCasoDto,
   FiltroCasos,
+  MovimentacaoProcessoDto,
   OperacoesCasosProcessos,
   ParteEnvolvidaDto,
+  ProcessoDetalheDto,
   RepositorioCasosProcessos,
 } from '../../src/application/cases/case-contracts.js';
 import { ErroCasoProcesso, PERMISSOES_CASO, type AutorCaso } from '../../src/application/cases/case-policy.js';
 import type { Caso } from '../../src/domain/cases/legal-case.js';
 import type { ParteEnvolvidaCaso } from '../../src/domain/cases/case-party.js';
+import { Processo } from '../../src/domain/cases/legal-process.js';
+import type { MovimentacaoProcesso } from '../../src/domain/cases/process-movement.js';
 import type { PapelVinculoEscritorio } from '../../src/domain/memberships/membership.js';
 
 export interface ClienteArmazenadoCaso {
@@ -58,9 +62,19 @@ function clonarParte(parte: ParteEnvolvidaDto): ParteEnvolvidaDto {
   };
 }
 
+function clonarProcessoDetalhe(p: ProcessoDetalheDto): ProcessoDetalheDto {
+  return {
+    ...p,
+    criadoEm: new Date(p.criadoEm.getTime()),
+    atualizadoEm: new Date(p.atualizadoEm.getTime()),
+  };
+}
+
 export class RepositorioCasosEmMemoria implements RepositorioCasosProcessos {
   readonly casos: CasoDetalheDto[] = [];
   readonly partes: ParteEnvolvidaDto[] = [];
+  readonly processos: ProcessoDetalheDto[] = [];
+  readonly movimentacoes: MovimentacaoProcessoDto[] = [];
   readonly linhaTempoCasos: EventoLinhaTempoCasoDto[] = [];
   readonly linhaTempoClientes: Array<{
     id: string;
@@ -125,6 +139,17 @@ export class RepositorioCasosEmMemoria implements RepositorioCasosProcessos {
         if (filtro.idCliente) {
           filtrados = filtrados.filter((c) => c.clientes.some((cli) => cli.id === filtro.idCliente));
         }
+        if (filtro.numeroCnj && filtro.numeroCnj.trim().length > 0) {
+          const buscaDigitos = filtro.numeroCnj.replace(/\D/g, '');
+          filtrados = filtrados.filter((c) =>
+            this.processos.some(
+              (p) =>
+                p.idCaso.toLowerCase() === c.id.toLowerCase() &&
+                p.idEscritorio.toLowerCase() === contexto.idEscritorioAtivo.toLowerCase() &&
+                (buscaDigitos.length > 0 ? p.numeroCnj.includes(buscaDigitos) : p.numeroCnj.includes(filtro.numeroCnj!)),
+            ),
+          );
+        }
         if (filtro.semResponsavel === true) {
           filtrados = filtrados.filter((c) => c.situacao === 'ATIVO' && !c.idVinculoResponsavel);
         }
@@ -144,7 +169,13 @@ export class RepositorioCasosEmMemoria implements RepositorioCasosProcessos {
                   cli.nome.toLowerCase().includes(busca) ||
                   (buscaDigitos.length > 0 && cli.documento.includes(buscaDigitos)),
               ) ||
-              c.processos.some((p) => buscaDigitos.length > 0 && p.numeroCnj.includes(buscaDigitos)),
+              this.processos.some(
+                (p) =>
+                  p.idCaso.toLowerCase() === c.id.toLowerCase() &&
+                  p.idEscritorio.toLowerCase() === contexto.idEscritorioAtivo.toLowerCase() &&
+                  buscaDigitos.length > 0 &&
+                  p.numeroCnj.includes(buscaDigitos),
+              ),
           );
         }
 
@@ -167,7 +198,11 @@ export class RepositorioCasosEmMemoria implements RepositorioCasosProcessos {
             valorCausaCentavos: c.valorCausaCentavos,
             valorEnvolvidoCentavos: c.valorEnvolvidoCentavos,
             clientes: c.clientes,
-            quantidadeProcessos: c.quantidadeProcessos,
+            quantidadeProcessos: this.processos.filter(
+              (p) =>
+                p.idCaso.toLowerCase() === c.id.toLowerCase() &&
+                p.idEscritorio.toLowerCase() === contexto.idEscritorioAtivo.toLowerCase(),
+            ).length,
             versao: c.versao,
             ultimaAtividadeEm: c.ultimaAtividadeEm,
             criadoEm: c.criadoEm,
@@ -186,7 +221,28 @@ export class RepositorioCasosEmMemoria implements RepositorioCasosProcessos {
         if (!caso) {
           throw new ErroCasoProcesso('NAO_ENCONTRADO', 404);
         }
-        return clonarCasoDetalhe(caso);
+        const processosVinculados = this.processos
+          .filter(
+            (p) =>
+              p.idCaso.toLowerCase() === caso.id.toLowerCase() &&
+              p.idEscritorio.toLowerCase() === contexto.idEscritorioAtivo.toLowerCase(),
+          )
+          .map((p) => ({
+            id: p.id,
+            numeroCnj: p.numeroCnj,
+            numeroCnjFormatado: p.numeroCnjFormatado,
+            relacaoComCaso: p.relacaoComCaso,
+            tribunal: p.tribunal,
+            comarca: p.comarca,
+            vara: p.vara,
+            instancia: p.instancia,
+            faseProcessual: p.faseProcessual,
+            versao: p.versao,
+          }));
+        const detalhe = clonarCasoDetalhe(caso);
+        detalhe.processos = processosVinculados;
+        detalhe.quantidadeProcessos = processosVinculados.length;
+        return detalhe;
       },
 
       validarClientesNoEscritorio: async (idsClientes: string[]) => {
@@ -643,6 +699,201 @@ export class RepositorioCasosEmMemoria implements RepositorioCasosProcessos {
               (!filtro?.idProcesso || e.idProcesso === filtro.idProcesso),
           )
           .sort((a, b) => b.criadoEm.getTime() - a.criadoEm.getTime());
+      },
+
+      buscarProcessoPorId: async (idProcesso: string): Promise<ProcessoDetalheDto | null> => {
+        const proc = this.processos.find(
+          (p) =>
+            p.id.toLowerCase() === idProcesso.toLowerCase() &&
+            p.idEscritorio.toLowerCase() === contexto.idEscritorioAtivo.toLowerCase(),
+        );
+        return proc ? clonarProcessoDetalhe(proc) : null;
+      },
+
+      buscarProcessoPorCnjNoCaso: async (
+        idCaso: string,
+        numeroCnj: string,
+      ): Promise<ProcessoDetalheDto | null> => {
+        const proc = this.processos.find(
+          (p) =>
+            p.idCaso.toLowerCase() === idCaso.toLowerCase() &&
+            p.numeroCnj === numeroCnj &&
+            p.idEscritorio.toLowerCase() === contexto.idEscritorioAtivo.toLowerCase(),
+        );
+        return proc ? clonarProcessoDetalhe(proc) : null;
+      },
+
+      cadastrarProcesso: async (processo: Processo): Promise<ProcessoDetalheDto> => {
+        const agora = new Date();
+        const dto: ProcessoDetalheDto = {
+          id: processo.id,
+          idEscritorio: processo.idEscritorio,
+          idCaso: processo.idCaso,
+          numeroCnj: processo.numeroCnj,
+          numeroCnjFormatado: processo.obterNumeroFormatado(),
+          relacaoComCaso: processo.relacaoComCaso,
+          tribunal: processo.tribunal,
+          comarca: processo.comarca,
+          vara: processo.vara,
+          instancia: processo.instancia,
+          faseProcessual: processo.faseProcessual,
+          versao: processo.versao,
+          criadoEm: processo.criadoEm,
+          atualizadoEm: processo.atualizadoEm,
+        };
+
+        this.processos.push(dto);
+
+        const caso = this.casos.find((c) => c.id.toLowerCase() === processo.idCaso.toLowerCase());
+        if (caso) {
+          caso.ultimaAtividadeEm = agora;
+          caso.atualizadoEm = agora;
+        }
+
+        this.linhaTempoCasos.push({
+          id: randomUUID(),
+          idEscritorio: processo.idEscritorio,
+          idCaso: processo.idCaso,
+          idProcesso: processo.id,
+          idAutor: contexto.idUsuario,
+          acao: 'PROCESSO_CADASTRADO',
+          anterior: null,
+          atual: {
+            idProcesso: processo.id,
+            numeroCnj: processo.numeroCnj,
+            numeroCnjFormatado: processo.obterNumeroFormatado(),
+            relacaoComCaso: processo.relacaoComCaso,
+            tribunal: processo.tribunal,
+            comarca: processo.comarca,
+            vara: processo.vara,
+            instancia: processo.instancia,
+            faseProcessual: processo.faseProcessual,
+          },
+          criadoEm: agora,
+        });
+
+        return clonarProcessoDetalhe(dto);
+      },
+
+      atualizarProcesso: async (
+        anterior: ProcessoDetalheDto,
+        atualizado: Processo,
+        evento?: { acao: string; anterior?: Record<string, unknown> | null; atual: Record<string, unknown> },
+      ): Promise<ProcessoDetalheDto> => {
+        const proc = this.processos.find(
+          (p) =>
+            p.id.toLowerCase() === atualizado.id.toLowerCase() &&
+            p.idEscritorio.toLowerCase() === contexto.idEscritorioAtivo.toLowerCase(),
+        );
+
+        if (!proc || proc.versao !== anterior.versao) {
+          throw new ErroCasoProcesso('CONFLITO', 409);
+        }
+
+        proc.relacaoComCaso = atualizado.relacaoComCaso;
+        proc.tribunal = atualizado.tribunal;
+        proc.comarca = atualizado.comarca;
+        proc.vara = atualizado.vara;
+        proc.instancia = atualizado.instancia;
+        proc.faseProcessual = atualizado.faseProcessual;
+        proc.versao = atualizado.versao;
+        proc.atualizadoEm = atualizado.atualizadoEm;
+
+        const agora = new Date();
+        const caso = this.casos.find((c) => c.id.toLowerCase() === atualizado.idCaso.toLowerCase());
+        if (caso) {
+          caso.ultimaAtividadeEm = agora;
+          caso.atualizadoEm = agora;
+        }
+
+        if (evento) {
+          this.linhaTempoCasos.push({
+            id: randomUUID(),
+            idEscritorio: atualizado.idEscritorio,
+            idCaso: atualizado.idCaso,
+            idProcesso: atualizado.id,
+            idAutor: contexto.idUsuario,
+            acao: evento.acao,
+            anterior: evento.anterior ?? null,
+            atual: evento.atual,
+            criadoEm: agora,
+          });
+        }
+
+        return clonarProcessoDetalhe(proc);
+      },
+
+      registrarMovimentacao: async (
+        movimentacao: MovimentacaoProcesso,
+      ): Promise<MovimentacaoProcessoDto> => {
+        const agora = new Date();
+        const membro = this.membros.find(
+          (m) =>
+            m.idUsuario.toLowerCase() === movimentacao.idAutor.toLowerCase() &&
+            m.idEscritorio.toLowerCase() === contexto.idEscritorioAtivo.toLowerCase(),
+        );
+
+        const dto: MovimentacaoProcessoDto = {
+          id: movimentacao.id,
+          idEscritorio: movimentacao.idEscritorio,
+          idCaso: movimentacao.idCaso,
+          idProcesso: movimentacao.idProcesso,
+          idAutor: movimentacao.idAutor,
+          nomeAutor: membro?.nome,
+          ocorridaEm: movimentacao.ocorridaEm,
+          descricao: movimentacao.descricao,
+          criadoEm: movimentacao.criadoEm,
+        };
+
+        this.movimentacoes.push(dto);
+
+        const caso = this.casos.find((c) => c.id.toLowerCase() === movimentacao.idCaso.toLowerCase());
+        if (caso) {
+          caso.ultimaAtividadeEm = agora;
+          caso.atualizadoEm = agora;
+        }
+
+        this.linhaTempoCasos.push({
+          id: randomUUID(),
+          idEscritorio: movimentacao.idEscritorio,
+          idCaso: movimentacao.idCaso,
+          idProcesso: movimentacao.idProcesso,
+          idAutor: contexto.idUsuario,
+          acao: 'MOVIMENTACAO_REGISTRADA',
+          anterior: null,
+          atual: {
+            idMovimentacao: movimentacao.id,
+            ocorridaEm: movimentacao.ocorridaEm.toISOString(),
+            descricao: movimentacao.descricao,
+          },
+          criadoEm: agora,
+        });
+
+        return dto;
+      },
+
+      listarMovimentacoesProcesso: async (
+        idProcesso: string,
+        paginacao?: { pagina: number; tamanhoPagina: number },
+      ): Promise<{ movimentacoes: MovimentacaoProcessoDto[]; total: number }> => {
+        const filtradas = this.movimentacoes
+          .filter(
+            (m) =>
+              m.idProcesso.toLowerCase() === idProcesso.toLowerCase() &&
+              m.idEscritorio.toLowerCase() === contexto.idEscritorioAtivo.toLowerCase(),
+          )
+          .sort((a, b) => b.ocorridaEm.getTime() - a.ocorridaEm.getTime());
+
+        const pagina = Math.max(1, paginacao?.pagina || 1);
+        const tamanhoPagina = Math.min(Math.max(1, paginacao?.tamanhoPagina || 20), 50);
+        const total = filtradas.length;
+        const inicio = (pagina - 1) * tamanhoPagina;
+        const paginadas = filtradas.slice(inicio, inicio + tamanhoPagina);
+
+        return {
+          movimentacoes: paginadas,
+          total,
+        };
       },
     };
 

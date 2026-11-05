@@ -13,20 +13,28 @@ import type {
   CasoResumoDto,
   EventoLinhaTempoCasoDto,
   FiltroCasos,
+  MovimentacaoProcessoDto,
   OperacoesCasosProcessos,
   ParteEnvolvidaDto,
+  ProcessoDetalheDto,
   RepositorioCasosProcessos,
 } from '../../application/cases/case-contracts.js';
 import { ErroCasoProcesso, PERMISSOES_CASO, type AutorCaso, type PermissaoCaso } from '../../application/cases/case-policy.js';
 import type { Caso } from '../../domain/cases/legal-case.js';
 import type { ParteEnvolvidaCaso } from '../../domain/cases/case-party.js';
+import type { Processo } from '../../domain/cases/legal-process.js';
+import type { MovimentacaoProcesso } from '../../domain/cases/process-movement.js';
 import {
   converterRegistroPrismaEmCasoDetalhe,
   converterRegistroPrismaEmCasoResumo,
   converterRegistroPrismaEmEventoLinhaTempoCaso,
+  converterRegistroPrismaEmMovimentacaoProcesso,
   converterRegistroPrismaEmParteEnvolvida,
+  converterRegistroPrismaEmProcessoDetalhe,
+  INSTANCIAS_PROCESSO_PRISMA,
   NATUREZAS_CASO_PRISMA,
   PRIORIDADES_CASO_PRISMA,
+  RELACOES_PROCESSO_PRISMA,
   SITUACOES_CASO_PRISMA,
 } from './case-mapper.js';
 
@@ -754,6 +762,216 @@ export class RepositorioCasosPrisma implements RepositorioCasosProcessos {
               });
 
               return registros.map(converterRegistroPrismaEmEventoLinhaTempoCaso);
+            },
+
+            buscarProcessoPorId: async (idProcesso: string): Promise<ProcessoDetalheDto | null> => {
+              const reg = await transacao.legalProcess.findFirst({
+                where: {
+                  id: idProcesso,
+                  officeId: contexto.idEscritorioAtivo,
+                },
+              });
+              return reg ? converterRegistroPrismaEmProcessoDetalhe(reg) : null;
+            },
+
+            buscarProcessoPorCnjNoCaso: async (
+              idCaso: string,
+              numeroCnj: string,
+            ): Promise<ProcessoDetalheDto | null> => {
+              const reg = await transacao.legalProcess.findFirst({
+                where: {
+                  caseId: idCaso,
+                  cnjNumber: numeroCnj,
+                  officeId: contexto.idEscritorioAtivo,
+                },
+              });
+              return reg ? converterRegistroPrismaEmProcessoDetalhe(reg) : null;
+            },
+
+            cadastrarProcesso: async (processo: Processo): Promise<ProcessoDetalheDto> => {
+              const agora = new Date();
+              const reg = await transacao.legalProcess.create({
+                data: {
+                  id: processo.id,
+                  officeId: processo.idEscritorio,
+                  caseId: processo.idCaso,
+                  cnjNumber: processo.numeroCnj,
+                  relationType: RELACOES_PROCESSO_PRISMA[processo.relacaoComCaso],
+                  court: processo.tribunal,
+                  district: processo.comarca,
+                  chamber: processo.vara,
+                  instance: INSTANCIAS_PROCESSO_PRISMA[processo.instancia],
+                  proceduralPhase: processo.faseProcessual,
+                  version: processo.versao,
+                  createdAt: processo.criadoEm,
+                  updatedAt: processo.atualizadoEm,
+                },
+              });
+
+              await transacao.legalCase.updateMany({
+                where: { id: processo.idCaso, officeId: contexto.idEscritorioAtivo },
+                data: { lastActivityAt: agora, updatedAt: agora },
+              });
+
+              await transacao.caseTimelineEvent.create({
+                data: {
+                  id: randomUUID(),
+                  officeId: processo.idEscritorio,
+                  caseId: processo.idCaso,
+                  processId: processo.id,
+                  actorId: contexto.idUsuario,
+                  action: 'PROCESSO_CADASTRADO',
+                  previous: Prisma.DbNull,
+                  current: {
+                    idProcesso: processo.id,
+                    numeroCnj: processo.numeroCnj,
+                    numeroCnjFormatado: processo.obterNumeroFormatado(),
+                    relacaoComCaso: processo.relacaoComCaso,
+                    tribunal: processo.tribunal,
+                    comarca: processo.comarca,
+                    vara: processo.vara,
+                    instancia: processo.instancia,
+                    faseProcessual: processo.faseProcessual,
+                  },
+                  createdAt: agora,
+                },
+              });
+
+              return converterRegistroPrismaEmProcessoDetalhe(reg);
+            },
+
+            atualizarProcesso: async (
+              anterior: ProcessoDetalheDto,
+              atualizado: Processo,
+              evento?: { acao: string; anterior?: Record<string, unknown> | null; atual: Record<string, unknown> },
+            ): Promise<ProcessoDetalheDto> => {
+              const agora = new Date();
+              const mutacao = await transacao.legalProcess.updateMany({
+                where: {
+                  id: atualizado.id,
+                  caseId: atualizado.idCaso,
+                  officeId: contexto.idEscritorioAtivo,
+                  version: anterior.versao,
+                },
+                data: {
+                  relationType: RELACOES_PROCESSO_PRISMA[atualizado.relacaoComCaso],
+                  court: atualizado.tribunal,
+                  district: atualizado.comarca,
+                  chamber: atualizado.vara,
+                  instance: INSTANCIAS_PROCESSO_PRISMA[atualizado.instancia],
+                  proceduralPhase: atualizado.faseProcessual,
+                  version: atualizado.versao,
+                  updatedAt: atualizado.atualizadoEm,
+                },
+              });
+
+              if (mutacao.count === 0) {
+                throw new ErroCasoProcesso('CONFLITO', 409);
+              }
+
+              const reg = await transacao.legalProcess.findFirstOrThrow({
+                where: { id: atualizado.id, officeId: contexto.idEscritorioAtivo },
+              });
+
+              await transacao.legalCase.updateMany({
+                where: { id: atualizado.idCaso, officeId: contexto.idEscritorioAtivo },
+                data: { lastActivityAt: agora, updatedAt: agora },
+              });
+
+              if (evento) {
+                await transacao.caseTimelineEvent.create({
+                  data: {
+                    id: randomUUID(),
+                    officeId: atualizado.idEscritorio,
+                    caseId: atualizado.idCaso,
+                    processId: atualizado.id,
+                    actorId: contexto.idUsuario,
+                    action: evento.acao,
+                    previous: (evento.anterior as Prisma.InputJsonValue) ?? Prisma.DbNull,
+                    current: evento.atual as Prisma.InputJsonValue,
+                    createdAt: agora,
+                  },
+                });
+              }
+
+              return converterRegistroPrismaEmProcessoDetalhe(reg);
+            },
+
+            registrarMovimentacao: async (
+              movimentacao: MovimentacaoProcesso,
+            ): Promise<MovimentacaoProcessoDto> => {
+              const agora = new Date();
+              const reg = await transacao.processMovement.create({
+                data: {
+                  id: movimentacao.id,
+                  officeId: movimentacao.idEscritorio,
+                  caseId: movimentacao.idCaso,
+                  processId: movimentacao.idProcesso,
+                  actorId: movimentacao.idAutor,
+                  occurredAt: movimentacao.ocorridaEm,
+                  description: movimentacao.descricao,
+                  createdAt: movimentacao.criadoEm,
+                },
+                include: {
+                  actor: { select: { name: true } },
+                },
+              });
+
+              await transacao.legalCase.updateMany({
+                where: { id: movimentacao.idCaso, officeId: contexto.idEscritorioAtivo },
+                data: { lastActivityAt: agora, updatedAt: agora },
+              });
+
+              await transacao.caseTimelineEvent.create({
+                data: {
+                  id: randomUUID(),
+                  officeId: movimentacao.idEscritorio,
+                  caseId: movimentacao.idCaso,
+                  processId: movimentacao.idProcesso,
+                  actorId: contexto.idUsuario,
+                  action: 'MOVIMENTACAO_REGISTRADA',
+                  previous: Prisma.DbNull,
+                  current: {
+                    idMovimentacao: movimentacao.id,
+                    ocorridaEm: movimentacao.ocorridaEm.toISOString(),
+                    descricao: movimentacao.descricao,
+                  },
+                  createdAt: agora,
+                },
+              });
+
+              return converterRegistroPrismaEmMovimentacaoProcesso(reg);
+            },
+
+            listarMovimentacoesProcesso: async (
+              idProcesso: string,
+              paginacao?: { pagina: number; tamanhoPagina: number },
+            ): Promise<{ movimentacoes: MovimentacaoProcessoDto[]; total: number }> => {
+              const pagina = Math.max(1, paginacao?.pagina || 1);
+              const tamanhoPagina = Math.min(Math.max(1, paginacao?.tamanhoPagina || 20), 50);
+
+              const where: Prisma.ProcessMovementWhereInput = {
+                officeId: contexto.idEscritorioAtivo,
+                processId: idProcesso,
+              };
+
+              const [registros, total] = await Promise.all([
+                transacao.processMovement.findMany({
+                  where,
+                  include: {
+                    actor: { select: { name: true } },
+                  },
+                  orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+                  skip: (pagina - 1) * tamanhoPagina,
+                  take: tamanhoPagina,
+                }),
+                transacao.processMovement.count({ where }),
+              ]);
+
+              return {
+                movimentacoes: registros.map(converterRegistroPrismaEmMovimentacaoProcesso),
+                total,
+              };
             },
           };
 

@@ -1,16 +1,23 @@
 import type { TokensAcesso } from '../authentication/authentication-contracts.js';
 import { Caso } from '../../domain/cases/legal-case.js';
 import { ParteEnvolvidaCaso } from '../../domain/cases/case-party.js';
+import { Processo } from '../../domain/cases/legal-process.js';
+import { MovimentacaoProcesso } from '../../domain/cases/process-movement.js';
 import type {
   CasoDetalheDto,
   CasoResumoDto,
   DadosCadastroCaso,
+  DadosCadastroMovimentacao,
   DadosCadastroParteInicial,
+  DadosCadastroProcesso,
   DadosEdicaoCaso,
+  DadosEdicaoProcesso,
   EventoLinhaTempoCasoDto,
   FiltroCasos,
+  MovimentacaoProcessoDto,
   OperacoesCasosProcessos,
   ParteEnvolvidaDto,
+  ProcessoDetalheDto,
   RepositorioCasosProcessos,
 } from './case-contracts.js';
 import { ErroCasoProcesso, PoliticaCasosProcessos } from './case-policy.js';
@@ -112,7 +119,7 @@ export class GestaoCasosProcessos {
         idsVinculosEquipe: dados.idsVinculosEquipe,
       });
 
-      const partesIniciais = (dados.partesIniciais ?? []).map((p) =>
+      const partesIniciais: ParteEnvolvidaCaso[] = (dados.partesIniciais ?? []).map((p) =>
         ParteEnvolvidaCaso.criar({
           idEscritorio: caso.idEscritorio,
           idCaso: caso.id,
@@ -134,13 +141,15 @@ export class GestaoCasosProcessos {
       PoliticaCasosProcessos.exigir(casos.autor, 'CASO_EDITAR');
 
       const anterior = await casos.buscarCasoPorId(idCaso);
-      if (anterior.versao !== dados.versao) {
-        throw new ErroCasoProcesso('CONFLITO', 409);
-      }
       if (anterior.situacao === 'ARQUIVADO') {
         throw new ErroCasoProcesso('CASO_ARQUIVADO_SOMENTE_LEITURA', 409);
       }
 
+      if (dados.versao !== anterior.versao) {
+        throw new ErroCasoProcesso('CONFLITO', 409);
+      }
+
+      // Validar clientes caso tenham sido informados
       if (dados.idsClientes) {
         if (dados.idsClientes.length === 0) {
           throw new ErroCasoProcesso('DADOS_INVALIDOS', 400, 'Ao menos um cliente deve ser vinculado.');
@@ -154,6 +163,7 @@ export class GestaoCasosProcessos {
         }
       }
 
+      // Validar responsável se informado
       if (dados.idVinculoResponsavel !== undefined && dados.idVinculoResponsavel !== null) {
         const resp = await casos.validarVinculoEquipeNoEscritorio(dados.idVinculoResponsavel);
         if (!resp || !resp.ativo) {
@@ -162,6 +172,7 @@ export class GestaoCasosProcessos {
         PoliticaCasosProcessos.validarPapelResponsavel(resp.papel);
       }
 
+      // Validar equipe se informada
       if (dados.idsVinculosEquipe && dados.idsVinculosEquipe.length > 0) {
         for (const idMembro of dados.idsVinculosEquipe) {
           const membro = await casos.validarVinculoEquipeNoEscritorio(idMembro);
@@ -184,14 +195,14 @@ export class GestaoCasosProcessos {
         valorCausaCentavos: anterior.valorCausaCentavos,
         valorEnvolvidoCentavos: anterior.valorEnvolvidoCentavos,
         idsClientes: anterior.clientes.map((c) => c.id),
-        idsVinculosEquipe: anterior.equipe.map((m) => m.id),
+        idsVinculosEquipe: anterior.equipe.map((e) => e.id),
         versao: anterior.versao,
         ultimaAtividadeEm: anterior.ultimaAtividadeEm,
         criadoEm: anterior.criadoEm,
         atualizadoEm: anterior.atualizadoEm,
       });
 
-      const atualizado = casoAtual.editar({
+      const casoAtualizado = casoAtual.editar({
         titulo: dados.titulo,
         descricao: dados.descricao,
         natureza: dados.natureza,
@@ -205,7 +216,7 @@ export class GestaoCasosProcessos {
         idsVinculosEquipe: dados.idsVinculosEquipe,
       });
 
-      const evento = {
+      return casos.atualizarCaso(anterior, casoAtualizado, {
         acao: 'CASO_ATUALIZADO',
         anterior: {
           titulo: anterior.titulo,
@@ -214,22 +225,16 @@ export class GestaoCasosProcessos {
           prioridade: anterior.prioridade,
           situacao: anterior.situacao,
           idVinculoResponsavel: anterior.idVinculoResponsavel,
-          valorCausaCentavos: anterior.valorCausaCentavos,
-          valorEnvolvidoCentavos: anterior.valorEnvolvidoCentavos,
         },
         atual: {
-          titulo: atualizado.titulo,
-          natureza: atualizado.natureza,
-          areaJuridica: atualizado.areaJuridica,
-          prioridade: atualizado.prioridade,
-          situacao: atualizado.situacao,
-          idVinculoResponsavel: atualizado.idVinculoResponsavel,
-          valorCausaCentavos: atualizado.valorCausaCentavos,
-          valorEnvolvidoCentavos: atualizado.valorEnvolvidoCentavos,
+          titulo: casoAtualizado.titulo,
+          natureza: casoAtualizado.natureza,
+          areaJuridica: casoAtualizado.areaJuridica,
+          prioridade: casoAtualizado.prioridade,
+          situacao: casoAtualizado.situacao,
+          idVinculoResponsavel: casoAtualizado.idVinculoResponsavel,
         },
-      };
-
-      return casos.atualizarCaso(anterior, atualizado, evento);
+      });
     });
   }
 
@@ -242,11 +247,12 @@ export class GestaoCasosProcessos {
       PoliticaCasosProcessos.exigir(casos.autor, 'CASO_ARQUIVAR_REABRIR');
 
       const anterior = await casos.buscarCasoPorId(idCaso);
-      if (anterior.versao !== dados.versao) {
-        throw new ErroCasoProcesso('CONFLITO', 409);
-      }
       if (anterior.situacao === 'ARQUIVADO') {
-        throw new ErroCasoProcesso('DADOS_INVALIDOS', 400, 'Caso já está arquivado.');
+        return anterior;
+      }
+
+      if (dados.versao !== anterior.versao) {
+        throw new ErroCasoProcesso('CONFLITO', 409);
       }
 
       return casos.arquivarCaso(anterior, dados.versao, dados.motivo);
@@ -262,11 +268,12 @@ export class GestaoCasosProcessos {
       PoliticaCasosProcessos.exigir(casos.autor, 'CASO_ARQUIVAR_REABRIR');
 
       const anterior = await casos.buscarCasoPorId(idCaso);
-      if (anterior.versao !== dados.versao) {
-        throw new ErroCasoProcesso('CONFLITO', 409);
+      if (anterior.situacao === 'ATIVO') {
+        return anterior;
       }
-      if (anterior.situacao !== 'ARQUIVADO' && anterior.situacao !== 'ENCERRADO') {
-        throw new ErroCasoProcesso('DADOS_INVALIDOS', 400, 'Caso não está arquivado nem encerrado.');
+
+      if (dados.versao !== anterior.versao) {
+        throw new ErroCasoProcesso('CONFLITO', 409);
       }
 
       return casos.reabrirCaso(anterior, dados.versao, dados.motivo);
@@ -366,6 +373,210 @@ export class GestaoCasosProcessos {
       PoliticaCasosProcessos.exigir(casos.autor, 'CASO_VISUALIZAR');
       await casos.buscarCasoPorId(idCaso);
       return casos.listarLinhaDoTempoCaso(idCaso, filtro);
+    });
+  }
+
+  // ==========================================
+  // Slice 2: Processos Vinculados (RF-038..RF-042)
+  // ==========================================
+
+  async cadastrarProcessoNoCaso(
+    token: string,
+    idCaso: string,
+    dados: DadosCadastroProcesso,
+  ): Promise<ProcessoDetalheDto> {
+    return this.executar(token, async (casos) => {
+      PoliticaCasosProcessos.exigir(casos.autor, 'CASO_CADASTRAR');
+
+      const caso = await casos.buscarCasoPorId(idCaso);
+      if (caso.situacao === 'ARQUIVADO') {
+        throw new ErroCasoProcesso('CASO_ARQUIVADO_SOMENTE_LEITURA', 409);
+      }
+
+      const cnjNormalizado = Processo.normalizarNumeroCnj(dados.numeroCnj);
+
+      // Unicidade dentro do mesmo caso (RF-038 / P-005)
+      const processoExistente = await casos.buscarProcessoPorCnjNoCaso(idCaso, cnjNormalizado);
+      if (processoExistente) {
+        throw new ErroCasoProcesso('CNJ_JA_VINCULADO_NO_CASO', 409);
+      }
+
+      const processo = Processo.criar({
+        idEscritorio: caso.idEscritorio,
+        idCaso: caso.id,
+        numeroCnj: cnjNormalizado,
+        relacaoComCaso: dados.relacaoComCaso ?? 'PRINCIPAL',
+        tribunal: dados.tribunal,
+        comarca: dados.comarca,
+        vara: dados.vara,
+        instancia: dados.instancia,
+        faseProcessual: dados.faseProcessual,
+      });
+
+      return casos.cadastrarProcesso(processo);
+    });
+  }
+
+  async editarProcessoDoCaso(
+    token: string,
+    idCaso: string,
+    idProcesso: string,
+    dados: DadosEdicaoProcesso,
+  ): Promise<ProcessoDetalheDto> {
+    return this.executar(token, async (casos) => {
+      PoliticaCasosProcessos.exigir(casos.autor, 'CASO_EDITAR');
+
+      const caso = await casos.buscarCasoPorId(idCaso);
+      if (caso.situacao === 'ARQUIVADO') {
+        throw new ErroCasoProcesso('CASO_ARQUIVADO_SOMENTE_LEITURA', 409);
+      }
+
+      const anterior = await casos.buscarProcessoPorId(idProcesso);
+      if (!anterior || anterior.idCaso !== idCaso || anterior.idEscritorio !== caso.idEscritorio) {
+        throw new ErroCasoProcesso('NAO_ENCONTRADO', 404);
+      }
+
+      if (dados.versao !== anterior.versao) {
+        throw new ErroCasoProcesso('CONFLITO', 409);
+      }
+
+      const processoDominio = Processo.restaurar({
+        id: anterior.id,
+        idEscritorio: anterior.idEscritorio,
+        idCaso: anterior.idCaso,
+        numeroCnj: anterior.numeroCnj,
+        relacaoComCaso: anterior.relacaoComCaso,
+        tribunal: anterior.tribunal,
+        comarca: anterior.comarca,
+        vara: anterior.vara,
+        instancia: anterior.instancia,
+        faseProcessual: anterior.faseProcessual,
+        versao: anterior.versao,
+        criadoEm: anterior.criadoEm,
+        atualizadoEm: anterior.atualizadoEm,
+      });
+
+      const atualizado = processoDominio.editar({
+        relacaoComCaso: dados.relacaoComCaso,
+        tribunal: dados.tribunal,
+        comarca: dados.comarca,
+        vara: dados.vara,
+        instancia: dados.instancia,
+        faseProcessual: dados.faseProcessual,
+      });
+
+      const mudouFase = dados.faseProcessual && dados.faseProcessual !== anterior.faseProcessual;
+      const acao = mudouFase ? 'FASE_PROCESSUAL_ALTERADA' : 'PROCESSO_ATUALIZADO';
+
+      return casos.atualizarProcesso(anterior, atualizado, {
+        acao,
+        anterior: {
+          relacaoComCaso: anterior.relacaoComCaso,
+          tribunal: anterior.tribunal,
+          comarca: anterior.comarca,
+          vara: anterior.vara,
+          instancia: anterior.instancia,
+          faseProcessual: anterior.faseProcessual,
+        },
+        atual: {
+          relacaoComCaso: atualizado.relacaoComCaso,
+          tribunal: atualizado.tribunal,
+          comarca: atualizado.comarca,
+          vara: atualizado.vara,
+          instancia: atualizado.instancia,
+          faseProcessual: atualizado.faseProcessual,
+        },
+      });
+    });
+  }
+
+  async consultarProcessoPorId(
+    token: string,
+    idCaso: string,
+    idProcesso: string,
+  ): Promise<ProcessoDetalheDto> {
+    return this.executar(token, async (casos) => {
+      PoliticaCasosProcessos.exigir(casos.autor, 'CASO_VISUALIZAR');
+
+      const caso = await casos.buscarCasoPorId(idCaso);
+      const processo = await casos.buscarProcessoPorId(idProcesso);
+      if (!processo || processo.idCaso !== caso.id || processo.idEscritorio !== caso.idEscritorio) {
+        throw new ErroCasoProcesso('NAO_ENCONTRADO', 404);
+      }
+
+      return processo;
+    });
+  }
+
+  // ==========================================
+  // Slice 2: Movimentações Manuais (RF-043)
+  // ==========================================
+
+  async registrarMovimentacaoManual(
+    token: string,
+    idCaso: string,
+    idProcesso: string,
+    dados: DadosCadastroMovimentacao,
+  ): Promise<MovimentacaoProcessoDto> {
+    return this.executar(token, async (casos) => {
+      PoliticaCasosProcessos.exigir(casos.autor, 'CASO_REGISTRAR_MOVIMENTACAO');
+
+      const caso = await casos.buscarCasoPorId(idCaso);
+      if (caso.situacao === 'ARQUIVADO') {
+        throw new ErroCasoProcesso('CASO_ARQUIVADO_SOMENTE_LEITURA', 409);
+      }
+
+      const processo = await casos.buscarProcessoPorId(idProcesso);
+      if (!processo || processo.idCaso !== caso.id || processo.idEscritorio !== caso.idEscritorio) {
+        throw new ErroCasoProcesso('NAO_ENCONTRADO', 404);
+      }
+
+      const movimentacao = MovimentacaoProcesso.criar({
+        idEscritorio: caso.idEscritorio,
+        idCaso: caso.id,
+        idProcesso: processo.id,
+        idAutor: casos.autor.idUsuario,
+        ocorridaEm: dados.ocorridaEm,
+        descricao: dados.descricao,
+      });
+
+      return casos.registrarMovimentacao(movimentacao);
+    });
+  }
+
+  async listarMovimentacoesProcesso(
+    token: string,
+    idCaso: string,
+    idProcesso: string,
+    paginacao?: { pagina?: number; tamanhoPagina?: number },
+  ): Promise<{
+    movimentacoes: MovimentacaoProcessoDto[];
+    total: number;
+    pagina: number;
+    tamanhoPagina: number;
+  }> {
+    return this.executar(token, async (casos) => {
+      PoliticaCasosProcessos.exigir(casos.autor, 'CASO_VISUALIZAR');
+
+      const caso = await casos.buscarCasoPorId(idCaso);
+      const processo = await casos.buscarProcessoPorId(idProcesso);
+      if (!processo || processo.idCaso !== caso.id || processo.idEscritorio !== caso.idEscritorio) {
+        throw new ErroCasoProcesso('NAO_ENCONTRADO', 404);
+      }
+
+      const pagina = Math.max(1, paginacao?.pagina || 1);
+      const tamanhoPagina = Math.min(Math.max(1, paginacao?.tamanhoPagina || 20), 50);
+
+      const resultado = await casos.listarMovimentacoesProcesso(processo.id, {
+        pagina,
+        tamanhoPagina,
+      });
+
+      return {
+        ...resultado,
+        pagina,
+        tamanhoPagina,
+      };
     });
   }
 }

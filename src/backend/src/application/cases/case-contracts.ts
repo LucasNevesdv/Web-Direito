@@ -2,6 +2,13 @@ import type { DadosTokenAcesso } from '../authentication/authentication-contract
 import type { PapelVinculoEscritorio } from '../../domain/memberships/membership.js';
 import type { Caso, NaturezaCaso, PrioridadeCaso, SituacaoCaso } from '../../domain/cases/legal-case.js';
 import type { ParteEnvolvidaCaso, TipoParticipacaoCaso } from '../../domain/cases/case-party.js';
+import type {
+  FaseProcessual,
+  InstanciaProcesso,
+  Processo,
+  RelacaoProcessoCaso,
+} from '../../domain/cases/legal-process.js';
+import type { MovimentacaoProcesso } from '../../domain/cases/process-movement.js';
 import type { AutorCaso } from './case-policy.js';
 
 export interface ClienteResumoCasoDto {
@@ -35,10 +42,43 @@ export interface ParteEnvolvidaDto {
 export interface ProcessoResumoCasoDto {
   id: string;
   numeroCnj: string;
+  numeroCnjFormatado?: string;
   relacaoComCaso: string;
   tribunal: string;
+  comarca?: string | null;
+  vara?: string | null;
   instancia: string;
   faseProcessual: string;
+  versao?: number;
+}
+
+export interface ProcessoDetalheDto {
+  id: string;
+  idEscritorio: string;
+  idCaso: string;
+  numeroCnj: string;
+  numeroCnjFormatado: string;
+  relacaoComCaso: RelacaoProcessoCaso;
+  tribunal: string;
+  comarca: string | null;
+  vara: string | null;
+  instancia: InstanciaProcesso;
+  faseProcessual: FaseProcessual;
+  versao: number;
+  criadoEm: Date;
+  atualizadoEm: Date;
+}
+
+export interface MovimentacaoProcessoDto {
+  id: string;
+  idEscritorio: string;
+  idCaso: string;
+  idProcesso: string;
+  idAutor: string;
+  nomeAutor?: string;
+  ocorridaEm: Date;
+  descricao: string;
+  criadoEm: Date;
 }
 
 export interface CasoResumoDto {
@@ -134,6 +174,31 @@ export interface DadosEdicaoCaso {
   versao: number;
 }
 
+export interface DadosCadastroProcesso {
+  numeroCnj: string;
+  relacaoComCaso?: RelacaoProcessoCaso;
+  tribunal: string;
+  comarca?: string | null;
+  vara?: string | null;
+  instancia: InstanciaProcesso;
+  faseProcessual: FaseProcessual;
+}
+
+export interface DadosEdicaoProcesso {
+  relacaoComCaso?: RelacaoProcessoCaso;
+  tribunal?: string;
+  comarca?: string | null;
+  vara?: string | null;
+  instancia?: InstanciaProcesso;
+  faseProcessual?: FaseProcessual;
+  versao: number;
+}
+
+export interface DadosCadastroMovimentacao {
+  ocorridaEm: Date;
+  descricao: string;
+}
+
 export interface OperacoesCasosProcessos {
   autor: AutorCaso;
   listarCasos(filtro: FiltroCasos): Promise<{ casos: CasoResumoDto[]; total: number }>;
@@ -154,6 +219,21 @@ export interface OperacoesCasosProcessos {
   atualizarParte(anterior: ParteEnvolvidaDto, atualizada: ParteEnvolvidaCaso): Promise<ParteEnvolvidaDto>;
   removerParte(idCaso: string, idParte: string): Promise<void>;
   listarLinhaDoTempoCaso(idCaso: string, filtro?: { idProcesso?: string }): Promise<EventoLinhaTempoCasoDto[]>;
+
+  // Operações de Processos e Movimentações (Slice 2)
+  buscarProcessoPorId(idProcesso: string): Promise<ProcessoDetalheDto | null>;
+  buscarProcessoPorCnjNoCaso(idCaso: string, numeroCnj: string): Promise<ProcessoDetalheDto | null>;
+  cadastrarProcesso(processo: Processo): Promise<ProcessoDetalheDto>;
+  atualizarProcesso(
+    anterior: ProcessoDetalheDto,
+    atualizado: Processo,
+    evento?: { acao: string; anterior?: Record<string, unknown> | null; atual: Record<string, unknown> },
+  ): Promise<ProcessoDetalheDto>;
+  registrarMovimentacao(movimentacao: MovimentacaoProcesso): Promise<MovimentacaoProcessoDto>;
+  listarMovimentacoesProcesso(
+    idProcesso: string,
+    paginacao?: { pagina: number; tamanhoPagina: number },
+  ): Promise<{ movimentacoes: MovimentacaoProcessoDto[]; total: number }>;
 }
 
 export interface RepositorioCasosProcessos {

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { GestaoCasosProcessos } from '../application/cases/manage-cases.js';
 import { ErroCasoProcesso } from '../application/cases/case-policy.js';
 import { ErroCasoInvalido } from '../domain/cases/invalid-case-error.js';
+import { ErroProcessoInvalido } from '../domain/cases/invalid-process-error.js';
 import {
   ErroTokenAcessoInvalido,
   ErroPrimeiroAcessoObrigatorio,
@@ -21,6 +22,54 @@ const TIPO_PARTICIPACAO = z.enum([
 ]);
 const VERSAO = z.number().int().nonnegative();
 const VALOR_CENTAVOS = z.number().int().min(0).max(999_999_999_999_99);
+
+const RELACAO_PROCESSO = z.enum(['PRINCIPAL', 'RECURSO', 'INCIDENTE', 'EXECUCAO_CUMPRIMENTO']);
+const INSTANCIA_PROCESSO = z.enum([
+  'PRIMEIRA_INSTANCIA',
+  'SEGUNDA_INSTANCIA',
+  'TRIBUNAL_SUPERIOR',
+  'ADMINISTRATIVA',
+]);
+const FASE_PROCESSUAL = z.enum([
+  'CONHECIMENTO',
+  'LIQUIDACAO',
+  'CUMPRIMENTO_SENTENCA',
+  'EXECUCAO',
+  'RECURSAL',
+  'SUSPENSO',
+  'ARQUIVADO',
+]);
+
+const PROCESSO_CADASTRO_SCHEMA = z
+  .object({
+    numeroCnj: z.string().trim().min(20).max(30),
+    relacaoComCaso: RELACAO_PROCESSO.optional(),
+    tribunal: z.string().trim().min(2).max(60),
+    comarca: z.string().trim().min(2).max(120).nullish(),
+    vara: z.string().trim().min(2).max(120).nullish(),
+    instancia: INSTANCIA_PROCESSO,
+    faseProcessual: FASE_PROCESSUAL,
+  })
+  .strict();
+
+const PROCESSO_EDICAO_SCHEMA = z
+  .object({
+    relacaoComCaso: RELACAO_PROCESSO.optional(),
+    tribunal: z.string().trim().min(2).max(60).optional(),
+    comarca: z.string().trim().min(2).max(120).nullish(),
+    vara: z.string().trim().min(2).max(120).nullish(),
+    instancia: INSTANCIA_PROCESSO.optional(),
+    faseProcessual: FASE_PROCESSUAL.optional(),
+    versao: VERSAO,
+  })
+  .strict();
+
+const MOVIMENTACAO_CADASTRO_SCHEMA = z
+  .object({
+    ocorridaEm: z.string().datetime(),
+    descricao: z.string().trim().min(3).max(2000),
+  })
+  .strict();
 
 const PARTE_SCHEMA = z
   .object({
@@ -52,8 +101,8 @@ const MENSAGENS: Record<string, string> = {
   RESPONSAVEL_INVALIDO: 'O responsável deve possuir papel de Proprietário, Administrador ou Advogado.',
   CNJ_JA_VINCULADO_NO_CASO: 'Este número CNJ já está vinculado ao caso.',
   CASO_ARQUIVADO_SOMENTE_LEITURA: 'O caso está arquivado e é somente leitura. Reabra o caso para realizar alterações.',
-  CONFLITO: 'Os dados ou a versão do caso mudaram. Atualize a página e tente novamente.',
-  DADOS_INVALIDOS: 'Confira os dados informados do caso.',
+  CONFLITO: 'Os dados ou a versão do caso ou processo mudaram. Atualize a página e tente novamente.',
+  DADOS_INVALIDOS: 'Confira os dados informados do caso ou processo.',
 };
 
 export function registrarRotasCasos(
@@ -96,6 +145,7 @@ export function registrarRotasCasos(
       if (
         erro instanceof z.ZodError ||
         erro instanceof ErroCasoInvalido ||
+        erro instanceof ErroProcessoInvalido ||
         (erro as { statusCode?: number }).statusCode === 413 ||
         (erro as { name?: string }).name === 'ZodError'
       ) {
@@ -108,6 +158,8 @@ export function registrarRotasCasos(
     const extrairId = (req: FastifyRequest) => z.object({ id: z.string().uuid() }).strict().parse(req.params).id;
     const extrairIds = (req: FastifyRequest) =>
       z.object({ id: z.string().uuid(), idParte: z.string().uuid() }).strict().parse(req.params);
+    const extrairIdsProcesso = (req: FastifyRequest) =>
+      z.object({ id: z.string().uuid(), idProcesso: z.string().uuid() }).strict().parse(req.params);
 
     rotas.get('/api/v1/casos', async (requisicao) => {
       const filtro = z
@@ -243,6 +295,59 @@ export function registrarRotasCasos(
         .parse(requisicao.query);
 
       return casos.consultarLinhaDoTempo(token(requisicao), idCaso, query);
+    });
+
+    // ==========================================
+    // Slice 2: Processos e Movimentações
+    // ==========================================
+
+    rotas.post('/api/v1/casos/:id/processos', async (requisicao, resposta) => {
+      const idCaso = extrairId(requisicao);
+      const dados = PROCESSO_CADASTRO_SCHEMA.parse(requisicao.body);
+      const novoProcesso = await casos.cadastrarProcessoNoCaso(token(requisicao), idCaso, {
+        ...dados,
+        comarca: dados.comarca ?? null,
+        vara: dados.vara ?? null,
+      });
+      return resposta.status(201).send(novoProcesso);
+    });
+
+    rotas.patch('/api/v1/casos/:id/processos/:idProcesso', async (requisicao) => {
+      const { id, idProcesso } = extrairIdsProcesso(requisicao);
+      const dados = PROCESSO_EDICAO_SCHEMA.parse(requisicao.body);
+      return casos.editarProcessoDoCaso(token(requisicao), id, idProcesso, {
+        ...dados,
+        comarca: dados.comarca !== undefined ? dados.comarca ?? null : undefined,
+        vara: dados.vara !== undefined ? dados.vara ?? null : undefined,
+      });
+    });
+
+    rotas.get('/api/v1/casos/:id/processos/:idProcesso', async (requisicao) => {
+      const { id, idProcesso } = extrairIdsProcesso(requisicao);
+      return casos.consultarProcessoPorId(token(requisicao), id, idProcesso);
+    });
+
+    rotas.post('/api/v1/casos/:id/processos/:idProcesso/movimentacoes', async (requisicao, resposta) => {
+      const { id, idProcesso } = extrairIdsProcesso(requisicao);
+      const dados = MOVIMENTACAO_CADASTRO_SCHEMA.parse(requisicao.body);
+      const novaMovimentacao = await casos.registrarMovimentacaoManual(token(requisicao), id, idProcesso, {
+        ocorridaEm: new Date(dados.ocorridaEm),
+        descricao: dados.descricao,
+      });
+      return resposta.status(201).send(novaMovimentacao);
+    });
+
+    rotas.get('/api/v1/casos/:id/processos/:idProcesso/movimentacoes', async (requisicao) => {
+      const { id, idProcesso } = extrairIdsProcesso(requisicao);
+      const query = z
+        .object({
+          pagina: z.coerce.number().int().min(1).max(10000).default(1),
+          tamanhoPagina: z.coerce.number().int().min(1).max(50).default(20),
+        })
+        .strict()
+        .parse(requisicao.query);
+
+      return casos.listarMovimentacoesProcesso(token(requisicao), id, idProcesso, query);
     });
   });
 }

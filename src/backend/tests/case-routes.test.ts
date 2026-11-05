@@ -3,14 +3,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { criarAplicacao } from '../src/app.js';
 import { GestaoCasosProcessos } from '../src/application/cases/manage-cases.js';
 import { ErroCasoProcesso } from '../src/application/cases/case-policy.js';
+import { Processo } from '../src/domain/cases/legal-process.js';
 import type { TokensAcesso } from '../src/application/authentication/authentication-contracts.js';
 import type { ServicosRotasAutenticacao } from '../src/presentation/authentication-routes.js';
 import type {
   CasoDetalheDto,
   CasoResumoDto,
   EventoLinhaTempoCasoDto,
+  MovimentacaoProcessoDto,
   OperacoesCasosProcessos,
   ParteEnvolvidaDto,
+  ProcessoDetalheDto,
   RepositorioCasosProcessos,
 } from '../src/application/cases/case-contracts.js';
 
@@ -19,12 +22,53 @@ afterEach(async () => {
   await Promise.all(aplicacoes.splice(0).map((app) => app.close()));
 });
 
+function gerarCnj(seq: number): { formatado: string; digitos: string } {
+  const s = String(seq).padStart(7, '0');
+  const dd = Processo.calcularDigitoVerificador(s, '2024', '8', '26', '0100');
+  return {
+    formatado: `${s}-${dd}.2024.8.26.0100`,
+    digitos: `${s}${dd}20248260100`,
+  };
+}
+
 function prepararCenarioRotas(casoInicial?: Partial<CasoDetalheDto>) {
   const idCaso = randomUUID();
   const idCliente = randomUUID();
   const idParte = randomUUID();
+  const idProcesso = randomUUID();
   const idEscritorio = randomUUID();
   const idUsuario = randomUUID();
+
+  const cnjExistente = gerarCnj(1);
+
+  const processoMock: ProcessoDetalheDto = {
+    id: idProcesso,
+    idEscritorio,
+    idCaso,
+    numeroCnj: cnjExistente.digitos,
+    numeroCnjFormatado: cnjExistente.formatado,
+    relacaoComCaso: 'PRINCIPAL',
+    tribunal: 'TJSP',
+    comarca: 'São Paulo',
+    vara: '1ª Vara Cível',
+    instancia: 'PRIMEIRA_INSTANCIA',
+    faseProcessual: 'CONHECIMENTO',
+    versao: 0,
+    criadoEm: new Date(),
+    atualizadoEm: new Date(),
+  };
+
+  const movimentacaoMock: MovimentacaoProcessoDto = {
+    id: randomUUID(),
+    idEscritorio,
+    idCaso,
+    idProcesso,
+    idAutor: idUsuario,
+    nomeAutor: 'Dr. Autor',
+    ocorridaEm: new Date('2024-05-01T12:00:00Z'),
+    descricao: 'Publicação de despacho intimando as partes.',
+    criadoEm: new Date(),
+  };
 
   const parteMock: ParteEnvolvidaDto = {
     id: idParte,
@@ -133,6 +177,34 @@ function prepararCenarioRotas(casoInicial?: Partial<CasoDetalheDto>) {
         atualizarParte: vi.fn(async () => parteMock),
         removerParte: vi.fn(async () => undefined),
         listarLinhaDoTempoCaso: vi.fn(async () => [eventoLinhaTempo]),
+        buscarProcessoPorId: vi.fn(async (id: string) => (id === idProcesso ? processoMock : null)),
+        buscarProcessoPorCnjNoCaso: vi.fn(async (_idCaso: string, cnj: string) =>
+          cnj === processoMock.numeroCnj ? processoMock : null,
+        ),
+        cadastrarProcesso: vi.fn(async (proc) => ({
+          id: proc.id,
+          idEscritorio: proc.idEscritorio,
+          idCaso: proc.idCaso,
+          numeroCnj: proc.numeroCnj,
+          numeroCnjFormatado: proc.obterNumeroFormatado(),
+          relacaoComCaso: proc.relacaoComCaso,
+          tribunal: proc.tribunal,
+          comarca: proc.comarca,
+          vara: proc.vara,
+          instancia: proc.instancia,
+          faseProcessual: proc.faseProcessual,
+          versao: proc.versao,
+          criadoEm: proc.criadoEm,
+          atualizadoEm: proc.atualizadoEm,
+        })),
+        atualizarProcesso: vi.fn(async (_ant, atu) => ({
+          ...processoMock,
+          versao: atu.versao,
+          tribunal: atu.tribunal,
+          faseProcessual: atu.faseProcessual,
+        })),
+        registrarMovimentacao: vi.fn(async () => movimentacaoMock),
+        listarMovimentacoesProcesso: vi.fn(async () => ({ movimentacoes: [movimentacaoMock], total: 1 })),
       };
       return operacao(operacoes);
     }),
@@ -171,7 +243,7 @@ function prepararCenarioRotas(casoInicial?: Partial<CasoDetalheDto>) {
   );
   aplicacoes.push(app);
 
-  return { app, idCaso, idCliente, idParte, origem: 'http://localhost:5173' };
+  return { app, idCaso, idCliente, idParte, idProcesso, processoMock, movimentacaoMock, origem: 'http://localhost:5173' };
 }
 
 describe('Rotas de Casos e Processos (/api/v1/casos)', () => {
@@ -407,5 +479,142 @@ describe('Rotas de Casos e Processos (/api/v1/casos)', () => {
     const eventos = resposta.json();
     expect(eventos).toHaveLength(1);
     expect(eventos[0].acao).toBe('CASO_CRIADO');
+  });
+
+  it('cadastra processo vinculado com 201 (RF-038..RF-042)', async () => {
+    const { app, idCaso, origem } = prepararCenarioRotas();
+    const cnjNovo = gerarCnj(2);
+    const resposta = await app.inject({
+      method: 'POST',
+      url: `/api/v1/casos/${idCaso}/processos`,
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: origem,
+      },
+      payload: {
+        numeroCnj: cnjNovo.formatado,
+        relacaoComCaso: 'PRINCIPAL',
+        tribunal: 'TJSP',
+        comarca: 'São Paulo',
+        vara: '1ª Vara Cível',
+        instancia: 'PRIMEIRA_INSTANCIA',
+        faseProcessual: 'CONHECIMENTO',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(201);
+    const corpo = resposta.json();
+    expect(corpo.numeroCnj).toBe(cnjNovo.digitos);
+    expect(corpo.tribunal).toBe('TJSP');
+  });
+
+  it('rejeita cadastro de processo com CNJ inválido com 400 (RF-039)', async () => {
+    const { app, idCaso, origem } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'POST',
+      url: `/api/v1/casos/${idCaso}/processos`,
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: origem,
+      },
+      payload: {
+        numeroCnj: '00000000000000000000',
+        relacaoComCaso: 'PRINCIPAL',
+        tribunal: 'TJSP',
+        instancia: 'PRIMEIRA_INSTANCIA',
+        faseProcessual: 'CONHECIMENTO',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(400);
+    expect(resposta.json()).toMatchObject({ erro: 'DADOS_INVALIDOS' });
+  });
+
+  it('edita processo com 200 (RF-040..RF-042)', async () => {
+    const { app, idCaso, idProcesso, origem } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/casos/${idCaso}/processos/${idProcesso}`,
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: origem,
+      },
+      payload: {
+        tribunal: 'TJSP - 2ª Instância',
+        instancia: 'SEGUNDA_INSTANCIA',
+        faseProcessual: 'RECURSAL',
+        versao: 0,
+      },
+    });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json().faseProcessual).toBe('RECURSAL');
+  });
+
+  it('consulta processo por id com 200', async () => {
+    const { app, idCaso, idProcesso } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'GET',
+      url: `/api/v1/casos/${idCaso}/processos/${idProcesso}`,
+      headers: {
+        authorization: 'Bearer token-valido',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json().id).toBe(idProcesso);
+  });
+
+  it('registra movimentação manual com 201 (RF-043)', async () => {
+    const { app, idCaso, idProcesso, origem } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'POST',
+      url: `/api/v1/casos/${idCaso}/processos/${idProcesso}/movimentacoes`,
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: origem,
+      },
+      payload: {
+        ocorridaEm: '2024-05-01T12:00:00.000Z',
+        descricao: 'Juntada de petição com alegações finais.',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(201);
+    expect(resposta.json().descricao).toBe('Publicação de despacho intimando as partes.');
+  });
+
+  it('rejeita movimentação com descrição muito curta com 400', async () => {
+    const { app, idCaso, idProcesso, origem } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'POST',
+      url: `/api/v1/casos/${idCaso}/processos/${idProcesso}/movimentacoes`,
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: origem,
+      },
+      payload: {
+        ocorridaEm: '2024-05-01T12:00:00.000Z',
+        descricao: 'oi',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(400);
+  });
+
+  it('lista movimentações do processo com 200 (RF-043)', async () => {
+    const { app, idCaso, idProcesso } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'GET',
+      url: `/api/v1/casos/${idCaso}/processos/${idProcesso}/movimentacoes`,
+      headers: {
+        authorization: 'Bearer token-valido',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(200);
+    const corpo = resposta.json();
+    expect(corpo.movimentacoes).toHaveLength(1);
+    expect(corpo.total).toBe(1);
   });
 });
