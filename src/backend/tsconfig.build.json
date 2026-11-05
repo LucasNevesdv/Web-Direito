@@ -4,5 +4,5 @@
     "rootDir": "src",
     "noEmit": false
   },
-  "exclude": ["tests"]
+  "exclude": ["tests", "scripts"]
 }

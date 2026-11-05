@@ -949,7 +949,7 @@ export function PaginaCasos() {
             }}
             className={filtroRapido === 'SEM_RESPONSAVEL' ? BOTAO : BOTAO_SECUNDARIO}
           >
-            Sem responsável (RF-047)
+            Sem responsável
           </button>
           <button
             type="button"
@@ -959,7 +959,7 @@ export function PaginaCasos() {
             }}
             className={filtroRapido === 'SEM_ATIVIDADE' ? BOTAO : BOTAO_SECUNDARIO}
           >
-            Sem atividade recente (30 dias) (RF-048)
+            Sem atividade recente (30 dias)
           </button>
           <button
             type="button"
@@ -969,7 +969,7 @@ export function PaginaCasos() {
             }}
             className={filtroRapido === 'ARQUIVADOS' ? BOTAO : BOTAO_SECUNDARIO}
           >
-            Arquivados (RF-046)
+            Arquivados
           </button>
         </div>
 
@@ -1233,7 +1233,7 @@ export function PaginaCasos() {
                           onClick={executarArquivar}
                           className="rounded-lg border border-amber-600 bg-amber-950/40 px-3 py-1 text-amber-300 hover:bg-amber-900/60 transition disabled:opacity-50"
                         >
-                          {processandoAcao ? 'Arquivando...' : 'Arquivar caso (RF-046)'}
+                          {processandoAcao ? 'Arquivando...' : 'Arquivar caso'}
                         </button>
                       ) : (
                         <button
@@ -1242,7 +1242,7 @@ export function PaginaCasos() {
                           onClick={executarReabrir}
                           className="rounded-lg border border-emerald-600 bg-emerald-950/40 px-3 py-1 text-emerald-300 hover:bg-emerald-900/60 transition disabled:opacity-50"
                         >
-                          {processandoAcao ? 'Reabrindo...' : 'Reabrir caso (RF-046)'}
+                          {processandoAcao ? 'Reabrindo...' : 'Reabrir caso'}
                         </button>
                       )}
                     </div>
@@ -1255,7 +1255,7 @@ export function PaginaCasos() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-slate-400">
-                      Processos judiciais ou administrativos vinculados ao caso (1:N — RF-038..RF-042).
+                      Processos judiciais ou administrativos vinculados ao caso.
                     </p>
                     {casoSelecionado.situacao !== 'ARQUIVADO' && (
                       <button
@@ -1586,7 +1586,7 @@ export function PaginaCasos() {
 
                   <div>
                     <label htmlFor="caso-responsavel" className="block text-sm font-semibold text-slate-300 mb-1">
-                      Advogado Responsável (RF-047)
+                      Advogado Responsável
                     </label>
                     <select
                       id="caso-responsavel"

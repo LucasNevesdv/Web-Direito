@@ -7,7 +7,8 @@
     "build": "pnpm --filter ./backend --filter ./frontend run build",
     "lint": "pnpm --filter ./backend --filter ./frontend run lint",
     "typecheck": "pnpm --filter ./backend --filter ./frontend run typecheck",
-    "test": "pnpm --filter ./backend --filter ./frontend run test"
+    "test": "pnpm --filter ./backend --filter ./frontend run test",
+    "seed:dev": "pnpm --filter ./backend run seed:dev"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.0.0",

@@ -99,7 +99,7 @@ describe('PaginaCasos (Frontend)', () => {
 
     expect(await screen.findByText('Ação de Cobrança Extrajudicial')).toBeTruthy();
     expect(screen.getByText('Carlos Eduardo Santos')).toBeTruthy();
-    expect(screen.getByText('Sem responsável')).toBeTruthy();
+    expect(screen.getAllByText('Sem responsável')[0]).toBeTruthy();
     expect(screen.getByText('R$ 15.000,00')).toBeTruthy();
     expect(screen.getByText('Ativo')).toBeTruthy();
   });

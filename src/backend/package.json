@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "prisma:generate": "prisma generate",
+    "seed:dev": "tsx scripts/seed-mock-data.ts",
     "verify:office-repository": "tsx tests/integration/prisma-offices-repository.check.ts",
     "verify:onboarding": "tsx tests/integration/onboarding.check.ts",
     "configure:auth": "node scripts/configure-auth.mjs",
