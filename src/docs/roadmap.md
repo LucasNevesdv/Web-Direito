@@ -224,7 +224,7 @@ sua aplicação.
 
 | Ordem | Etapa e requisitos | Critérios para concluir |
 | --- | --- | --- |
-| 1 | Escritórios e usuários — **Cadastro, equipe e seleção de contexto concluídos; manutenção de escritórios pendente** | Concluir decisões restantes de P-001 e implementar manutenção de escritórios. Gestão administrativa de membros está entregue em RF-009/RF-010/RF-011 e seleção/troca em RF-013. Preservar unicidade, histórico aplicável e consistência dos vínculos; o cadastro inicial atômico já está entregue. |
+| 1 | Escritórios e usuários — **Cadastro, equipe e seleção de contexto concluídos; renomear e exportar o escritório implementados; inativação e transferência de propriedade pendentes** | Concluir decisões restantes de P-001 e implementar inativação do escritório e transferência de propriedade. Gestão administrativa de membros está entregue em RF-009/RF-010/RF-011 e seleção/troca em RF-013. Preservar unicidade, histórico aplicável e consistência dos vínculos; o cadastro inicial atômico já está entregue. |
 | 2 | Autenticação e autorização — Autenticação, senhas e permissões da equipe concluídas; demais módulos pendentes | Preservar login, `/me`, rotação, coordenação entre abas e logout; definir P-002/P-003 e implementar verificação de e-mail, dois fatores e permissões dos demais módulos. RF-007/RF-008 entregam recuperação e alteração de senha. Testar operações autorizadas e isolamento antes de liberar os demais módulos. Evoluir proteção contra abuso além dos limites compartilhados atuais. |
 | 3 | Clientes — RF-015 | Definir P-004 e a política aplicável de P-008; validar cadastro, consulta, edição e inativação sem perda de histórico ou vínculos, respeitando permissões. |
 | 4 | Casos e processos — RF-016, RF-017 | Definir P-005; validar cadastro e atualização manual, estados e vínculos aprovados com clientes; comprovar consistência e isolamento. Captura automática permanece fora desta etapa. |
@@ -232,7 +232,7 @@ sua aplicação.
 | 6 | Documentos e anotações — RF-020 implementado, RF-021 pendente | Documentos entregues conforme RN-069 a RN-072. Pendentes: anotações, verificação contra bucket S3 real, retenção e exclusão definitiva (P-008). |
 | 7 | Agenda — RF-022 | Resolver as definições de agenda em P-006; validar compromissos e apresentação coerente de tarefas e prazos, com datas e permissões corretas. |
 | 8 | Dashboard — RF-023 — prazos críticos e contagem das próprias tarefas entregues em `/painel` | Definir P-009; conferir resumos e contagens contra os dados de origem e testar que filtros e agregações não revelam dados sem autorização. |
-| 9 | Auditoria, segurança e aceitação do MVP — RF-024 e RNF-001 a RNF-010 | Concluir P-008 e a revisão dos controles transversais; validar rastreabilidade após alterações e exclusões, acesso à auditoria, sanitização e isolamento; definir e verificar metas operacionais e restauração de dados e documentos antes da liberação. |
+| 9 | Auditoria, segurança e aceitação do MVP — RF-024 e RNF-001 a RNF-010 — **trilha unificada implementada para os módulos existentes** | Ligar clientes, casos, processos e agenda à trilha quando existirem. Concluir P-008 e a revisão dos controles transversais; validar rastreabilidade após alterações e exclusões, acesso à auditoria, sanitização e isolamento; definir e verificar metas operacionais e restauração de dados e documentos antes da liberação. |
 
 ## Critérios comuns de entrega
 
@@ -432,3 +432,74 @@ Caminhos relativos à raiz Git; nenhum arquivo removido.
 | Criado | `src/backend/tests/team.test.ts` |
 | Criado | `src/frontend/src/team-page.test.tsx` |
 | Criado | `src/frontend/src/team-page.tsx` |
+
+## Auditoria e administração — RF-024 (RF-098 a RF-117 da Entrega 3)
+
+**Implementados no escopo essencial definido na Entrega 3:** RF-098 a RF-101,
+RF-103 a RF-106, RF-108, RF-110, RF-113 e RF-115. RF-102 e RF-117 também estão
+entregues pela consulta filtrada. RF-107 é parcial: a trilha acompanha a
+exportação geral, sem exportação filtrada própria. RF-109, RF-111, RF-112,
+RF-114 e RF-116 permanecem pendentes.
+
+A tabela `audit_logs` é alimentada por triggers `AFTER INSERT` sobre
+`task_history`, `judicial_deadline_history`, `document_events` e
+`membership_history`, na mesma transação da operação, e por triggers de início e
+encerramento em `sessions`. A trilha é append-only e não possui chaves
+estrangeiras, para sobreviver à remoção das entidades descritas. Falhas de login
+são gravadas pela aplicação, uma linha por escritório ativo do usuário, ou sem
+escritório quando o e-mail não existe; e-mail e senha digitados nunca são
+gravados. A migration `20261104192050_create_audit_logs` copia os históricos
+existentes para a trilha.
+
+Para ligar um módulo novo, basta que ele grave um histórico com `actor_id`,
+`action`, `previous`, `current` e `created_at` e registre o trigger:
+`CREATE TRIGGER ... AFTER INSERT ON <historico> FOR EACH ROW EXECUTE FUNCTION
+audit_from_history('<TIPO>', '<tabela com office_id>', '<coluna de referência>')`.
+
+A área `/administracao` (proprietário e administrador) consulta a trilha com
+filtros por tipo e período e paginação, e renomeia o escritório. A exportação em
+JSON é exclusiva do proprietário e exclui hashes, tokens, chaves de armazenamento
+e os arquivos dos documentos. RF-110 e RF-115 já eram cobertos pela gestão de
+equipe; um teste confirma que o proprietário não pode ser rebaixado nem inativado.
+
+Verificação reproduzível: `pnpm --filter ./backend verify:audit-admin` em banco
+descartável (`VERIFICACAO_BANCO_DESCARTAVEL=true`). Cobre auditoria de tarefas,
+documentos, permissões, login, falha de login e logout; rollback sem registro;
+imutabilidade; filtros, paginação e isolamento entre escritórios; renomear;
+exportação sem segredos nem dados de outro escritório; e a limpeza usada pelas
+verificações de equipe e sessões. Em 04/11/2026: 541 testes no backend e 119 no
+frontend, lint, typecheck, build, `verify:audit-admin` e `verify:tasks-documents`
+aprovados. No navegador, com PostgreSQL real: cadastro, falha de login, login,
+histórico, filtro, renomeação refletida no menu e tarefa criada em `/tarefas`
+aparecendo na trilha. `verify:team` e `verify:sessions` não foram executados.
+
+## Arquivos da entrega de auditoria e administração
+
+Caminhos relativos à raiz Git; nenhum arquivo removido.
+
+| Estado | Caminho |
+| --- | --- |
+| Alterado | `src/backend/package.json` |
+| Alterado | `src/backend/prisma/schema.prisma` |
+| Alterado | `src/backend/src/app.ts` |
+| Alterado | `src/backend/src/application/authentication/authenticate-user.ts` |
+| Alterado | `src/backend/src/application/authentication/authentication-contracts.ts` |
+| Alterado | `src/backend/src/authentication.ts` |
+| Alterado | `src/backend/src/server.ts` |
+| Alterado | `src/backend/tests/server.test.ts` |
+| Alterado | `src/backend/tests/tenant-boundaries.test.ts` |
+| Alterado | `src/docs/requirements.md` |
+| Alterado | `src/docs/roadmap.md` |
+| Alterado | `src/frontend/src/app.tsx` |
+| Alterado | `src/frontend/src/shared/testing.tsx` |
+| Alterado | `src/frontend/src/shared/ui.tsx` |
+| Criado | `src/backend/prisma/migrations/20261104192050_create_audit_logs/migration.sql` |
+| Criado | `src/backend/src/application/administration/administration-contracts.ts` |
+| Criado | `src/backend/src/application/administration/manage-administration.ts` |
+| Criado | `src/backend/src/infrastructure/prisma/prisma-administration-repository.ts` |
+| Criado | `src/backend/src/infrastructure/prisma/prisma-login-audit.ts` |
+| Criado | `src/backend/src/presentation/administration-routes.ts` |
+| Criado | `src/backend/tests/administration.test.ts` |
+| Criado | `src/backend/tests/integration/audit-admin.check.ts` |
+| Criado | `src/frontend/src/features/admin/admin-page.test.tsx` |
+| Criado | `src/frontend/src/features/admin/admin-page.tsx` |

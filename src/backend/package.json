@@ -20,7 +20,8 @@
     "verify:sessions": "node tests/integration/session-management.check.mjs",
     "verify:tasks-documents": "tsx tests/integration/tasks-documents.check.ts",
     "verify:clients": "tsx tests/integration/clients-management.check.ts",
-    "verify:cases-processes": "tsx tests/integration/cases-processes.check.ts"
+    "verify:cases-processes": "tsx tests/integration/cases-processes.check.ts",
+    "verify:audit-admin": "tsx tests/integration/audit-admin.check.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3",

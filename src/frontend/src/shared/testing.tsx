@@ -8,14 +8,14 @@ export const IDENTIDADE_TESTE = { usuario: { id: 'usuario-1', nome: 'Maria', ema
 export const respostaJson = (corpo: unknown, status = 200) => new Response(status === 204 ? null : JSON.stringify(corpo), { status });
 
 // Cliente real autenticado sobre fetch simulado; cada teste define as respostas da API.
-export async function criarClienteAutenticado(rotas: (url: string, opcoes?: RequestInit) => Response | Promise<Response>) {
+export async function criarClienteAutenticado(rotas: (url: string, opcoes?: RequestInit) => Response | Promise<Response>, identidade: typeof IDENTIDADE_TESTE = IDENTIDADE_TESTE) {
   const requisicao = vi.fn<typeof fetch>();
   vi.stubGlobal('fetch', requisicao);
   const cliente = new ClienteAutenticacao(requisicao);
   requisicao.mockResolvedValueOnce(respostaJson({}, 401)); await cliente.restaurarSessao();
-  requisicao.mockResolvedValueOnce(respostaJson({ tokenAcesso: 'token-teste', expiraEmSegundos: 900 })).mockResolvedValueOnce(respostaJson(IDENTIDADE_TESTE));
+  requisicao.mockResolvedValueOnce(respostaJson({ tokenAcesso: 'token-teste', expiraEmSegundos: 900 })).mockResolvedValueOnce(respostaJson(identidade));
   await cliente.autenticarUsuario('maria@example.test', 'senha de teste');
-  requisicao.mockReset().mockImplementation(async (url, opcoes) => String(url).endsWith('/me') ? respostaJson(IDENTIDADE_TESTE) : rotas(String(url), opcoes));
+  requisicao.mockReset().mockImplementation(async (url, opcoes) => String(url).endsWith('/me') ? respostaJson(identidade) : rotas(String(url), opcoes));
   return { cliente, requisicao };
 }
 

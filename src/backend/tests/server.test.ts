@@ -139,6 +139,7 @@ describe("inicialização do backend", () => {
       SIMULACOES.trabalho,
       expect.objectContaining({ cadastrarCliente: expect.any(Function), definirSituacaoCliente: expect.any(Function) }),
       expect.objectContaining({ cadastrarCaso: expect.any(Function) }),
+      expect.objectContaining({ listarAuditoria: expect.any(Function), exportarDados: expect.any(Function) }),
     );
     expect(SIMULACOES.trabalho.processamento.iniciar).toHaveBeenCalledOnce();
     expect(SIMULACOES.aplicacao.listen).toHaveBeenCalledWith({
