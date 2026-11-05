@@ -38,17 +38,39 @@ export class ErroCliente extends Error {
 }
 
 export class PoliticaClientes {
+  static permissoesPadrao(papel: PapelVinculoEscritorio): PermissaoCliente[] {
+    if (papel === 'PROPRIETARIO' || papel === 'ADMINISTRADOR' || papel === 'ADVOGADO') {
+      return [...PERMISSOES_CLIENTE];
+    }
+    if (papel === 'ESTAGIARIO') {
+      return [
+        'CLIENTE_VISUALIZAR',
+        'CLIENTE_VISUALIZAR_OBSERVACOES',
+        'CLIENTE_CADASTRAR',
+        'CLIENTE_EDITAR',
+      ];
+    }
+    return [];
+  }
+
+  static permissoesEfetivas(autor: AutorCliente): string[] {
+    const padrao = this.permissoesPadrao(autor.papel);
+    return Array.from(new Set([...padrao, ...autor.permissoes]));
+  }
+
   static exigir(autor: AutorCliente, permissao: PermissaoCliente): void {
     if (autor.papel === 'PROPRIETARIO') {
       return;
     }
-    if (!autor.permissoes.includes(permissao)) {
+    const permitidas = this.permissoesEfetivas(autor);
+    if (!permitidas.includes(permissao)) {
       throw new ErroCliente('PROIBIDO', 403);
     }
   }
 
   static podeVisualizarObservacoes(autor: AutorCliente): boolean {
-    return autor.papel === 'PROPRIETARIO' || autor.permissoes.includes('CLIENTE_VISUALIZAR_OBSERVACOES');
+    if (autor.papel === 'PROPRIETARIO') return true;
+    return this.permissoesEfetivas(autor).includes('CLIENTE_VISUALIZAR_OBSERVACOES');
   }
 
   static validarPapelResponsavel(papel: PapelVinculoEscritorio): void {

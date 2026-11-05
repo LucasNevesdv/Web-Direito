@@ -186,6 +186,7 @@ export interface EventoLinhaTempoCaso {
 
 interface MembroEquipeOpcao {
   id: string;
+  idUsuario?: string;
   nome: string;
   papel: string;
   estaAtivo: boolean;
@@ -249,12 +250,12 @@ export function converterCentavosParaReais(centavos: number | null): string {
 }
 
 export function PaginaCasos() {
-  const { cliente } = useAutenticacao();
+  const { cliente, identidade } = useAutenticacao();
   const [casos, setCasos] = useState<CasoItem[]>([]);
   const [total, setTotal] = useState(0);
   const [pagina, setPagina] = useState(1);
   const [pesquisa, setPesquisa] = useState('');
-  const [filtroRapido, setFiltroRapido] = useState<'ATIVOS' | 'SEM_RESPONSAVEL' | 'SEM_ATIVIDADE' | 'ARQUIVADOS'>('ATIVOS');
+  const [filtroRapido, setFiltroRapido] = useState<'ATIVOS' | 'MEUS_CASOS' | 'SEM_RESPONSAVEL' | 'SEM_ATIVIDADE' | 'ARQUIVADOS'>('ATIVOS');
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -343,6 +344,14 @@ export function PaginaCasos() {
 
       if (filtroRapido === 'ATIVOS') {
         params.set('situacao', 'ATIVO');
+      } else if (filtroRapido === 'MEUS_CASOS') {
+        params.set('situacao', 'ATIVO');
+        const meuVinculo = equipeDisponivel.find(
+          (m) => (m.idUsuario && m.idUsuario === identidade?.usuario.id) || m.nome === identidade?.usuario.nome,
+        );
+        if (meuVinculo) {
+          params.set('idVinculoResponsavel', meuVinculo.id);
+        }
       } else if (filtroRapido === 'SEM_RESPONSAVEL') {
         params.set('semResponsavel', 'true');
       } else if (filtroRapido === 'SEM_ATIVIDADE') {
@@ -379,13 +388,16 @@ export function PaginaCasos() {
           cliente,
           '/api/v1/clientes?tamanhoPagina=50&situacao=ATIVO',
         ).catch(() => null),
-        requisitarApi<{ membros: MembroEquipeOpcao[] }>(cliente, '/api/v1/equipe').catch(() => null),
+        requisitarApi<{ usuarios: MembroEquipeOpcao[] }>(
+          cliente,
+          '/api/v1/equipe/usuarios?tamanhoPagina=50',
+        ).catch(() => null),
       ]);
       if (resClientes && resClientes.ok) {
         setClientesDisponiveis(resClientes.dados.clientes ?? []);
       }
       if (resEquipe && resEquipe.ok) {
-        setEquipeDisponivel(resEquipe.dados.membros ?? []);
+        setEquipeDisponivel(resEquipe.dados.usuarios ?? []);
       }
     } catch {
       // Ignora erro de pré-carregamento
@@ -419,6 +431,7 @@ export function PaginaCasos() {
   }
 
   function abrirModalNovoCaso() {
+    void carregarOpcoesFormulario();
     setCasoEmEdicao(null);
     setFormTitulo('');
     setFormDescricao('');
@@ -435,6 +448,7 @@ export function PaginaCasos() {
   }
 
   function abrirModalEditarCaso(caso: CasoDetalhe) {
+    void carregarOpcoesFormulario();
     setCasoEmEdicao(caso);
     setFormTitulo(caso.titulo);
     setFormDescricao(caso.descricao ?? '');
@@ -916,6 +930,16 @@ export function PaginaCasos() {
             className={filtroRapido === 'ATIVOS' ? BOTAO : BOTAO_SECUNDARIO}
           >
             Todos os casos ativos
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setFiltroRapido('MEUS_CASOS');
+              setPagina(1);
+            }}
+            className={filtroRapido === 'MEUS_CASOS' ? BOTAO : BOTAO_SECUNDARIO}
+          >
+            Sob minha responsabilidade
           </button>
           <button
             type="button"

@@ -40,11 +40,32 @@ export class ErroCasoProcesso extends Error {
 }
 
 export class PoliticaCasosProcessos {
+  static permissoesPadrao(papel: PapelVinculoEscritorio): PermissaoCaso[] {
+    if (papel === 'PROPRIETARIO' || papel === 'ADMINISTRADOR' || papel === 'ADVOGADO') {
+      return [...PERMISSOES_CASO];
+    }
+    if (papel === 'ESTAGIARIO') {
+      return [
+        'CASO_VISUALIZAR',
+        'CASO_CADASTRAR',
+        'CASO_EDITAR',
+        'CASO_REGISTRAR_MOVIMENTACAO',
+      ];
+    }
+    return [];
+  }
+
+  static permissoesEfetivas(autor: AutorCaso): string[] {
+    const padrao = this.permissoesPadrao(autor.papel);
+    return Array.from(new Set([...padrao, ...autor.permissoes]));
+  }
+
   static exigir(autor: AutorCaso, permissao: PermissaoCaso): void {
     if (autor.papel === 'PROPRIETARIO') {
       return;
     }
-    if (!autor.permissoes.includes(permissao)) {
+    const permitidas = this.permissoesEfetivas(autor);
+    if (!permitidas.includes(permissao)) {
       throw new ErroCasoProcesso('PROIBIDO', 403);
     }
   }

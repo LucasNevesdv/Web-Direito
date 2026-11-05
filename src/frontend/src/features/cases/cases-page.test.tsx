@@ -89,8 +89,8 @@ describe('PaginaCasos (Frontend)', () => {
       if (url.startsWith('/api/v1/clientes?')) {
         return respostaJson({ clientes: [] });
       }
-      if (url === '/api/v1/equipe') {
-        return respostaJson({ membros: [] });
+      if (url.startsWith('/api/v1/equipe/usuarios')) {
+        return respostaJson({ usuarios: [] });
       }
       return respostaJson({}, 404);
     });
@@ -175,9 +175,9 @@ describe('PaginaCasos (Frontend)', () => {
           clientes: [{ id: 'cliente-1', nome: 'Carlos Eduardo Santos', documento: '11144477735' }],
         });
       }
-      if (url === '/api/v1/equipe') {
+      if (url.startsWith('/api/v1/equipe/usuarios')) {
         return respostaJson({
-          membros: [
+          usuarios: [
             { id: 'vinculo-1', nome: 'Dra. Alice Advogada', papel: 'ADVOGADO', estaAtivo: true },
           ],
         });
