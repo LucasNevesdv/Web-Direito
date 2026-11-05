@@ -12,6 +12,8 @@ import { ProtecaoDeSenhasArgon2 } from './infrastructure/security/argon2-passwor
 import { criarEncerramento } from './shutdown.js';
 import { comporLimitacaoDeRequisicoes } from './rate-limiting.js';
 import { comporServicosDeTrabalho } from './infrastructure/work-services.js';
+import { GestaoAdministracao } from './application/administration/manage-administration.js';
+import { RepositorioAdministracaoPrisma } from './infrastructure/prisma/prisma-administration-repository.js';
 
 let prisma: ReturnType<typeof criarClientePrisma> | undefined;
 let aplicacao: ReturnType<typeof criarAplicacao> | undefined;
@@ -50,7 +52,8 @@ try {
   const equipe = new GestaoEquipe(new RepositorioEquipePrisma(prisma), new TokensAcessoJose(ambiente.AUTH_JWT_SECRET, ambiente.AUTH_JWT_ISSUER, ambiente.AUTH_JWT_AUDIENCE, ambiente.AUTH_ACCESS_TTL_SECONDS), protecaoDeSenhas);
   const trabalho = comporServicosDeTrabalho(prisma, ambiente);
   processamentoLembretes = trabalho.processamento;
-  aplicacao = criarAplicacao(criarVerificadorSaudePrisma(prisma), cadastro, autenticacao, { limitador: limitacaoRequisicoes.limitador, proxiesConfiaveis: ambiente.TRUST_PROXY }, senhas.servicos, equipe, trabalho);
+  const administracao = new GestaoAdministracao(new RepositorioAdministracaoPrisma(prisma), new TokensAcessoJose(ambiente.AUTH_JWT_SECRET, ambiente.AUTH_JWT_ISSUER, ambiente.AUTH_JWT_AUDIENCE, ambiente.AUTH_ACCESS_TTL_SECONDS));
+  aplicacao = criarAplicacao(criarVerificadorSaudePrisma(prisma), cadastro, autenticacao, { limitador: limitacaoRequisicoes.limitador, proxiesConfiaveis: ambiente.TRUST_PROXY }, senhas.servicos, equipe, trabalho, administracao);
   await aplicacao.listen({
     host: ambiente.HOST,
     port: ambiente.PORT,

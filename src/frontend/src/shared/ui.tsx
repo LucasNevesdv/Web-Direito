@@ -6,12 +6,15 @@ export const BOTAO = 'rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-
 export const BOTAO_SECUNDARIO = 'rounded-lg border border-slate-500 px-3 py-1 disabled:opacity-50';
 export const CARTAO = 'rounded-xl border border-slate-700 bg-slate-900 p-5';
 
-const LINKS = [['/painel', 'Painel'], ['/tarefas', 'Tarefas'], ['/prazos', 'Prazos judiciais'], ['/documentos', 'Documentos'], ['/equipe', 'Equipe'], ['/app', 'Conta']] as const;
+const LINKS = [['/painel', 'Painel'], ['/tarefas', 'Tarefas'], ['/prazos', 'Prazos judiciais'], ['/documentos', 'Documentos'], ['/equipe', 'Equipe'],
+  ['/administracao', 'Administração'], ['/app', 'Conta']] as const;
 
 export function NavegacaoPrincipal({ atual }: { atual: string }) {
   const { cliente, identidade } = useAutenticacao();
+  const administra = identidade?.escritorio.papel === 'PROPRIETARIO' || identidade?.escritorio.papel === 'ADMINISTRADOR';
+  const links = LINKS.filter(([caminho]) => caminho !== '/administracao' || administra);
   return <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
-    <nav aria-label="Principal" className="flex flex-wrap gap-4">{LINKS.map(([caminho, rotulo]) =>
+    <nav aria-label="Principal" className="flex flex-wrap gap-4">{links.map(([caminho, rotulo]) =>
       <a key={caminho} href={caminho} aria-current={caminho === atual ? 'page' : undefined}
         className={caminho === atual ? 'font-semibold text-cyan-300' : 'text-slate-300 underline-offset-4 hover:underline'}>{rotulo}</a>)}</nav>
     <div className="flex items-center gap-4 text-sm text-slate-300"><span>{identidade?.escritorio.nome}</span>
