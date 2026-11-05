@@ -18,7 +18,9 @@
     "verify:password-security": "node tests/integration/password-security.check.mjs",
     "verify:team": "node tests/integration/team-management.check.mjs",
     "verify:sessions": "node tests/integration/session-management.check.mjs",
-    "verify:tasks-documents": "tsx tests/integration/tasks-documents.check.ts"
+    "verify:tasks-documents": "tsx tests/integration/tasks-documents.check.ts",
+    "verify:clients": "tsx tests/integration/clients-management.check.ts",
+    "verify:cases-processes": "tsx tests/integration/cases-processes.check.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3",
