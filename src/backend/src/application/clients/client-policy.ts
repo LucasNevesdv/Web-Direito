@@ -45,7 +45,6 @@ export class PoliticaClientes {
     if (papel === 'ESTAGIARIO') {
       return [
         'CLIENTE_VISUALIZAR',
-        'CLIENTE_VISUALIZAR_OBSERVACOES',
         'CLIENTE_CADASTRAR',
         'CLIENTE_EDITAR',
       ];

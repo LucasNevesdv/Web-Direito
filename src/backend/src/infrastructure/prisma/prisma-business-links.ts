@@ -6,7 +6,6 @@ export type ResolvedorVinculo = {
   pesquisar(transacao: Prisma.TransactionClient, idEscritorio: string, pesquisa: string, limite: number): Promise<Array<{ id: string; rotulo: string }>>;
 };
 
-const SEM_REGISTROS: ResolvedorVinculo = { existe: async () => false, pesquisar: async () => [] };
 
 export const RESOLVEDORES_VINCULO: Record<TipoVinculo, ResolvedorVinculo> = {
   CLIENTE: {
@@ -79,7 +78,32 @@ export const RESOLVEDORES_VINCULO: Record<TipoVinculo, ResolvedorVinculo> = {
       }));
     },
   },
-  PROCESSO: SEM_REGISTROS,
+  PROCESSO: {
+    existe: async (transacao, idEscritorio, id) => {
+      const processo = await transacao.legalProcess.findFirst({
+        where: { id, officeId: idEscritorio },
+        select: { id: true },
+      });
+      return Boolean(processo);
+    },
+    pesquisar: async (transacao, idEscritorio, pesquisa, limite) => {
+      const digitos = pesquisa.replace(/\D/g, '');
+      const processos = await transacao.legalProcess.findMany({
+        where: {
+          officeId: idEscritorio,
+          ...(digitos.length > 0 ? { cnjNumber: { contains: digitos } } : {}),
+        },
+        select: { id: true, cnjNumber: true, legalCase: { select: { title: true } } },
+        take: Math.min(Math.max(limite, 1), 50),
+        orderBy: { cnjNumber: 'asc' },
+      });
+
+      return processos.map((p) => ({
+        id: p.id,
+        rotulo: `${p.cnjNumber.replace(/^(\d{7})(\d{2})(\d{4})(\d)(\d{2})(\d{4})$/, '$1-$2.$3.$4.$5.$6')} — ${p.legalCase.title}`,
+      }));
+    },
+  },
 };
 
 export function criarCatalogoVinculos(transacao: Prisma.TransactionClient, idEscritorio: string,

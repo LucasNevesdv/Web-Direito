@@ -272,7 +272,7 @@ try {
 
   const timelineCliente = await clientes.consultarLinhaDoTempo(token(escritorioA.dono.contexto), cliente1A.id);
   const acoesTimeline = timelineCliente.map((e) => e.acao);
-  assert.ok(acoesTimeline.includes('CLIENTE_CADASTRADO'));
+  assert.ok(acoesTimeline.includes('CLIENTE_CRIADO'));
   assert.ok(acoesTimeline.includes('CLIENTE_INATIVADO'));
   assert.ok(acoesTimeline.includes('CLIENTE_REATIVADO'));
 
