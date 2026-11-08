@@ -102,4 +102,45 @@ describe('fronteiras multiempresa de tarefas, prazos e documentos', () => {
     // Sem permissão para confidenciais, a listagem restringe aos públicos ou criados pela pessoa.
     expect(JSON.stringify(listagem.argumentos.where)).toContain(`{"OR":[{"confidential":false},{"creatorId":"${idUsuario}"}]}`);
   });
+
+  it('valida vínculos com clientes garantindo isolamento entre escritórios (RF-029, RF-030, RN-001..RN-004)', async () => {
+    const idClienteLocal = randomUUID();
+    const clienteLocal = {
+      id: idClienteLocal,
+      officeId: idEscritorio,
+      name: 'Cliente Local',
+      socialName: 'Nome Fantasia',
+      documentNumber: '11144477735',
+      status: 'ACTIVE',
+    };
+
+    const { prisma } = transacaoInstrumentada({
+      client: clienteLocal,
+      task: TAREFA,
+      judicialDeadline: PRAZO,
+      document: DOCUMENTO,
+      membership: { user: pessoa },
+    });
+
+    const repoTarefas = new RepositorioTarefasPrisma(prisma);
+    await repoTarefas.executar(contexto, async (operacoes) => {
+      // Cliente do mesmo escritório existe
+      expect(await operacoes.vinculos.existe({ tipo: 'CLIENTE', id: idClienteLocal })).toBe(true);
+
+      // Cliente de outro escritório não existe para este escritório
+      expect(await operacoes.vinculos.existe({ tipo: 'CLIENTE', id: idAlheio })).toBe(false);
+
+      // Pesquisa busca clientes do escritório
+      const resultado = await operacoes.vinculos.pesquisar('CLIENTE', 'Local', 10);
+      expect(resultado).toHaveLength(1);
+      expect(resultado[0]!.id).toBe(idClienteLocal);
+      expect(resultado[0]!.rotulo).toBe('Cliente Local (Nome Fantasia)');
+    });
+
+    const repoDocumentos = new RepositorioDocumentosPrisma(prisma);
+    await repoDocumentos.executar(contexto, async (operacoes) => {
+      expect(await operacoes.vinculos.existe({ tipo: 'CLIENTE', id: idClienteLocal })).toBe(true);
+      expect(await operacoes.vinculos.existe({ tipo: 'CLIENTE', id: idAlheio })).toBe(false);
+    });
+  });
 });

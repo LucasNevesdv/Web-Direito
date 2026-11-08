@@ -129,7 +129,18 @@ describe("inicialização do backend", () => {
       SIMULACOES.repositorio, SIMULACOES.protecaoDeSenhas,
     );
     expect(SIMULACOES.comporServicosDeAutenticacao).toHaveBeenCalledWith(SIMULACOES.prisma, SIMULACOES.ambiente, SIMULACOES.protecaoDeSenhas);
-    expect(SIMULACOES.criarAplicacao).toHaveBeenCalledWith(SIMULACOES.verificador, SIMULACOES.cadastro, SIMULACOES.autenticacao, { limitador: SIMULACOES.limitador, proxiesConfiaveis: undefined }, {}, expect.objectContaining({ cadastrar: expect.any(Function), definirSituacao: expect.any(Function) }), SIMULACOES.trabalho, expect.objectContaining({ listarAuditoria: expect.any(Function), exportarDados: expect.any(Function) }));
+    expect(SIMULACOES.criarAplicacao).toHaveBeenCalledWith(
+      SIMULACOES.verificador,
+      SIMULACOES.cadastro,
+      SIMULACOES.autenticacao,
+      { limitador: SIMULACOES.limitador, proxiesConfiaveis: undefined },
+      {},
+      expect.objectContaining({ cadastrar: expect.any(Function), definirSituacao: expect.any(Function) }),
+      SIMULACOES.trabalho,
+      expect.objectContaining({ cadastrarCliente: expect.any(Function), definirSituacaoCliente: expect.any(Function) }),
+      expect.objectContaining({ cadastrarCaso: expect.any(Function) }),
+      expect.objectContaining({ listarAuditoria: expect.any(Function), exportarDados: expect.any(Function) }),
+    );
     expect(SIMULACOES.trabalho.processamento.iniciar).toHaveBeenCalledOnce();
     expect(SIMULACOES.aplicacao.listen).toHaveBeenCalledWith({
       host: SIMULACOES.ambiente.HOST,

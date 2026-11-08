@@ -1,0 +1,569 @@
+import { randomUUID } from 'node:crypto';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { criarAplicacao } from '../src/app.js';
+import { GestaoClientes } from '../src/application/clients/manage-clients.js';
+import { ErroCliente } from '../src/application/clients/client-policy.js';
+import { ErroPrimeiroAcessoObrigatorio } from '../src/application/authentication/authentication-errors.js';
+import type { ServicosRotasAutenticacao } from '../src/presentation/authentication-routes.js';
+import type {
+  ClienteDetalheDto,
+  ClienteResumoDto,
+  ContatoClienteDto,
+  EventoLinhaTempoClienteDto,
+  VinculosRelacionadosClienteDto,
+  OperacoesClientes,
+  RepositorioClientes,
+} from '../src/application/clients/client-contracts.js';
+
+const aplicacoes: ReturnType<typeof criarAplicacao>[] = [];
+afterEach(async () => {
+  await Promise.all(aplicacoes.splice(0).map((app) => app.close()));
+});
+
+function prepararCenarioRotas() {
+  const idCliente = randomUUID();
+  const idContato = randomUUID();
+  const idEscritorio = randomUUID();
+  const idUsuario = randomUUID();
+
+  const contatoMock: ContatoClienteDto = {
+    id: idContato,
+    idEscritorio,
+    idCliente,
+    nome: 'Carlos Contato',
+    cargoOuRelacao: 'Gerente',
+    email: 'carlos@empresa.test',
+    telefone: '11988887777',
+    observacao: null,
+    criadoEm: new Date(),
+    atualizadoEm: new Date(),
+  };
+
+  const clienteResumo: ClienteResumoDto = {
+    id: idCliente,
+    idEscritorio,
+    tipoPessoa: 'PESSOA_FISICA',
+    nome: 'Ana Paula Souza',
+    nomeSocial: null,
+    documento: '11144477735',
+    email: 'ana@example.test',
+    telefone: '11988887777',
+    situacao: 'ATIVO',
+    idVinculoResponsavel: null,
+    versao: 0,
+    criadoEm: new Date(),
+    atualizadoEm: new Date(),
+  };
+
+  const clienteDetalhe: ClienteDetalheDto = {
+    ...clienteResumo,
+    endereco: null,
+    observacoesInternas: 'Observação teste',
+    contatos: [contatoMock],
+  };
+
+  const eventoLinhaTempo: EventoLinhaTempoClienteDto = {
+    id: randomUUID(),
+    idEscritorio,
+    idCliente,
+    idAutor: idUsuario,
+    acao: 'CLIENTE_CRIADO',
+    anterior: null,
+    atual: { id: idCliente, nome: 'Ana Paula Souza' },
+    criadoEm: new Date(),
+  };
+
+  const vinculosMock: VinculosRelacionadosClienteDto = {
+    casos: [],
+    processos: [],
+    documentos: [
+      {
+        id: randomUUID(),
+        nome: 'Procuracao.pdf',
+        categoria: 'PROCURACAO',
+        criadoEm: new Date('2026-10-30T10:00:00Z'),
+      },
+    ],
+    tarefas: [
+      {
+        id: randomUUID(),
+        titulo: 'Revisar minuta',
+        situacao: 'PENDENTE',
+        prazo: '2026-11-15',
+      },
+    ],
+    compromissos: [
+      {
+        id: randomUUID(),
+        descricao: 'Prazo Contestação',
+        data: '2026-11-20',
+        situacao: 'PENDENTE',
+      },
+    ],
+  };
+
+  const operacoes: OperacoesClientes = {
+    autor: {
+      idUsuario,
+      idEscritorio,
+      papel: 'PROPRIETARIO',
+      permissoes: ['CLIENTE_VISUALIZAR', 'CLIENTE_CADASTRAR', 'CLIENTE_EDITAR', 'CLIENTE_ATIVAR_INATIVAR', 'CLIENTE_VISUALIZAR_OBSERVACOES'],
+    },
+    listarClientes: vi.fn(async () => ({ clientes: [clienteResumo], total: 1 })),
+    buscarClientePorId: vi.fn(async (id) => {
+      if (id !== idCliente) throw new ErroCliente('NAO_ENCONTRADO', 404);
+      return clienteDetalhe;
+    }),
+    verificarDuplicidades: vi.fn(async () => []),
+    validarVinculoResponsavelNoEscritorio: vi.fn(async (id) => ({ id, nome: 'Advogado', papel: 'ADVOGADO' as const })),
+    criarCliente: vi.fn(async () => clienteDetalhe),
+    atualizarCliente: vi.fn(async (ant, at) => ({ ...clienteDetalhe, nome: at.nome, versao: ant.versao + 1 })),
+    definirSituacao: vi.fn(async (_ant, sit) => {
+      clienteDetalhe.situacao = sit;
+      clienteDetalhe.versao += 1;
+      return { ...clienteDetalhe };
+    }),
+    adicionarContatoCliente: vi.fn(async (ct) => ({
+      id: ct.id,
+      idEscritorio: ct.idEscritorio,
+      idCliente: ct.idCliente,
+      nome: ct.nome,
+      cargoOuRelacao: ct.cargoOuRelacao,
+      email: ct.email,
+      telefone: ct.telefone,
+      observacao: ct.observacao,
+      criadoEm: ct.criadoEm,
+      atualizadoEm: ct.atualizadoEm,
+    })),
+    atualizarContatoCliente: vi.fn(async (_ant, ct) => ({
+      id: ct.id,
+      idEscritorio: ct.idEscritorio,
+      idCliente: ct.idCliente,
+      nome: ct.nome,
+      cargoOuRelacao: ct.cargoOuRelacao,
+      email: ct.email,
+      telefone: ct.telefone,
+      observacao: ct.observacao,
+      criadoEm: ct.criadoEm,
+      atualizadoEm: ct.atualizadoEm,
+    })),
+    removerContatoCliente: vi.fn(async () => {}),
+    listarLinhaDoTempoCliente: vi.fn(async () => [eventoLinhaTempo]),
+    listarVinculosRelacionados: vi.fn(async () => vinculosMock),
+  };
+
+  const repositorio: RepositorioClientes = {
+    executar: vi.fn(async (_ctx, fn) => fn(operacoes)),
+  };
+
+  const tokens = {
+    validarTokenDeAcesso: vi.fn(async () => ({
+      idUsuario,
+      idEscritorioAtivo: idEscritorio,
+      idSessao: randomUUID(),
+      papel: 'PROPRIETARIO' as const,
+    })),
+    criarTokenDeAcesso: vi.fn(async () => 'novo-token'),
+  };
+
+  const clientes = new GestaoClientes(repositorio, tokens);
+  const app = criarAplicacao(
+    { verificarConexaoComBanco: async () => {} },
+    undefined,
+    { origemFrontend: 'http://localhost:5173' } as ServicosRotasAutenticacao,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    clientes,
+  );
+  aplicacoes.push(app);
+
+  return { idCliente, idContato, idEscritorio, operacoes, repositorio, tokens, clientes, app };
+}
+
+describe('Rotas HTTP de Clientes (/api/v1/clientes)', () => {
+  it('aplica Cache-Control: no-store em todas as respostas', async () => {
+    const { app } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'GET',
+      url: '/api/v1/clientes',
+      headers: { authorization: 'Bearer token-valido' },
+    });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.headers['cache-control']).toBe('no-store');
+  });
+
+  it('exige Bearer token (401 quando ausente)', async () => {
+    const { app } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'GET',
+      url: '/api/v1/clientes',
+    });
+
+    expect(resposta.statusCode).toBe(401);
+    expect(resposta.json()).toMatchObject({ erro: 'NAO_AUTORIZADO' });
+  });
+
+  it('valida cabeçalho Origin em mutações POST/PATCH (403 quando incorreto)', async () => {
+    const { app } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'POST',
+      url: '/api/v1/clientes',
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: 'http://origem-maliciosa.com',
+      },
+      payload: {
+        tipoPessoa: 'PESSOA_FISICA',
+        nome: 'Teste',
+        documento: '11144477735',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(403);
+    expect(resposta.json()).toMatchObject({ erro: 'PROIBIDO' });
+  });
+
+  it('rejeita mass assignment com campos extras (.strict() -> 400)', async () => {
+    const { app } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'POST',
+      url: '/api/v1/clientes',
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: 'http://localhost:5173',
+      },
+      payload: {
+        tipoPessoa: 'PESSOA_FISICA',
+        nome: 'Teste',
+        documento: '11144477735',
+        officeId: randomUUID(), // campo proibido
+        status: 'ACTIVE',       // campo proibido
+      },
+    });
+
+    expect(resposta.statusCode).toBe(400);
+    expect(resposta.json()).toMatchObject({ erro: 'DADOS_INVALIDOS' });
+  });
+
+  it('cadastra cliente com sucesso (201)', async () => {
+    const { app } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'POST',
+      url: '/api/v1/clientes',
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: 'http://localhost:5173',
+      },
+      payload: {
+        tipoPessoa: 'PESSOA_FISICA',
+        nome: 'Ana Paula Souza',
+        documento: '11144477735',
+        email: 'ana@example.test',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(201);
+    expect(resposta.json()).toMatchObject({
+      nome: 'Ana Paula Souza',
+      documento: '11144477735',
+    });
+  });
+
+  it('inativa cliente com sucesso e aceita motivo (200)', async () => {
+    const { app, idCliente } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'POST',
+      url: `/api/v1/clientes/${idCliente}/inativar`,
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: 'http://localhost:5173',
+      },
+      payload: {
+        versao: 0,
+        motivo: 'Contrato encerrado',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json().situacao).toBe('INATIVO');
+  });
+
+  it('reativa cliente com sucesso (200)', async () => {
+    const { app, idCliente, operacoes } = prepararCenarioRotas();
+    const clienteInativo = await operacoes.buscarClientePorId(idCliente);
+    clienteInativo.situacao = 'INATIVO';
+
+    const resposta = await app.inject({
+      method: 'POST',
+      url: `/api/v1/clientes/${idCliente}/ativar`,
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: 'http://localhost:5173',
+      },
+      payload: {
+        versao: 0,
+        motivo: 'Cliente retornou',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json().situacao).toBe('ATIVO');
+  });
+
+  it('consulta linha do tempo do cliente (200)', async () => {
+    const { app, idCliente } = prepararCenarioRotas();
+    const resposta = await app.inject({
+      method: 'GET',
+      url: `/api/v1/clientes/${idCliente}/linha-do-tempo`,
+      headers: { authorization: 'Bearer token-valido' },
+    });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(Array.isArray(resposta.json())).toBe(true);
+    expect(resposta.json()[0].acao).toBe('CLIENTE_CRIADO');
+  });
+
+  it('sanitiza erros internos e não expõe detalhes de infraestrutura (503)', async () => {
+    const { app, repositorio } = prepararCenarioRotas();
+    vi.mocked(repositorio.executar).mockRejectedValue(new Error('Falha de conexão com PostgreSQL'));
+
+    const resposta = await app.inject({
+      method: 'GET',
+      url: '/api/v1/clientes',
+      headers: { authorization: 'Bearer token-valido' },
+    });
+
+    expect(resposta.statusCode).toBe(503);
+    expect(resposta.body).not.toContain('PostgreSQL');
+    expect(resposta.json()).toMatchObject({ erro: 'INDISPONIVEL' });
+  });
+
+  it('rejeita acesso de sessão com primeiro acesso pendente (403)', async () => {
+    const { app, repositorio } = prepararCenarioRotas();
+    vi.mocked(repositorio.executar).mockRejectedValue(new ErroPrimeiroAcessoObrigatorio());
+
+    const resposta = await app.inject({
+      method: 'GET',
+      url: '/api/v1/clientes',
+      headers: { authorization: 'Bearer token-valido' },
+    });
+
+    expect(resposta.statusCode).toBe(403);
+    expect(resposta.json()).toMatchObject({ erro: 'PRIMEIRO_ACESSO_OBRIGATORIO' });
+  });
+
+  it('verifica duplicidades com sucesso (200) e rejeita propriedades extras (.strict)', async () => {
+    const { app, operacoes } = prepararCenarioRotas();
+    vi.mocked(operacoes.verificarDuplicidades).mockResolvedValueOnce([
+      {
+        id: 'dup-1',
+        nome: 'Pessoa Semelhante',
+        nomeSocial: null,
+        tipoPessoa: 'PESSOA_FISICA',
+        documentoMascarado: '111.***.***-35',
+        email: 'dup@example.test',
+        telefone: '11988887777',
+        situacao: 'ATIVO',
+        motivos: ['NOME_IDENTICO'],
+      },
+    ]);
+
+    const resposta = await app.inject({
+      method: 'POST',
+      url: '/api/v1/clientes/verificar-duplicidades',
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: 'http://localhost:5173',
+      },
+      payload: {
+        documento: '11144477735',
+        nome: 'Pessoa Semelhante',
+        email: 'dup@example.test',
+      },
+    });
+
+    expect(resposta.statusCode).toBe(200);
+    expect(resposta.json().duplicidades).toHaveLength(1);
+    expect(resposta.json().duplicidades[0].motivos).toContain('NOME_IDENTICO');
+
+    // Rejeita campo extra com .strict()
+    const respostaInvalida = await app.inject({
+      method: 'POST',
+      url: '/api/v1/clientes/verificar-duplicidades',
+      headers: {
+        authorization: 'Bearer token-valido',
+        origin: 'http://localhost:5173',
+      },
+      payload: {
+        documento: '11144477735',
+        nome: 'Pessoa Semelhante',
+        campoInvasivo: 'ataque',
+      },
+    });
+    expect(respostaInvalida.statusCode).toBe(400);
+    expect(respostaInvalida.json()).toMatchObject({ erro: 'DADOS_INVALIDOS' });
+  });
+
+  describe('Endpoints de Contatos Relacionados (/contatos)', () => {
+    it('adiciona contato ao cliente com sucesso (201) e valida Origin e .strict()', async () => {
+      const { app, idCliente } = prepararCenarioRotas();
+
+      // Sucesso
+      const resposta = await app.inject({
+        method: 'POST',
+        url: `/api/v1/clientes/${idCliente}/contatos`,
+        headers: {
+          authorization: 'Bearer token-valido',
+          origin: 'http://localhost:5173',
+        },
+        payload: {
+          nome: 'Contato do Cliente',
+          cargoOuRelacao: 'Gerente Financeiro',
+          email: 'financeiro@empresa.test',
+          telefone: '11988887777',
+          observacao: 'Anotação interna do contato',
+        },
+      });
+
+      expect(resposta.statusCode).toBe(201);
+      expect(resposta.json().nome).toBe('Contato do Cliente');
+
+      // Rejeita Origin inválido (403)
+      const respostaOrigem = await app.inject({
+        method: 'POST',
+        url: `/api/v1/clientes/${idCliente}/contatos`,
+        headers: {
+          authorization: 'Bearer token-valido',
+          origin: 'http://origem-falsa.com',
+        },
+        payload: {
+          nome: 'Invasor',
+          email: 'invasor@test.com',
+        },
+      });
+      expect(respostaOrigem.statusCode).toBe(403);
+
+      // Rejeita campo extra (.strict)
+      const respostaExtra = await app.inject({
+        method: 'POST',
+        url: `/api/v1/clientes/${idCliente}/contatos`,
+        headers: {
+          authorization: 'Bearer token-valido',
+          origin: 'http://localhost:5173',
+        },
+        payload: {
+          nome: 'Contato',
+          email: 'c@test.com',
+          campoNaoPermitido: true,
+        },
+      });
+      expect(respostaExtra.statusCode).toBe(400);
+      expect(respostaExtra.json()).toMatchObject({ erro: 'DADOS_INVALIDOS' });
+    });
+
+    it('atualiza contato do cliente com sucesso (200) e valida Origin', async () => {
+      const { app, idCliente, idContato } = prepararCenarioRotas();
+
+      const resposta = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/clientes/${idCliente}/contatos/${idContato}`,
+        headers: {
+          authorization: 'Bearer token-valido',
+          origin: 'http://localhost:5173',
+        },
+        payload: {
+          nome: 'Contato Atualizado',
+          cargoOuRelacao: 'Diretor',
+          email: 'diretor@empresa.test',
+        },
+      });
+
+      expect(resposta.statusCode).toBe(200);
+      expect(resposta.json().nome).toBe('Contato Atualizado');
+    });
+
+    it('remove contato do cliente com sucesso (204) e valida Origin', async () => {
+      const { app, idCliente, idContato } = prepararCenarioRotas();
+
+      const resposta = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/clientes/${idCliente}/contatos/${idContato}`,
+        headers: {
+          authorization: 'Bearer token-valido',
+          origin: 'http://localhost:5173',
+        },
+      });
+
+      expect(resposta.statusCode).toBe(204);
+    });
+  });
+
+  describe('GET /api/v1/clientes/:id/vinculos', () => {
+    it('retorna 200 com os vínculos consolidados do cliente (RF-029 / RF-030)', async () => {
+      const { app, idCliente } = prepararCenarioRotas();
+
+      const resposta = await app.inject({
+        method: 'GET',
+        url: `/api/v1/clientes/${idCliente}/vinculos`,
+        headers: {
+          authorization: 'Bearer token-valido',
+        },
+      });
+
+      expect(resposta.statusCode).toBe(200);
+      expect(resposta.headers['cache-control']).toBe('no-store');
+      const dados = resposta.json();
+      expect(dados.documentos).toHaveLength(1);
+      expect(dados.documentos[0].nome).toBe('Procuracao.pdf');
+      expect(dados.tarefas).toHaveLength(1);
+      expect(dados.tarefas[0].titulo).toBe('Revisar minuta');
+      expect(dados.compromissos).toHaveLength(1);
+      expect(dados.compromissos[0].descricao).toBe('Prazo Contestação');
+      expect(dados.casos).toEqual([]);
+      expect(dados.processos).toEqual([]);
+    });
+
+    it('retorna 404 quando o cliente não é encontrado no escritório', async () => {
+      const { app } = prepararCenarioRotas();
+
+      const resposta = await app.inject({
+        method: 'GET',
+        url: `/api/v1/clientes/${randomUUID()}/vinculos`,
+        headers: {
+          authorization: 'Bearer token-valido',
+        },
+      });
+
+      expect(resposta.statusCode).toBe(404);
+      expect(resposta.json()).toMatchObject({ erro: 'NAO_ENCONTRADO' });
+    });
+
+    it('retorna 401 sem header de autorização', async () => {
+      const { app, idCliente } = prepararCenarioRotas();
+
+      const resposta = await app.inject({
+        method: 'GET',
+        url: `/api/v1/clientes/${idCliente}/vinculos`,
+      });
+
+      expect(resposta.statusCode).toBe(401);
+    });
+
+    it('retorna 400 se id do cliente não for UUID válido', async () => {
+      const { app } = prepararCenarioRotas();
+
+      const resposta = await app.inject({
+        method: 'GET',
+        url: '/api/v1/clientes/id-invalido/vinculos',
+        headers: {
+          authorization: 'Bearer token-valido',
+        },
+      });
+
+      expect(resposta.statusCode).toBe(400);
+    });
+  });
+});

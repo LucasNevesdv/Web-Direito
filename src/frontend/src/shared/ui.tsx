@@ -6,8 +6,7 @@ export const BOTAO = 'rounded-lg bg-cyan-300 px-4 py-2 font-semibold text-slate-
 export const BOTAO_SECUNDARIO = 'rounded-lg border border-slate-500 px-3 py-1 disabled:opacity-50';
 export const CARTAO = 'rounded-xl border border-slate-700 bg-slate-900 p-5';
 
-const LINKS = [['/painel', 'Painel'], ['/tarefas', 'Tarefas'], ['/prazos', 'Prazos judiciais'], ['/documentos', 'Documentos'], ['/equipe', 'Equipe'],
-  ['/administracao', 'Administração'], ['/app', 'Conta']] as const;
+const LINKS = [['/painel', 'Painel'], ['/clientes', 'Clientes'], ['/casos', 'Casos'], ['/tarefas', 'Tarefas'], ['/prazos', 'Prazos judiciais'], ['/documentos', 'Documentos'], ['/equipe', 'Equipe'], ['/administracao', 'Administração'], ['/app', 'Conta']] as const;
 
 export function NavegacaoPrincipal({ atual }: { atual: string }) {
   const { cliente, identidade } = useAutenticacao();
