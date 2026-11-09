@@ -1,7 +1,7 @@
 import type { DadosTokenAcesso } from '../authentication/authentication-contracts.js';
 import type { PapelVinculoEscritorio } from '../../domain/memberships/membership.js';
 
-export const TIPOS_ENTIDADE_AUDITORIA = ['TAREFA', 'PRAZO_JUDICIAL', 'DOCUMENTO', 'MEMBRO', 'SESSAO', 'AUTENTICACAO', 'ESCRITORIO'] as const;
+export const TIPOS_ENTIDADE_AUDITORIA = ['TAREFA', 'PRAZO_JUDICIAL', 'COMPROMISSO', 'DOCUMENTO', 'MEMBRO', 'SESSAO', 'AUTENTICACAO', 'ESCRITORIO'] as const;
 export type TipoEntidadeAuditoria = typeof TIPOS_ENTIDADE_AUDITORIA[number];
 
 export interface AutorAdministracao { idUsuario: string; papel: PapelVinculoEscritorio }
@@ -23,6 +23,7 @@ export interface ExportacaoEscritorio {
   prazos: unknown[];
   documentos: Array<{ id: string } & Record<string, unknown>>;
   auditoria: unknown[];
+  compromissos?: unknown[];
 }
 
 export interface OperacoesAdministracao {

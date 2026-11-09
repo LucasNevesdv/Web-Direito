@@ -13,7 +13,7 @@ export type OrigemPrazo = typeof ORIGENS_PRAZO[number];
 export type SituacaoPrazo = typeof SITUACOES_PRAZO[number];
 export type PeriodoTarefa = typeof PERIODOS_TAREFA[number];
 
-export interface AutorEscritorio { idUsuario: string; papel: PapelVinculoEscritorio }
+export interface AutorEscritorio { idUsuario: string; papel: PapelVinculoEscritorio; permissoes?: string[] }
 export interface Pessoa { id: string; nome: string }
 export interface Conclusao { em: Date; autor: Pessoa; observacao: string | null }
 export interface ItemChecklist { id: string; titulo: string; concluido: boolean; concluidoEm: Date | null; concluidoPor: Pessoa | null; posicao: number }
@@ -43,9 +43,9 @@ export interface EstadoPrazo {
 
 export interface FiltroTarefas {
   periodo: PeriodoTarefa; hoje: string; idResponsavel?: string; situacao?: SituacaoTarefa; prioridade?: PrioridadeTarefa;
-  pagina: number; tamanhoPagina: number;
+  pagina: number; tamanhoPagina: number; ate?: string;
 }
-export interface FiltroPrazos { situacao?: SituacaoPrazo; idResponsavel?: string; idTarefa?: string; ate?: string; pagina: number; tamanhoPagina: number }
+export interface FiltroPrazos { situacao?: SituacaoPrazo; idResponsavel?: string; idTarefa?: string; ate?: string; depois?: string; pagina: number; tamanhoPagina: number }
 export interface EventoHistorico { id: string; autor: Pessoa; acao: string; anterior: unknown; atual: unknown; criadoEm: Date }
 export interface Notificacao {
   id: string; tipo: 'TAREFA_PROXIMA' | 'TAREFA_ATRASADA' | 'PRAZO_CRITICO' | 'PRAZO_VENCIDO'; escalonada: boolean;

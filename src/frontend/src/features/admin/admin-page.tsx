@@ -12,7 +12,7 @@ interface Filtros { tipoEntidade: string; de: string; ate: string }
 
 const TAMANHO_PAGINA = 20;
 const TIPOS: Record<string, string> = { TAREFA: 'Tarefa', PRAZO_JUDICIAL: 'Prazo judicial', DOCUMENTO: 'Documento', MEMBRO: 'Equipe',
-  SESSAO: 'Sessão', AUTENTICACAO: 'Autenticação', ESCRITORIO: 'Escritório' };
+  SESSAO: 'Sessão', AUTENTICACAO: 'Autenticação', ESCRITORIO: 'Escritório', COMPROMISSO: 'Compromisso' };
 const ACOES: Record<string, string> = {
   SESSAO_INICIADA: 'Sessão iniciada', SESSAO_ENCERRADA: 'Sessão encerrada', LOGIN_FALHOU: 'Falha de login',
   ESCRITORIO_RENOMEADO: 'Escritório renomeado', EXPORTACAO_REALIZADA: 'Dados exportados',

@@ -359,7 +359,8 @@ export function PaginaClientes() {
   const [total, definirTotal] = useState(0);
   const [pagina, definirPagina] = useState(1);
   const [pesquisa, definirPesquisa] = useState('');
-  const [filtroSituacao, definirFiltroSituacao] = useState<string>('');
+  const [filtroSituacao, definirFiltroSituacao] = useState<string>(() => new URLSearchParams(window.location.search).get('situacao') === 'ATIVO' ? 'ATIVO' : '');
+  const [vinculoResponsavel, definirVinculoResponsavel] = useState(() => new URLSearchParams(window.location.search).get('idVinculoResponsavel') ?? '');
   const [filtroTipo, definirFiltroTipo] = useState<string>('');
   const [revisao, definirRevisao] = useState(0);
   const [carregando, definirCarregando] = useState(true);
@@ -434,6 +435,7 @@ export function PaginaClientes() {
     });
     if (filtroSituacao) parametros.set('situacao', filtroSituacao);
     if (filtroTipo) parametros.set('tipoPessoa', filtroTipo);
+    if (vinculoResponsavel) parametros.set('idVinculoResponsavel', vinculoResponsavel);
 
     void requisitarApi<{ clientes: ClienteItem[]; total: number }>(
       cliente,
@@ -457,7 +459,7 @@ export function PaginaClientes() {
       });
 
     return () => controle.abort();
-  }, [cliente, pagina, pesquisa, filtroSituacao, filtroTipo, revisao]);
+  }, [cliente, pagina, pesquisa, filtroSituacao, filtroTipo, revisao, vinculoResponsavel]);
 
   function abrirNovo() {
     definirEditando(null);
@@ -826,6 +828,7 @@ export function PaginaClientes() {
 
   return (
     <Pagina caminho="/clientes" titulo="Gestão de Clientes">
+      {vinculoResponsavel && <p>Responsável selecionado no painel. <button className="text-cyan-300 underline" onClick={() => { definirPagina(1); definirVinculoResponsavel(''); }}>Mostrar todos os responsáveis</button></p>}
       {mensagem && (
         <p role="status" className="rounded-lg bg-emerald-950 p-3 text-emerald-300 border border-emerald-800">
           {mensagem}

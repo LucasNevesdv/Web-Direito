@@ -66,7 +66,8 @@ export class RepositorioTarefasPrisma implements RepositorioTarefas {
             const where: Prisma.TaskWhereInput = { officeId: idEscritorio, ...periodo,
               ...(filtro.idResponsavel ? { responsibleId: filtro.idResponsavel } : {}),
               ...(filtro.prioridade ? { priority: PRIORIDADES_PRISMA[filtro.prioridade] } : {}),
-              ...(filtro.situacao ? { AND: [{ status: SITUACOES_TAREFA_PRISMA[filtro.situacao] }] } : {}) };
+              AND: [...(filtro.situacao ? [{ status: SITUACOES_TAREFA_PRISMA[filtro.situacao] }] : []),
+                ...(filtro.ate ? [{ internalDueDate: { lte: dataDoBanco(filtro.ate) } }] : [])] };
             const registros = await transacao.task.findMany({ where, include: INCLUSAO_TAREFA, skip: (filtro.pagina - 1) * filtro.tamanhoPagina, take: filtro.tamanhoPagina,
               orderBy: [{ internalDueDate: { sort: 'asc', nulls: 'last' } }, { priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] });
             return { tarefas: registros.map(converterTarefa), total: await transacao.task.count({ where }) };
@@ -111,7 +112,8 @@ export class RepositorioTarefasPrisma implements RepositorioTarefas {
               ...(filtro.situacao ? { status: SITUACOES_PRAZO_PRISMA[filtro.situacao] } : {}),
               ...(filtro.idResponsavel ? { responsibleId: filtro.idResponsavel } : {}),
               ...(filtro.idTarefa ? { taskId: filtro.idTarefa } : {}),
-              ...(filtro.ate ? { dueDate: { lte: dataDoBanco(filtro.ate) } } : {}) };
+              ...((filtro.ate || filtro.depois) ? { dueDate: { ...(filtro.ate ? { lte: dataDoBanco(filtro.ate) } : {}),
+                ...(filtro.depois ? { gt: dataDoBanco(filtro.depois) } : {}) } } : {}) };
             const registros = await transacao.judicialDeadline.findMany({ where, include: INCLUSAO_PRAZO, orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
               skip: (filtro.pagina - 1) * filtro.tamanhoPagina, take: filtro.tamanhoPagina });
             return { prazos: registros.map(converterPrazo), total: await transacao.judicialDeadline.count({ where }) };

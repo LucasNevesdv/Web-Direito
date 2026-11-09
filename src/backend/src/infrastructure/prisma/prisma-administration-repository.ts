@@ -61,7 +61,7 @@ export class RepositorioAdministracaoPrisma implements RepositorioAdministracao 
         },
         exportar: async () => {
           const escritorio = await transacao.office.findUniqueOrThrow({ where: { id: idEscritorio } });
-          const [membros, tarefas, prazos, documentos, auditoria] = await Promise.all([
+          const [membros, tarefas, prazos, documentos, auditoria, compromissos] = await Promise.all([
             transacao.membership.findMany({ where: { officeId: idEscritorio }, include: { user: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'asc' } }),
             transacao.task.findMany({ where: { officeId: idEscritorio }, include: { checklist: { orderBy: { position: 'asc' } }, history: { orderBy: { createdAt: 'asc' } } }, orderBy: { createdAt: 'asc' } }),
             transacao.judicialDeadline.findMany({ where: { officeId: idEscritorio }, include: { history: { orderBy: { createdAt: 'asc' } } }, orderBy: { createdAt: 'asc' } }),
@@ -69,6 +69,7 @@ export class RepositorioAdministracaoPrisma implements RepositorioAdministracao 
               versions: { select: { number: true, originalName: true, contentType: true, sizeBytes: true, sha256: true, uploaderId: true, createdAt: true }, orderBy: { number: 'asc' } },
               events: { orderBy: { createdAt: 'asc' } } } }),
             transacao.auditLog.findMany({ where: { officeId: idEscritorio }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }),
+            transacao.appointment.findMany({ where: { officeId: idEscritorio }, include: { participants: true, history: { orderBy: { createdAt: 'asc' } } }, orderBy: [{ startsAt: 'asc' }, { id: 'asc' }] }),
           ]);
           await auditar('EXPORTACAO_REALIZADA', undefined, undefined);
           return {
@@ -80,6 +81,7 @@ export class RepositorioAdministracaoPrisma implements RepositorioAdministracao 
             prazos,
             documentos: documentos.map((d) => ({ ...d, versions: d.versions.map((v) => ({ ...v, sizeBytes: Number(v.sizeBytes) })) })),
             auditoria,
+            compromissos,
           };
         },
       });

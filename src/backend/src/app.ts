@@ -1,4 +1,8 @@
 import Fastify from 'fastify';
+import type { GestaoAgenda } from './application/agenda/manage-agenda.js';
+import type { GestaoPainel } from './application/dashboard/manage-dashboard.js';
+import { registrarRotasPainel } from './presentation/dashboard-routes.js';
+import { registrarRotasAgenda } from './presentation/agenda-routes.js';
 import type { GestaoEquipe } from './application/team/manage-team.js';
 import { registrarRotasEquipe } from './presentation/team-routes.js';
 import type { GestaoTarefas } from './application/tasks/manage-tasks.js';
@@ -25,7 +29,7 @@ export function criarAplicacao(
   seguranca: { limitador: LimitadorRequisicoes; proxiesConfiaveis?: false | string[] } = { limitador: LIMITADOR_REQUISICOES_INDISPONIVEL },
   senhas?: ServicosRotasSenhas,
   equipe?: GestaoEquipe,
-  trabalho?: { tarefas: GestaoTarefas; documentos: { gestao: GestaoDocumentos; limiteBytes: number } },
+  trabalho?: { tarefas: GestaoTarefas; documentos: { gestao: GestaoDocumentos; limiteBytes: number }; agenda?: GestaoAgenda; painel?: GestaoPainel },
   clientes?: GestaoClientes,
   casos?: GestaoCasosProcessos,
   administracao?: GestaoAdministracao,
@@ -50,6 +54,8 @@ export function criarAplicacao(
   if (autenticacao && senhas) registrarRotasSenhas(aplicacao, senhas, autenticacao, seguranca.limitador);
   if (autenticacao && equipe) registrarRotasEquipe(aplicacao, equipe, autenticacao.origemFrontend, seguranca.limitador);
   if (autenticacao && trabalho) {
+    if (trabalho.agenda) registrarRotasAgenda(aplicacao, trabalho.agenda, autenticacao.origemFrontend);
+    if (trabalho.painel) registrarRotasPainel(aplicacao, trabalho.painel, autenticacao.origemFrontend);
     registrarRotasTarefas(aplicacao, trabalho.tarefas, autenticacao.origemFrontend);
     registrarRotasDocumentos(aplicacao, trabalho.documentos.gestao, autenticacao.origemFrontend, trabalho.documentos.limiteBytes);
   }

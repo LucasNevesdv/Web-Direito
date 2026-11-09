@@ -15,7 +15,11 @@ interface Formulario { titulo: string; descricao: string; prioridade: Prioridade
 export function PaginaTarefas() {
   const { cliente, identidade } = useAutenticacao();
   const [configuracao, definirConfiguracao] = useState<ConfiguracaoTarefas | null>(null);
-  const [filtros, definirFiltros] = useState({ periodo: 'HOJE' as Periodo, idResponsavel: '', situacao: '', prioridade: '' });
+  const [filtros, definirFiltros] = useState(() => {
+    const q = new URLSearchParams(window.location.search), periodo = q.get('periodo') ?? 'HOJE';
+    return { periodo: (Object.hasOwn(PERIODOS, periodo) ? periodo : 'HOJE') as Periodo,
+      idResponsavel: q.get('idResponsavel') ?? '', situacao: '', prioridade: '', ate: q.get('ate') ?? '' };
+  });
   const [pagina, definirPagina] = useState(1);
   const [tarefas, definirTarefas] = useState<Tarefa[]>([]), [total, definirTotal] = useState(0);
   const [selecionada, definirSelecionada] = useState<Tarefa | null>(null);
@@ -33,7 +37,7 @@ export function PaginaTarefas() {
   useEffect(() => {
     const controle = new AbortController(); definirCarregando(true);
     const consulta = new URLSearchParams({ periodo: filtros.periodo, pagina: String(pagina), tamanhoPagina: String(TAMANHO_PAGINA) });
-    for (const chave of ['idResponsavel', 'situacao', 'prioridade'] as const) if (filtros[chave]) consulta.set(chave, filtros[chave]);
+    for (const chave of ['idResponsavel', 'situacao', 'prioridade', 'ate'] as const) if (filtros[chave]) consulta.set(chave, filtros[chave]);
     void requisitarApi<{ tarefas: Tarefa[]; total: number }>(cliente, `/api/v1/tarefas?${consulta}`, { signal: controle.signal })
       .then((resposta) => { if (controle.signal.aborted) return; if (resposta.ok) { definirTarefas(resposta.dados.tarefas); definirTotal(resposta.dados.total); } else definirErro(resposta.mensagem); })
       .catch(() => { if (!controle.signal.aborted) definirErro('Não foi possível carregar as tarefas.'); })
@@ -41,6 +45,13 @@ export function PaginaTarefas() {
     return () => controle.abort();
   }, [cliente, filtros, pagina, revisao]);
 
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('id'), controle = new AbortController();
+    if (id) void requisitarApi<Tarefa>(cliente, `/api/v1/tarefas/${encodeURIComponent(id)}`, { signal: controle.signal })
+      .then((r) => { if (!controle.signal.aborted) { if (r.ok) definirSelecionada(r.dados); else definirErro(r.mensagem); } })
+      .catch(() => { if (!controle.signal.aborted) definirErro('Não foi possível abrir a tarefa.'); });
+    return () => controle.abort();
+  }, [cliente]);
   function alterarFiltro(chave: keyof typeof filtros, valor: string) { definirPagina(1); definirFiltros({ ...filtros, [chave]: valor }); }
   async function abrir(id: string) {
     const resposta = await requisitarApi<Tarefa>(cliente, `/api/v1/tarefas/${id}`).catch(() => null);
@@ -52,6 +63,7 @@ export function PaginaTarefas() {
   return <Pagina caminho="/tarefas" titulo="Tarefas">
     <p className="text-slate-300">Escritório: <strong>{identidade?.escritorio.nome}</strong>. Prazos internos são da equipe; prazos judiciais ficam em <a className="text-cyan-300 underline" href="/prazos">Prazos judiciais</a>.</p>
     {mensagem && <p role="status" className="text-cyan-300">{mensagem}</p>}{erro && <p role="alert" className="text-rose-300">{erro}</p>}
+    {filtros.ate && <p>Prazo interno até {dataBrasileira(filtros.ate)}. <button className="text-cyan-300 underline" onClick={() => alterarFiltro('ate', '')}>Remover limite de data</button></p>}
     <section aria-label="Filtros" className="grid gap-3 md:grid-cols-5">
       <div role="group" aria-label="Período" className="flex flex-wrap gap-2 md:col-span-5">{(Object.keys(PERIODOS) as Periodo[]).map((periodo) =>
         <button key={periodo} type="button" aria-pressed={filtros.periodo === periodo} className={filtros.periodo === periodo ? BOTAO : BOTAO_SECUNDARIO}

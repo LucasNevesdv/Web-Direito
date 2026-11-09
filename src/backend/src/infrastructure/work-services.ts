@@ -1,4 +1,8 @@
 import type { PrismaClient } from '@prisma/client';
+import { GestaoPainel } from '../application/dashboard/manage-dashboard.js';
+import { RepositorioPainelPrisma } from './prisma/prisma-dashboard-repository.js';
+import { GestaoAgenda } from '../application/agenda/manage-agenda.js';
+import { RepositorioAgendaPrisma } from './prisma/prisma-agenda-repository.js';
 import { GestaoDocumentos } from '../application/documents/manage-documents.js';
 import { GestaoTarefas } from '../application/tasks/manage-tasks.js';
 import { LembretesDePrazos } from '../application/tasks/reminders.js';
@@ -27,6 +31,8 @@ export function comporServicosDeTrabalho(prisma: PrismaClient, ambiente: Ambient
     reservaSegundos: ambiente.EMAIL_FILA_LEASE_SEGUNDOS, prazoEncerramentoMs: ambiente.EMAIL_FILA_ENCERRAMENTO_MS },
   (evento, quantidade) => console.info(JSON.stringify({ componente: 'lembretes_prazos', evento, ...(quantidade ? { quantidade } : {}) })));
   return {
+    painel: new GestaoPainel(new RepositorioPainelPrisma(prisma), tokens, configuracao),
+    agenda: new GestaoAgenda(new RepositorioAgendaPrisma(prisma), tokens, ambiente.FUSO_HORARIO),
     tarefas: new GestaoTarefas(new RepositorioTarefasPrisma(prisma), tokens, configuracao),
     documentos: { gestao: new GestaoDocumentos(new RepositorioDocumentosPrisma(prisma), tokens, armazenamento, limiteBytes), limiteBytes },
     processamento,

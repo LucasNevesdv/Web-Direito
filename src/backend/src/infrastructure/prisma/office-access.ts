@@ -16,7 +16,7 @@ export async function abrirContextoDoEscritorio(transacao: Prisma.TransactionCli
   if (!sessao) throw new ErroTokenAcessoInvalido();
   if (sessao.restricted || sessao.user.mustChangePassword) throw new ErroPrimeiroAcessoObrigatorio();
   await registrarAtividadeDaSessao(transacao, sessao);
-  return { idUsuario: sessao.userId, papel: PAPEIS_DOMINIO[sessao.membership.role] };
+  return { idUsuario: sessao.userId, papel: PAPEIS_DOMINIO[sessao.membership.role], permissoes: sessao.membership.permissions };
 }
 
 export async function membroAtivoDoEscritorio(transacao: Prisma.TransactionClient, idEscritorio: string, idUsuario: string): Promise<boolean> {

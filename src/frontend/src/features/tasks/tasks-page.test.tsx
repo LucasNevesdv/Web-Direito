@@ -17,6 +17,43 @@ const corpo = (opcoes?: RequestInit) => JSON.parse(String(opcoes?.body));
 beforeEach(() => { window.history.replaceState(null, '', '/tarefas'); localStorage.clear(); sessionStorage.clear(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+describe('links de entrada do Dashboard', () => {
+  it('mantém período e responsável e abre tarefa fora da página atual', async () => {
+    window.history.replaceState(null, '', '/tarefas?periodo=FUTURAS&ate=2030-01-22&idResponsavel=usuario-2&id=tarefa-1');
+    const { cliente, requisicao } = await criarClienteAutenticado((url) => {
+      if (url.endsWith('/configuracao')) return respostaJson(configuracao);
+      if (url.startsWith('/api/v1/tarefas?')) return respostaJson({ tarefas: [], total: 0 });
+      if (url === '/api/v1/tarefas/tarefa-1') return respostaJson(tarefa);
+      if (url.endsWith('/historico')) return respostaJson([]);
+      return respostaJson({}, 404);
+    });
+    renderizarComCliente(cliente, <PaginaTarefas />);
+    expect(await screen.findByRole('heading', { name: 'Protocolar petição' })).toBeTruthy();
+    const consulta = requisicao.mock.calls.find(([u]) => String(u).startsWith('/api/v1/tarefas?'))!;
+    const parametros = new URL(String(consulta[0]), 'http://localhost').searchParams;
+    expect(parametros.get('periodo')).toBe('FUTURAS'); expect(parametros.get('ate')).toBe('2030-01-22');
+    expect(parametros.get('idResponsavel')).toBe('usuario-2');
+    fireEvent.click(screen.getByRole('button', { name: 'Remover limite de data' }));
+    await waitFor(() => expect(requisicao.mock.calls.filter(([u]) => String(u).startsWith('/api/v1/tarefas?')).at(-1)![0]).not.toContain('ate='));
+  });
+  it('abre prazo por ID e mantém os limites da lista de prazos próximos', async () => {
+    window.history.replaceState(null, '', '/prazos?id=prazo-1&depois=2030-01-18&ate=2030-01-22&idResponsavel=usuario-2');
+    const { cliente, requisicao } = await criarClienteAutenticado((url) => {
+      if (url.endsWith('/configuracao')) return respostaJson(configuracao);
+      if (url.startsWith('/api/v1/prazos?')) return respostaJson({ prazos: [], total: 0 });
+      if (url === '/api/v1/prazos/prazo-1') return respostaJson(prazo);
+      if (url.endsWith('/historico')) return respostaJson([]);
+      return respostaJson({}, 404);
+    });
+    renderizarComCliente(cliente, <PaginaPrazos />);
+    expect(await screen.findByRole('heading', { name: 'Contestação' })).toBeTruthy();
+    const consulta = requisicao.mock.calls.find(([u]) => String(u).startsWith('/api/v1/prazos?'))!;
+    const parametros = new URL(String(consulta[0]), 'http://localhost').searchParams;
+    expect(parametros.get('depois')).toBe('2030-01-18'); expect(parametros.get('ate')).toBe('2030-01-22');
+    expect(parametros.get('idResponsavel')).toBe('usuario-2');
+  });
+});
+
 describe('tarefas', () => {
   it('lista tarefas de hoje por padrão, destaca atraso e cria tarefa com campos opcionais nulos', async () => {
     const { cliente, requisicao } = await criarClienteAutenticado((url, opcoes) => {
@@ -82,8 +119,13 @@ describe('prazos judiciais e painel', () => {
   it('painel exibe prazos críticos e marca lembrete como lido', async () => {
     let lida = false;
     const { cliente, requisicao } = await criarClienteAutenticado((url) => {
-      if (url === '/api/v1/painel') return respostaJson({ hoje: '2026-10-11', diasPrazoCritico: 3, minhasTarefas: { hoje: 1, atrasadas: 2, futuras: 0 },
-        prazosCriticos: [prazo], totalPrazosCriticos: 1, notificacoesNaoLidas: lida ? 0 : 1 });
+      if (url.startsWith('/api/v1/painel/resumo?')) {
+        const vazio = { total: 0, itens: [], href: '/tarefas' };
+        return respostaJson({ hoje: '2026-10-11', ate: '2026-10-18', dias: 7, diasPrazoCritico: 3, fusoHorario: 'America/Sao_Paulo', membros,
+          tarefas: { hoje: vazio, atrasadas: vazio, futuras: vazio }, prazosProximos: vazio, compromissos: vazio,
+          clientesAtivos: null, casosAtivos: null, casosSemAtividade: null,
+          prazosCriticos: { total: 1, href: '/prazos?somenteCriticos=true', itens: [{ id: prazo.id, titulo: prazo.descricao, data: prazo.dataLimite, href: '/prazos?id=prazo-1' }] } });
+      }
       if (url === '/api/v1/notificacoes') return respostaJson({ notificacoes: [{ id: 'n-1', tipo: 'PRAZO_CRITICO', escalonada: true, titulo: 'Contestação',
         dataLimite: '2026-10-13', idTarefa: null, idPrazo: 'prazo-1', lidaEm: lida ? '2026-10-11T15:00:00Z' : null, criadoEm: '2026-10-11T10:00:00Z' }], naoLidas: lida ? 0 : 1 });
       if (url === '/api/v1/notificacoes/n-1/lida') { lida = true; return respostaJson(null, 204); }

@@ -1,4 +1,5 @@
 import { PaginaCadastro } from './features/auth/register-page';
+import { PaginaAgenda } from './features/agenda/agenda-page';
 import { PaginaSenhas } from './features/auth/password-pages';
 import { PaginaEquipe } from './features/team/team-page';
 import { PaginaPainel } from './features/dashboard/dashboard-page';
@@ -55,6 +56,7 @@ function Rotas() {
   if (caminho === '/seguranca/sessoes' && situacao === 'autenticado') return <PaginaSessoes key={contexto} />;
   if (caminho === '/equipe' && situacao === 'autenticado') return <PaginaEquipe key={contexto} />;
   if (caminho === '/painel' && situacao === 'autenticado') return <PaginaPainel key={contexto} />;
+  if (caminho === '/agenda' && situacao === 'autenticado') return <PaginaAgenda key={contexto} />;
   if (caminho === '/clientes' && situacao === 'autenticado') return <PaginaClientes key={contexto} />;
   if (caminho === '/casos' && situacao === 'autenticado') return <PaginaCasos key={contexto} />;
   if (caminho === '/tarefas' && situacao === 'autenticado') return <PaginaTarefas key={contexto} />;

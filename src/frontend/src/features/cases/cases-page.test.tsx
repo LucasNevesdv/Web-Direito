@@ -81,6 +81,25 @@ afterEach(() => {
 });
 
 describe('PaginaCasos (Frontend)', () => {
+
+  it('abre caso por URL e mantém os filtros do painel na listagem', async () => {
+    window.history.replaceState(null, '', '/casos?id=caso-1&semAtividadeDesdeDias=90&idVinculoResponsavel=vinculo-1');
+    const { cliente, requisicao } = await criarClienteAutenticado((url) => {
+      if (url.startsWith('/api/v1/casos?')) return respostaJson({ casos: [], total: 0 });
+      if (url === '/api/v1/casos/caso-1') return respostaJson(casoDetalheMock);
+      if (url.endsWith('/linha-do-tempo')) return respostaJson([]);
+      if (url.startsWith('/api/v1/clientes?')) return respostaJson({ clientes: [], total: 0 });
+      if (url.startsWith('/api/v1/equipe/usuarios?')) return respostaJson({ usuarios: [], total: 0 });
+      return respostaJson({}, 404);
+    });
+    renderizarComCliente(cliente, <PaginaCasos />);
+    expect(await screen.findByText('Dossiê sobre cobrança de valores em aberto.')).toBeTruthy();
+    const url = String(requisicao.mock.calls.find(([u]) => String(u).startsWith('/api/v1/casos?'))![0]);
+    const q = new URL(url, 'http://localhost').searchParams;
+    expect(q.get('semAtividadeDesdeDias')).toBe('90'); expect(q.get('idVinculoResponsavel')).toBe('vinculo-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros do painel' }));
+    await waitFor(() => expect(requisicao.mock.calls.filter(([u]) => String(u).startsWith('/api/v1/casos?')).at(-1)![0]).not.toContain('idVinculoResponsavel'));
+  });
   it('carrega e lista casos ativos', async () => {
     const { cliente } = await criarClienteAutenticado((url) => {
       if (url.startsWith('/api/v1/casos?')) {
