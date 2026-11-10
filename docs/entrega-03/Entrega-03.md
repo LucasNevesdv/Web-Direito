@@ -99,108 +99,17 @@ obter adesão ou substituir uma ferramenta já utilizada (EQUIPE WEB-DIREITO,
 Modelo de negócio proposto para continuidade do empreendimento. Receita, canais e parcerias abaixo são hipóteses de operação; a
 atividade acadêmica não representa contratação comercial.
 
-Parceiros chave
-
-Atividades chave
-
-Proposta de valor
-
-Relacionamento
-
-Profissionais e
-escritórios que aceitem
-participar de testes.
-
-Desenvolver e manter o
-fluxo jurídico.
-Testar usabilidade.
-Apoiar implantação e
-uso.
-Proteger e recuperar os
-dados.
-
-Dar clareza ao trabalho
-compartilhado: cliente e
-caso relacionados a
-tarefas, executor,
-revisor, datas,
-documentos e histórico.
-
-Demonstração guiada.
-Orientação inicial curta.
-Suporte por canal
-definido.
-Coleta contínua de
-dificuldades.
-
-Fornecedores de
-hospedagem,
-armazenamento de
-objetos e envio
-transacional de e-mail.
-Redes de contatos para
-indicações.
-Não há parceria
-comercial ou
-institucional
-formalizada nesta etapa.
-
-Recursos chave
-Equipe de
-desenvolvimento.
-Código e documentação.
-Banco de dados e
-arquivos.
-Conhecimento da rotina
-pesquisada.
-
-Reduzir conferências e
-facilitar o
-acompanhamento da
-próxima ação.
-Simplicidade e adesão
-são hipóteses a testar
-com usuários.
-
-Canais
-Contato direto com
-pequenos escritórios.
-Indicações profissionais.
-Demonstrações pelo
-navegador.
-Página de apresentação
-futura.
-
-Segmentos de
-clientes
-Pequenos escritórios
-com duas ou mais
-pessoas que dividem
-atividades e percebem
-dificuldade de
-acompanhamento.
-Usuários: gestores,
-advogados, estagiários e
-apoio.
-Pagador: proprietário,
-sócio ou gestor.
-Autônomos satisfeitos
-com seu método não são
-o foco inicial.
-
-Estrutura de custos
-
-Fontes de receita
-
-Desenvolvimento e manutenção; hospedagem da aplicação e do
-PostgreSQL; armazenamento, backup e tráfego; e-mail; suporte e
-implantação. No projeto acadêmico, o esforço dos integrantes é um
-recurso limitado, mesmo sem desembolso.
-
-Hipótese de assinatura mensal por escritório. Limites de usuários e
-armazenamento e eventual cobrança de implantação serão
-avaliados após os testes. Preço, conversão e receita não foram
-validados; o MVP acadêmico será testado sem cobrança.
+| Bloco | Conteúdo |
+| --- | --- |
+| Parceiros chave | Profissionais e escritórios que aceitem participar de testes.<br>Fornecedores de hospedagem, armazenamento de objetos e envio transacional de e-mail.<br>Redes de contatos para indicações.<br>Não há parceria comercial ou institucional formalizada nesta etapa. |
+| Atividades chave | Desenvolver e manter o fluxo jurídico.<br>Testar usabilidade.<br>Apoiar implantação e uso.<br>Proteger e recuperar os dados. |
+| Recursos chave | Equipe de desenvolvimento.<br>Código e documentação.<br>Banco de dados e arquivos.<br>Conhecimento da rotina pesquisada. |
+| Proposta de valor | Dar clareza ao trabalho compartilhado: cliente e caso relacionados a tarefas, executor, revisor, datas, documentos e histórico.<br>Reduzir conferências e facilitar o acompanhamento da próxima ação.<br>Simplicidade e adesão são hipóteses a testar com usuários. |
+| Relacionamento | Demonstração guiada.<br>Orientação inicial curta.<br>Suporte por canal definido.<br>Coleta contínua de dificuldades. |
+| Canais | Contato direto com pequenos escritórios.<br>Indicações profissionais.<br>Demonstrações pelo navegador.<br>Página de apresentação futura. |
+| Segmentos de clientes | Pequenos escritórios com duas ou mais pessoas que dividem atividades e percebem dificuldade de acompanhamento.<br>Usuários: gestores, advogados, estagiários e apoio.<br>Pagador: proprietário, sócio ou gestor.<br>Autônomos satisfeitos com seu método não são o foco inicial. |
+| Estrutura de custos | Desenvolvimento e manutenção; hospedagem da aplicação e do PostgreSQL; armazenamento, backup e tráfego; e-mail; suporte e implantação. No projeto acadêmico, o esforço dos integrantes é um recurso limitado, mesmo sem desembolso. |
+| Fontes de receita | Hipótese de assinatura mensal por escritório. Limites de usuários e armazenamento e eventual cobrança de implantação serão avaliados após os testes. Preço, conversão e receita não foram validados; o MVP acadêmico será testado sem cobrança. |
 
 Fonte: elaborado pela equipe a partir da decisão e dos critérios de adoção registrados na Entrega 2 (2026b).
 
@@ -236,145 +145,29 @@ possibilidade de saída como critérios de adoção.
 
 ### 3.3 Hipóteses que permanecem abertas
 
-Hipótese
-
-Como investigar
-
-A equipe percebe ganho suficiente
-para adotar a solução.
-
-Observar tarefas reais de uso e comparar com o
-procedimento atual.
-
-O gestor aceitaria assinatura por
-escritório.
-
-Entrevistar o decisor após a demonstração,
-explorando condições e alternativas.
-
-A implantação pode ocorrer com
-orientação curta.
-
-Registrar tempo, dúvidas e pedidos de ajuda no
-primeiro uso.
-
-Os custos são compatíveis com um
-preço aceitável.
-
-Estimar infraestrutura e esforço de suporte depois
-de definir volume e uso.
+| Hipótese | Como investigar |
+| --- | --- |
+| A equipe percebe ganho suficiente para adotar a solução. | Observar tarefas reais de uso e comparar com o procedimento atual. |
+| O gestor aceitaria assinatura por escritório. | Entrevistar o decisor após a demonstração, explorando condições e alternativas. |
+| A implantação pode ocorrer com orientação curta. | Registrar tempo, dúvidas e pedidos de ajuda no primeiro uso. |
+| Os custos são compatíveis com um preço aceitável. | Estimar infraestrutura e esforço de suporte depois de definir volume e uso. |
 
 ## 4 PERSONAL BUSINESS MODEL CANVAS DA EQUIPE
 
 Reflexão sobre a equipe acadêmica. A divisão representa responsabilidades e competências mobilizadas no projeto, sem pressupor
 dedicação integral, especializações ou apoios não confirmados.
 
-Quem nos ajuda
-
-O que fazemos
-
-Como ajudamos
-
-Participantes acessíveis
-por contatos e
-indicações, conforme a
-pesquisa.
-
-Traduzir relatos em
-requisitos.
-Desenvolver os
-módulos.
-Integrar e testar o fluxo.
-Documentar e validar
-decisões.
-
-Construímos uma forma
-compartilhada de
-acompanhar casos e
-atividades.
-
-Quem somos e temos
-
-Para o grupo,
-transformamos
-conceitos de
-empreendedorismo e
-desenvolvimento em um
-produto testável.
-
-Professor e materiais da
-disciplina como
-orientação acadêmica.
-Documentação das
-tecnologias e
-colaboração entre os
-cinco integrantes.
-Apoios externos
-dependem de
-disponibilidade e
-consentimento.
-
-Cinco estudantes de SI.
-Base técnica
-implementada.
-Repositório e
-documentação.
-Programação e
-pesquisa.
-
-Relacionamos executor,
-revisor, datas,
-documentos e histórico.
-
-Como nos
-relacionamos
-Revisões entre colegas.
-Registro de decisões.
-Observação de testes.
-Escuta sem induzir
-aprovação.
-
-Quem ajudamos
-Gestores e integrantes
-de pequenas equipes
-jurídicas com
-dificuldades de
-acompanhamento.
-
-Como chegamos
-
-A equipe acadêmica,
-que precisa integrar
-módulos e explicar o
-produto.
-
-GitHub para trabalho e
-evidências.
-Reuniões do grupo.
-Contatos e indicações
-para pesquisa.
-Demonstração do MVP.
-
-A rede disponível não
-garante
-representatividade nem
-contratação; novas
-interações precisam ser
-agendadas.
-
-O que investimos
-
-O que ganhamos
-
-Tempo de estudo, implementação, integração, documentação e
-testes. Esforço para agendar participantes e conciliar graduação e
-demais atividades. Limitações: prazo curto, disponibilidade parcial
-e domínio jurídico a aprofundar.
-
-Aprendizado em validação de problemas, colaboração e produto;
-experiência técnica e de comunicação; entrega acadêmica
-demonstrável e portfólio. Possibilidade de continuidade futura,
-sem promessa de clientes ou renda.
+| Bloco | Conteúdo |
+| --- | --- |
+| Quem nos ajuda | Participantes acessíveis por contatos e indicações, conforme a pesquisa.<br>Professor e materiais da disciplina como orientação acadêmica.<br>Documentação das tecnologias e colaboração entre os cinco integrantes.<br>Apoios externos dependem de disponibilidade e consentimento. |
+| O que fazemos | Traduzir relatos em requisitos.<br>Desenvolver os módulos.<br>Integrar e testar o fluxo.<br>Documentar e validar decisões. |
+| Quem somos e temos | Cinco estudantes de SI.<br>Base técnica implementada.<br>Repositório e documentação.<br>Programação e pesquisa. |
+| Como ajudamos | Construímos uma forma compartilhada de acompanhar casos e atividades.<br>Relacionamos executor, revisor, datas, documentos e histórico.<br>Para o grupo, transformamos conceitos de empreendedorismo e desenvolvimento em um produto testável. |
+| Como nos relacionamos | Revisões entre colegas.<br>Registro de decisões.<br>Observação de testes.<br>Escuta sem induzir aprovação. |
+| Como chegamos | GitHub para trabalho e evidências.<br>Reuniões do grupo.<br>Contatos e indicações para pesquisa.<br>Demonstração do MVP. |
+| Quem ajudamos | Gestores e integrantes de pequenas equipes jurídicas com dificuldades de acompanhamento.<br>A equipe acadêmica, que precisa integrar módulos e explicar o produto.<br>A rede disponível não garante representatividade nem contratação; novas interações precisam ser agendadas. |
+| O que investimos | Tempo de estudo, implementação, integração, documentação e testes. Esforço para agendar participantes e conciliar graduação e demais atividades. Limitações: prazo curto, disponibilidade parcial e domínio jurídico a aprofundar. |
+| O que ganhamos | Aprendizado em validação de problemas, colaboração e produto; experiência técnica e de comunicação; entrega acadêmica demonstrável e portfólio. Possibilidade de continuidade futura, sem promessa de clientes ou renda. |
 
 Fonte: equipe do Web-Direito, a partir da Entrega 1 e da divisão atual de módulos. Revisão e validação são colaborativas.
 
@@ -401,460 +194,7 @@ Quadro 2 - Jornada que será demonstrada e testada
 | **6. Revisão** | Registrar andamento e conferir a etapa de revisão. | A elaboração não é confundida com conclusão integral. |
 | **7. Consulta** | Consultar painel, agenda e histórico; confirmar conclusão. | Pendências e acontecimentos visíveis. |
 
-*Fonte: elaborado pela equipe para a proposta de MVP. A jornada ainda será testada com usuários.*ARTAMENTO DE CIÊNCIA DA COMPUTAÇÃO
-### EMPREENDEDORISMO EM SISTEMAS DE INFORMAÇÃO (2026/2)
-
-**Orientador:** Prof. Johnatan Oliveira  
-**Data Limite:** 27 de outubro de 2026  
-**Local:** Lavras - MG  
-
----
-
-# WEB-DIREITO
-## ENTREGA 3: PROPOSTA DE VALOR, MODELO DE NEGÓCIO E DEFINIÇÃO DO MVP
-
-**Integrantes da Equipe:**
-- Augusto Fernandes Carvalho
-- Alexandre Bortone
-- Lucas Marcelino Neves
-- Matheus Pimenta
-- Diovani Da Cruz Mangia
-
-**Repositório Oficial:** [https://github.com/LucasNevesdv/Web-Direito](https://github.com/LucasNevesdv/Web-Direito)
-
----
-
-## 1 CONTINUIDADE DO PROJETO E APRENDIZADOS
-
-O Web-Direito prossegue com foco em pequenas equipes de advocacia que
-precisam acompanhar uma mesma demanda entre execução, revisão e conclusão.
-Nesta etapa, os aprendizados das entregas anteriores são convertidos em
-proposta de valor, modelo de negócio e planejamento do produto mínimo. A
-prioridade é permitir que a equipe identifique o que precisa ser feito, por quem,
-até quando e com quais documentos.
-A Entrega 1 identificou tarefas, responsáveis e prazos como problema
-principal. Na Entrega 2, os registros de oito entrevistas e a comparação com
-cinco alternativas de mercado levaram à decisão de prosseguir com ajustes. O
-uso de várias ferramentas, isoladamente, deixou de ser considerado suficiente
-para justificar a solução (EQUIPE WEB-DIREITO, 2026a; 2026b).
-Quadro 1 - Aprendizados que orientam o produto
-
-| Evidência registrada | Implicação para o MVP |
-| :--- | :--- |
-| **P01 e P07:** pedidos e prioridades nem sempre chegam ao controle compartilhado. | Relacionar cada tarefa a uma demanda, com responsável, prioridade, data e situação. |
-| **P03:** elaboração concluída não significava revisão concluída. | Identificar executor e revisor e manter registro das etapas antes da conclusão. |
-| **P04:** retrabalho para reunir arquivos e localizar versões. | Vincular documentos ao cliente ou caso e preservar versões anteriores. |
-| **P05 e P06:** adoção, segurança, suporte e custo de mudança influenciam a escolha. | Testar facilidade de uso e prever permissões, histórico e saída dos dados. |
-| **P02 e P08:** o método atual atende à rotina de parte do público. | Priorizar equipes que já percebem dificuldades; evitar presumir necessidade universal. |
-
-*Fonte: síntese da Entrega 2, com base nos participantes P01 a P08 (EQUIPE WEB-DIREITO, 2026b).*
-
-A pesquisa é exploratória e não permite generalização estatística. Nenhum participante
-relatou perda de prazo judicial diretamente decorrente das situações descritas. Os
-efeitos observados foram conferências, retrabalho, reorganização de prioridades e falta
-de clareza; disposição para pagar e ganhos de tempo ainda precisam ser testados.
-
-## 2 PROPOSTA DE VALOR
-
-### 2.1 Segmento e problema prioritários
-
-O segmento prioritário é formado por pequenos escritórios brasileiros com
-duas ou mais pessoas que compartilham atividades. O usuário principal é o
-advogado ou gestor que distribui e acompanha demandas; advogados executores,
-revisores, estagiários e profissionais de apoio também utilizam o sistema. O
-pagador esperado é o proprietário, sócio ou gestor com poder de contratação.
-O problema prioritário é a dificuldade para acompanhar uma demanda
-quando responsáveis, prioridades, revisão, documentos e datas não estão
-relacionados ou são atualizados de forma inconsistente. A necessidade central é
-uma visão compartilhada e confiável da próxima ação de cada caso.
-
-### 2.2 Proposta em linguagem simples
-
-O Web-Direito ajuda pequenas equipes de advocacia a acompanhar
-suas demandas em um único fluxo, mostrando o que precisa ser feito,
-quem executa, quem revisa e qual é a data combinada, com os
-documentos e o histórico ligados ao caso.
-
-### 2.3 Benefício principal e valor para cada usuário
-
-O benefício esperado é reduzir o esforço de conferir informações em
-mensagens, planilhas e pastas e tornar o andamento do trabalho mais claro. O
-gestor acompanha pendências; o advogado localiza contexto e documentos; o
-estagiário conhece a prioridade e a entrega esperada; o apoio administrativo
-registra e encontra informações sem repetir o mesmo trabalho em vários lugares.
-
-### 2.4 Diferenciais que serão testados
-
-A centralização já existe nos concorrentes estudados e não será apresentada
-como exclusividade. A hipótese de diferenciação é oferecer um percurso simples
-para equipes pequenas, com execução e revisão visíveis, informações
-relacionadas e baixa dificuldade de aprendizagem. Segurança, exportação e
-suporte são condições de adoção, não provas de superioridade comercial.
-O MVP verificará se essa organização é percebida como útil e fácil de usar. A
-expectativa é apoiada nos relatos de P01, P03, P04 e P07, mas os contrapontos
-de P02, P05, P06 e P08 impedem concluir que basta desenvolver o software para
-obter adesão ou substituir uma ferramenta já utilizada (EQUIPE WEB-DIREITO,
-2026b).
-
-## 3 BUSINESS MODEL CANVAS
-
-Modelo de negócio proposto para continuidade do empreendimento. Receita, canais e parcerias abaixo são hipóteses de operação; a
-atividade acadêmica não representa contratação comercial.
-
-Parceiros chave
-
-Atividades chave
-
-Proposta de valor
-
-Relacionamento
-
-Profissionais e
-escritórios que aceitem
-participar de testes.
-
-Desenvolver e manter o
-fluxo jurídico.
-Testar usabilidade.
-Apoiar implantação e
-uso.
-Proteger e recuperar os
-dados.
-
-Dar clareza ao trabalho
-compartilhado: cliente e
-caso relacionados a
-tarefas, executor,
-revisor, datas,
-documentos e histórico.
-
-Demonstração guiada.
-Orientação inicial curta.
-Suporte por canal
-definido.
-Coleta contínua de
-dificuldades.
-
-Fornecedores de
-hospedagem,
-armazenamento de
-objetos e envio
-transacional de e-mail.
-Redes de contatos para
-indicações.
-Não há parceria
-comercial ou
-institucional
-formalizada nesta etapa.
-
-Recursos chave
-Equipe de
-desenvolvimento.
-Código e documentação.
-Banco de dados e
-arquivos.
-Conhecimento da rotina
-pesquisada.
-
-Reduzir conferências e
-facilitar o
-acompanhamento da
-próxima ação.
-Simplicidade e adesão
-são hipóteses a testar
-com usuários.
-
-Canais
-Contato direto com
-pequenos escritórios.
-Indicações profissionais.
-Demonstrações pelo
-navegador.
-Página de apresentação
-futura.
-
-Segmentos de
-clientes
-Pequenos escritórios
-com duas ou mais
-pessoas que dividem
-atividades e percebem
-dificuldade de
-acompanhamento.
-Usuários: gestores,
-advogados, estagiários e
-apoio.
-Pagador: proprietário,
-sócio ou gestor.
-Autônomos satisfeitos
-com seu método não são
-o foco inicial.
-
-Estrutura de custos
-
-Fontes de receita
-
-Desenvolvimento e manutenção; hospedagem da aplicação e do
-PostgreSQL; armazenamento, backup e tráfego; e-mail; suporte e
-implantação. No projeto acadêmico, o esforço dos integrantes é um
-recurso limitado, mesmo sem desembolso.
-
-Hipótese de assinatura mensal por escritório. Limites de usuários e
-armazenamento e eventual cobrança de implantação serão
-avaliados após os testes. Preço, conversão e receita não foram
-validados; o MVP acadêmico será testado sem cobrança.
-
-Fonte: elaborado pela equipe a partir da decisão e dos critérios de adoção registrados na Entrega 2 (2026b).
-
-### 3.1 PREMISSAS COMERCIAIS E OPERACIONAIS
-
-A assinatura por escritório é uma hipótese compatível com uso recorrente e
-acesso por vários integrantes. O preço não será escolhido apenas para ficar
-abaixo dos concorrentes: deverá considerar os custos de operação, os recursos
-efetivamente usados, a capacidade de suporte e a disposição do cliente para
-contratar. Esses pontos serão investigados; não há receita projetada como
-resultado comprovado nesta entrega.
-A entrada no mercado, após a fase acadêmica, deverá começar por contato
-direto e indicações, permitindo observar a implantação em uma equipe pequena
-antes de ampliar a divulgação. O contato com advogados já utilizado na pesquisa
-é um canal possível, sem presumir que os entrevistados serão clientes ou que
-aceitaram uma oferta comercial.
-O relacionamento inicial combinará demonstração do fluxo, orientação sobre
-registro de tarefas e um canal de suporte. P05 e P06 indicaram que hábitos e
-controles paralelos podem comprometer a adoção. A implantação deve orientar o
-registro de responsável, data, revisão e conclusão no sistema.
-
-### 3.2 Custos e limites da operação
-
-As despesas relevantes incluem aplicação, banco de dados, armazenamento
-de documentos, cópias de segurança, envio de e-mails, tráfego e atendimento. A
-execução local reduz desembolsos do protótipo, mas não elimina os custos de
-uma operação comercial. Planos gratuitos de terceiros não serão tratados como
-garantia de funcionamento gratuito permanente.
-O modelo dependerá da capacidade de manter dados disponíveis, separar os
-escritórios e oferecer exportação. O custo de transferência de informações
-também deverá ser observado nos testes, pois P05 e P06 destacaram segurança e
-possibilidade de saída como critérios de adoção.
-
-### 3.3 Hipóteses que permanecem abertas
-
-Hipótese
-
-Como investigar
-
-A equipe percebe ganho suficiente
-para adotar a solução.
-
-Observar tarefas reais de uso e comparar com o
-procedimento atual.
-
-O gestor aceitaria assinatura por
-escritório.
-
-Entrevistar o decisor após a demonstração,
-explorando condições e alternativas.
-
-A implantação pode ocorrer com
-orientação curta.
-
-Registrar tempo, dúvidas e pedidos de ajuda no
-primeiro uso.
-
-Os custos são compatíveis com um
-preço aceitável.
-
-Estimar infraestrutura e esforço de suporte depois
-de definir volume e uso.
-
-## 4 PERSONAL BUSINESS MODEL CANVAS DA EQUIPE
-
-Reflexão sobre a equipe acadêmica. A divisão representa responsabilidades e competências mobilizadas no projeto, sem pressupor
-dedicação integral, especializações ou apoios não confirmados.
-
-Quem nos ajuda
-
-O que fazemos
-
-Como ajudamos
-
-Participantes acessíveis
-por contatos e
-indicações, conforme a
-pesquisa.
-
-Traduzir relatos em
-requisitos.
-Desenvolver os
-módulos.
-Integrar e testar o fluxo.
-Documentar e validar
-decisões.
-
-Construímos uma forma
-compartilhada de
-acompanhar casos e
-atividades.
-
-Quem somos e temos
-
-Para o grupo,
-transformamos
-conceitos de
-empreendedorismo e
-desenvolvimento em um
-produto testável.
-
-Professor e materiais da
-disciplina como
-orientação acadêmica.
-Documentação das
-tecnologias e
-colaboração entre os
-cinco integrantes.
-Apoios externos
-dependem de
-disponibilidade e
-consentimento.
-
-Cinco estudantes de SI.
-Base técnica
-implementada.
-Repositório e
-documentação.
-Programação e
-pesquisa.
-
-Relacionamos executor,
-revisor, datas,
-documentos e histórico.
-
-Como nos
-relacionamos
-Revisões entre colegas.
-Registro de decisões.
-Observação de testes.
-Escuta sem induzir
-aprovação.
-
-Quem ajudamos
-Gestores e integrantes
-de pequenas equipes
-jurídicas com
-dificuldades de
-acompanhamento.
-
-Como chegamos
-
-A equipe acadêmica,
-que precisa integrar
-módulos e explicar o
-produto.
-
-GitHub para trabalho e
-evidências.
-Reuniões do grupo.
-Contatos e indicações
-para pesquisa.
-Demonstração do MVP.
-
-A rede disponível não
-garante
-representatividade nem
-contratação; novas
-interações precisam ser
-agendadas.
-
-O que investimos
-
-O que ganhamos
-
-Tempo de estudo, implementação, integração, documentação e
-testes. Esforço para agendar participantes e conciliar graduação e
-demais atividades. Limitações: prazo curto, disponibilidade parcial
-e domínio jurídico a aprofundar.
-
-Aprendizado em validação de problemas, colaboração e produto;
-experiência técnica e de comunicação; entrega acadêmica
-demonstrável e portfólio. Possibilidade de continuidade futura,
-sem promessa de clientes ou renda.
-
-Fonte: equipe do Web-Direito, a partir da Entrega 1 e da divisão atual de módulos. Revisão e validação são colaborativas.
-
-## 5 VISÃO DO PRODUTO E JORNADA PRINCIPAL
-
-O Web-Direito é uma aplicação web de acompanhamento do trabalho
-jurídico para pequenas equipes. Relaciona clientes, casos e processos a tarefas,
-revisores, documentos, datas e compromissos, com acesso por papel e
-permissões. O objetivo é permitir que o escritório compreenda a situação de uma
-demanda sem reconstruí-la a partir de conversas e registros dispersos.
-O usuário principal do fluxo é o advogado ou gestor que distribui e
-acompanha o trabalho. O resultado esperado é uma demanda registrada com
-seus documentos, responsáveis e próxima ação, cujo andamento e conclusão
-possam ser consultados pela equipe autorizada.
-Quadro 2 - Jornada que será demonstrada e testada
-
-Etapa
-
-Ação principal
-
-Resultado esperado
-
-1. Acesso
-
-Proprietário cria o escritório e
-cadastra a equipe; integrante realiza
-primeiro acesso.
-
-Ambiente e permissões
-definidos.
-
-2. Cliente
-
-Registrar ou localizar o cliente e
-conferir possíveis duplicidades.
-
-Cadastro único no escritório.
-
-3. Caso
-
-Abrir a demanda, vincular cliente,
-equipe e processo quando aplicável.
-
-Contexto do trabalho
-identificado.
-
-4. Documentos
-
-Anexar o material necessário e
-identificar sua versão.
-
-Arquivos ligados à demanda.
-
-5. Execução
-
-Criar tarefa com responsável, revisor,
-prioridade e datas confirmadas.
-
-Próxima ação e atribuições
-claras.
-
-6. Revisão
-
-Registrar andamento e conferir a
-etapa de revisão.
-
-A elaboração não é confundida
-com conclusão integral.
-
-7. Consulta
-
-Consultar painel, agenda e histórico;
-confirmar conclusão.
-
-Pendências e acontecimentos
-visíveis.
-
-Fonte: elaborado pela equipe para a proposta de MVP. A jornada ainda será testada com usuários.
+*Fonte: elaborado pela equipe para a proposta de MVP. A jornada ainda será testada com usuários.*
 
 Caso é a demanda interna, que pode ser judicial, extrajudicial, administrativa ou
 consultiva. Processo é um procedimento associado ao caso. Uma tarefa possui data
@@ -984,32 +324,12 @@ Hospedagem pública não é condição para validar o fluxo em laboratório.
 
 ### 8.3 Riscos técnicos e tratamento
 
-Risco
-
-Tratamento previsto
-
-Modelos incompatíveis entre
-módulos
-
-Definir contratos compartilhados e integrar um caso
-fictício completo antes dos testes externos.
-
-Acesso a dados de outro escritório
-
-Escopo e autorização no backend, testes de acesso
-cruzado e referências de arquivos privadas.
-
-Credenciais ou armazenamento
-indisponíveis
-
-Configurar ambiente documental antes da validação;
-não simular upload como concluído.
-
-Mudança de escritório com dados
-antigos na tela
-
-Preservar a coordenação já implementada e testar os
-novos estados e consultas.
+| Risco | Tratamento previsto |
+| --- | --- |
+| Modelos incompatíveis entre módulos | Definir contratos compartilhados e integrar um caso fictício completo antes dos testes externos. |
+| Acesso a dados de outro escritório | Escopo e autorização no backend, testes de acesso cruzado e referências de arquivos privadas. |
+| Credenciais ou armazenamento indisponíveis | Configurar ambiente documental antes da validação; não simular upload como concluído. |
+| Mudança de escritório com dados antigos na tela | Preservar a coordenação já implementada e testar os novos estados e consultas. |
 
 ## 9 EQUIPE E PLANO DE DESENVOLVIMENTO
 
@@ -1164,84 +484,38 @@ do sistema nem evidências de funcionalidades já implementadas.
 
 ### 11.1 Painel operacional
 
-WEB-DIREITO
-
-Painel
-Clientes
-Casos
-Tarefas
-Documentos
-Agenda
-Equipe
-
-Escritório Exemplo | Usuário
+```text
+WEB-DIREITO                               Escritório Exemplo | Usuário
+Menu: Painel | Clientes | Casos | Tarefas | Documentos | Agenda | Equipe | Administração
 
 Visão do trabalho da equipe
-Hoje
+Hoje: 4 tarefas      Atrasadas: 2 tarefas      Prazos: 3 próximos
 
-Atrasadas
+Demanda          Responsável    Data    Situação
+Caso exemplo     Advogado A     05/11   Em andamento
+Caso exemplo     Advogado B     06/11   Pendente
+Revisão de peça   Advogado B     06/11   Em andamento
 
-Prazos
-
-4 tarefas
-
-2 tarefas
-
-3 próximos
-
-Demanda
-
-Responsável
-
-Data
-
-Situação
-
-Caso exemplo Advogado A
-
-05/11 Em andamento
-
-Caso exemplo Advogado B
-
-06/11 Pendente
-
-Revisão de peça Advogado B
-
-06/11 Em andamento
-
-Administração
 Filtros: período / responsável / prioridade
+```
 
 Figura 1 - Entrada para tarefas, datas e pendências. Cada indicador leva ao registro
 correspondente; os dados respeitam as permissões do usuário.
 
 ### 11.2 Cliente e informações relacionadas
 
-WEB-DIREITO
-
-Painel
-
-Escritório Exemplo | Usuário
+```text
+WEB-DIREITO                               Escritório Exemplo | Usuário
+Menu: Painel | Clientes | Casos | Tarefas | Documentos | Agenda | Equipe | Administração
 
 Cliente fictício
-
-Clientes
-Nome / razão social
-Casos
-Tarefas
-
-Responsável
+Nome / razão social                       Responsável
 CPF / CNPJ
-
-Documentos
 E-mail e telefone
-Agenda
-Equipe
 
 Casos | Documentos | Tarefas | Histórico
-
-Administração
 Caso exemplo / documento vinculado
+```
 
 Figura 2 - Cadastro com identificação e responsável, conectado a casos, documentos, tarefas e
 histórico do mesmo escritório.
@@ -1252,77 +526,38 @@ Fonte das figuras: elaborado pela equipe para esta proposta de MVP.
 O detalhe do caso reúne o contexto; a tarefa explicita a ação. A interface deve tornar
 visível a diferença entre elaborar um documento, revisá-lo e concluir a atividade.
 
+```text
 Caso e próxima ação
-WEB-DIREITO
-
-Escritório Exemplo | Usuário
-
-Painel
+WEB-DIREITO                               Escritório Exemplo | Usuário
+Menu: Painel | Clientes | Casos | Tarefas | Documentos | Agenda | Equipe | Administração
 
 Caso exemplo
-
-Clientes
-
 Cliente fictício | Responsável: Advogado A
-
-Casos
-
 Prioridade: alta | Situação: em andamento
-
-Tarefas
 Resumo | Processos | Documentos | Tarefas
-Documentos
-Agenda
 
 Próxima ação: revisar minuta
-
-Equipe
-
 Execução: Advogado A / Revisão: Advogado B
-
-Administração
-
 Prazo interno: 05/11 / judicial: 07/11
-
 Histórico: documento anexado / tarefa atualizada
+```
 
 Figura 3 - Demanda com cliente, equipe, situação, documentos e histórico. O processo judicial é
 um registro relacionado quando aplicável.
 
+```text
 Tarefa com executor e revisor
-WEB-DIREITO
-
-Painel
-
-Escritório Exemplo | Usuário
+WEB-DIREITO                               Escritório Exemplo | Usuário
+Menu: Painel | Clientes | Casos | Tarefas | Documentos | Agenda | Equipe | Administração
 
 Tarefa: preparar manifestação
-
-Clientes
 Caso vinculado: Caso exemplo
-Casos
-Tarefas
-
-Responsável: Advogado A
-
-Revisor: Advogado B
-
-Documentos
-Prazo interno: 05/11
-
-Prazo judicial: 07/11
-
-Agenda
-Situação: em andamento
-
-Prioridade: alta
-
-Equipe
-Administração
-
+Responsável: Advogado A       Revisor: Advogado B
+Prazo interno: 05/11          Prazo judicial: 07/11
+Situação: em andamento        Prioridade: alta
 Checklist: elaborar / revisar / confirmar conclusão
-
 Registrar andamento ou concluir após revisão
+```
 
 Figura 4 - Prazos interno e judicial separados. A revisão é registrada antes da conclusão da tarefa
 que a exige.
@@ -1334,91 +569,38 @@ Os documentos devem permanecer relacionados à demanda, e a agenda deve permitir
 localizar compromissos e seus participantes. A aparência final poderá mudar após o
 piloto.
 
+```text
 Arquivo atual e versões anteriores
-WEB-DIREITO
-
-Painel
-
-Escritório Exemplo | Usuário
+WEB-DIREITO                               Escritório Exemplo | Usuário
+Menu: Painel | Clientes | Casos | Tarefas | Documentos | Agenda | Equipe | Administração
 
 Documentos do caso
-
-Clientes
 Enviar documento / categoria / descrição
-Casos
-Tarefas
 
-Arquivo
+Arquivo               Versão   Autor        Ação
+Minuta exemplo.pdf    2        Advogado A   Baixar
+Procuração.pdf        1        Apoio        Baixar
 
-Documentos
-
-Minuta exemplo.pdf
-
-
-Advogado A Baixar
-
-Agenda
-
-Procuração.pdf
-
-
-Apoio
-
-Versão
-
-Autor
-
-Ação
-
-Baixar
-
-Equipe
 Histórico: versão 1 preservada / versão 2 atual
-Administração
-
 Acesso sujeito ao escritório e às permissões.
+```
 
 Figura 5 - Documento vinculado ao caso, com versão e autor. Download e consulta dependem da
 autorização do escritório.
 
+```text
 Compromissos da equipe
-WEB-DIREITO
-
-Painel
-
-Escritório Exemplo | Usuário
+WEB-DIREITO                               Escritório Exemplo | Usuário
+Menu: Painel | Clientes | Casos | Tarefas | Documentos | Agenda | Equipe | Administração
 
 Agenda da equipe
+Dia | Semana | Mês / Novo compromisso
 
-Clientes
-Dia | Semana | Mês
-
-/
-
-Novo compromisso
-
-Casos
-Tarefas
-Seg
-
-Ter
-
-Qua
-
-Qui
-
-Sex
-
-Documentos
-10h Reunião
-
-14h Audiência
-
-Agenda
-Equipe
-Administração
+Seg     Ter            Qua     Qui              Sex
+        10h Reunião            14h Audiência
 
 Participantes e local vinculados ao compromisso.
+```
 
 Figura 6 - Visões de dia, semana e mês, com referência ao cliente ou caso e registro de
 participantes, local e horários.
@@ -1429,116 +611,40 @@ Fonte das figuras: elaborado pela equipe para esta proposta de MVP.
 A gestão de acesso sustenta o uso compartilhado. O histórico permite entender quem
 registrou ou alterou uma informação, preservando os limites de visualização.
 
+```text
 Equipe do escritório
-WEB-DIREITO
-
-Painel
-
-Escritório Exemplo | Usuário
+WEB-DIREITO                               Escritório Exemplo | Usuário
+Menu: Painel | Clientes | Casos | Tarefas | Documentos | Agenda | Equipe | Administração
 
 Equipe e permissões
-
-Clientes
 Novo usuário / Pesquisar por nome ou e-mail
-Casos
-Tarefas
 
-Nome
+Nome       Papel          Vínculo   Ação
+Pessoa A   Proprietário   Ativo     Protegido
+Pessoa B   Advogado       Ativo     Editar
+Pessoa C   Estagiário     Inativo   Reativar
 
-Papel
-
-Documentos
-
-Pessoa A
-
-Proprietário
-
-Ativo
-
-Protegido
-
-Agenda
-
-Pessoa B
-
-Advogado
-
-Ativo
-
-Editar
-
-Equipe
-
-Pessoa C
-
-Estagiário
-
-Inativo
-
-Reativar
-
-Vínculo
-
-Ação
-
-Administração
 Papel, permissões e histórico administrativo
+```
 
 Figura 7 - Cadastro administrativo, papel, permissões e estado do vínculo. Usuários criados pelo
 escritório recebem senha temporária e realizam primeiro acesso.
 
+```text
 Eventos administrativos
-WEB-DIREITO
-
-Painel
-
-Escritório Exemplo | Usuário
+WEB-DIREITO                               Escritório Exemplo | Usuário
+Menu: Painel | Clientes | Casos | Tarefas | Documentos | Agenda | Equipe | Administração
 
 Histórico administrativo
-
-Clientes
 Filtrar por usuário, entidade, ação e período
-Casos
-Tarefas
-Documentos
-Agenda
-Equipe
 
-Quando
-
-Quem
-
-Ação
-
-Registro
-
-Hoje 09h
-
-Pessoa A
-
-Criou tarefa
-
-Caso exemplo
-
-Hoje 10h
-
-Pessoa B
-
-Nova versão
-
-Minuta exemplo
-
-Hoje 11h
-
-Pessoa A
-
-Concluiu
-
-Revisão
-
-Administração
+Quando     Quem       Ação          Registro
+Hoje 09h   Pessoa A   Criou tarefa  Caso exemplo
+Hoje 10h   Pessoa B   Nova versão   Minuta exemplo
+Hoje 11h   Pessoa A   Concluiu      Revisão
 
 Eventos preservados para consulta autorizada.
+```
 
 Figura 8 - Consulta de eventos com autor, data, ação e entidade. Os registros de auditoria não
 podem ser alterados pela aplicação comum.

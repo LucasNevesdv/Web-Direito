@@ -43,7 +43,7 @@ O software foi construído seguindo rigorosamente os princípios da **Clean Arch
 - **Backend**: Node.js (>= 20.19 / 22), TypeScript 5.6, Fastify 5 (baixo overhead e alta performance de I/O), Prisma ORM 6.19.3, Argon2id para derivação segura de senhas e tokens JWT (`jose`) em memória.
 - **Banco de Dados**: PostgreSQL 16+ com 14 migrações versionadas, constraints relacionais estritas por escritório (`office_id`) e triggers SQL duráveis para trilha de auditoria imutável.
 - **Frontend**: Single Page Application (SPA) responsiva em React 18, Vite 5 e Tailwind CSS, equipada com coordenador de sessões multi-abas baseado em `BroadcastChannel` e `Web Locks` API.
-- **Suíte de Testes Automatizados**: Vitest cobrindo 821 testes unitários, de rotas e de integração ponta a ponta (662 no backend e 159 no frontend), além de suítes de verificação concorrente contra PostgreSQL real.
+- **Suíte de Testes Automatizados**: Vitest cobrindo 821 testes unitários, de rotas e de componentes (662 no backend e 159 no frontend), além de suítes de verificação concorrente contra PostgreSQL real.
 
 ### 2.2. Instruções de Instalação e Execução Local
 O sistema foi concebido para execução ágil em ambiente de desenvolvimento local, sem dependência de serviços externos pagos ou infraestrutura de produção complexa:
@@ -51,7 +51,7 @@ O sistema foi concebido para execução ágil em ambiente de desenvolvimento loc
 1. **Clonar o Repositório**:
    ```bash
    git clone https://github.com/LucasNevesdv/Web-Direito.git
-   cd Web-Direito
+   cd Web-Direito/src
    ```
 
 2. **Instalação das Dependências (via pnpm workspace)**:
@@ -62,21 +62,22 @@ O sistema foi concebido para execução ágil em ambiente de desenvolvimento loc
 3. **Configuração de Variáveis de Ambiente**:
    Copiar o arquivo de exemplo do backend para configurar o acesso ao PostgreSQL local:
    ```bash
-   cp src/backend/.env.example src/backend/.env
-   # Ajustar a variável DATABASE_URL com usuário e senha do seu PostgreSQL local
+   # Somente se backend/.env ainda não existir:
+   cp backend/.env.example backend/.env
+   # Ajustar DATABASE_URL com usuário, senha e nome de um banco PostgreSQL já criado
    ```
 
 4. **Aplicação das Migrations e Geração do Prisma Client**:
    ```bash
-   cd src/backend
-   pnpm run prisma:generate
-   pnpm exec prisma migrate deploy
+   pnpm --filter ./backend run configure:auth
+   pnpm --filter ./backend run prisma:generate
+   pnpm --filter ./backend exec prisma migrate deploy
    ```
 
 5. **Injeção da Base de Dados de Demonstração (Mock Seed)**:
-   O projeto conta com um script automatizado que popula o banco com um escritório ativo de demonstração (*Advocacia do Marmelo*), composto por 8 clientes PF/PJ, 5 casos judiciais, 4 processos CNJ, 4 tarefas com prazos e 3 prazos judiciais:
+   Antes do seed, execute `pnpm dev`, cadastre escritório e proprietário em **Criar escritório** no navegador e interrompa o comando com Ctrl+C. Cadastre os demais membros se necessário. O script acrescenta 8 clientes PF/PJ, 5 casos, 4 processos CNJ, 4 tarefas e 3 prazos judiciais ao primeiro escritório ativo existente; não cria escritório, usuário ou senha. Use um banco local exclusivo de demonstração:
    ```bash
-   pnpm run seed:dev
+   pnpm --filter ./backend run seed:dev
    ```
 
 6. **Inicialização Conjunta (Backend + Frontend)**:
@@ -87,10 +88,10 @@ O sistema foi concebido para execução ágil em ambiente de desenvolvimento loc
    - **Frontend**: acessível em `http://localhost:5173`
    - **Backend API**: ativo em `http://127.0.0.1:3000`
 
-7. **Credenciais Pré-Configuradas para Demonstração**:
-   - **E-mail do Proprietário**: `marmelo@gmail.com`
-   - **Senha**: `SenhaForte@123`
-   - **E-mail do Advogado Associado**: `cocada@advogado.com.br`
+7. **Credenciais para Demonstração**:
+   Use as credenciais definidas no cadastro inicial e na gestão da equipe. As contas das capturas pertencem ao ambiente usado para demonstração; o seed não as cria automaticamente.
+
+Para demonstrar upload e versões de documentos, configure S3/MinIO conforme o [guia técnico](../../src/README.md). Sem `S3_BUCKET`, o envio responde 503. E-mails exigem o provedor configurado. No PowerShell, use `pnpm.cmd` se a execução de `pnpm.ps1` for bloqueada.
 
 ---
 
@@ -278,13 +279,13 @@ Abaixo estão descritas as sessões individuais realizadas com os 5 participante
 A compilação dos dados registrados durante as 5 sessões evidencia um desempenho consistente do MVP funcional, atendendo e superando as metas preliminares estabelecidas no plano da Entrega 3.
 
 ### 6.1. Taxa de Conclusão por Tarefa
-Todos os participantes completaram a jornada de ponta a ponta. Houve apenas 2 ocasiões pontuais em que o observador precisou esclarecer dúvidas de navegação (uma sobre a aba de tarefas vazia e outra sobre o clique na tabela de casos), resultando em **92% de taxa de conclusão independente sem auxílio**:
+Todos os participantes completaram a jornada de ponta a ponta. Houve apenas 2 ocasiões pontuais em que o observador precisou esclarecer dúvidas de navegação (uma em T1, ao localizar cliente/caso, e outra em T3, ao criar/distribuir tarefa), resultando em **92% de taxa de conclusão independente sem auxílio**:
 
 | Tarefa Avaliada | Conclusão sem Ajuda | Conclusão com Dúvida Leve | Taxa de Sucesso |
 | :--- | :---: | :---: | :---: |
 | **T1: Localizar cliente e abrir caso** | 4 / 5 | 1 / 5 | **100%** |
 | **T2: Iniciar envio de documento vinculado** | 5 / 5 | 0 / 5 | **100%** |
-| **T3: Criar tarefa com executor e revisor** | 5 / 5 | 0 / 5 | **100%** |
+| **T3: Criar tarefa com executor e revisor** | 4 / 5 | 1 / 5 | **100%** |
 | **T4: Compreender etapa de revisão** | 5 / 5 | 0 / 5 | **100%** |
 | **T5: Identificar prazo crítico no painel** | 5 / 5 | 0 / 5 | **100%** |
 | **Média Geral** | **23 / 25 (92%)** | **2 / 25 (8%)** | **100%** |
