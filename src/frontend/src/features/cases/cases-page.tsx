@@ -255,7 +255,12 @@ export function PaginaCasos() {
   const [total, setTotal] = useState(0);
   const [pagina, setPagina] = useState(1);
   const [pesquisa, setPesquisa] = useState('');
-  const [filtroRapido, setFiltroRapido] = useState<'ATIVOS' | 'MEUS_CASOS' | 'SEM_RESPONSAVEL' | 'SEM_ATIVIDADE' | 'ARQUIVADOS'>('ATIVOS');
+  const [filtroRapido, setFiltroRapido] = useState<'ATIVOS' | 'MEUS_CASOS' | 'SEM_RESPONSAVEL' | 'SEM_ATIVIDADE' | 'ARQUIVADOS'>(() =>
+    new URLSearchParams(window.location.search).has('semAtividadeDesdeDias') ? 'SEM_ATIVIDADE' : 'ATIVOS');
+  const [filtroPainel, setFiltroPainel] = useState(() => {
+    const q = new URLSearchParams(window.location.search), dias = Number(q.get('semAtividadeDesdeDias'));
+    return { vinculo: q.get('idVinculoResponsavel') ?? '', dias: [7, 30, 90].includes(dias) ? dias : 30 };
+  });
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -355,11 +360,12 @@ export function PaginaCasos() {
       } else if (filtroRapido === 'SEM_RESPONSAVEL') {
         params.set('semResponsavel', 'true');
       } else if (filtroRapido === 'SEM_ATIVIDADE') {
-        params.set('semAtividadeDesdeDias', '30');
+        params.set('semAtividadeDesdeDias', String(filtroPainel.dias));
       } else if (filtroRapido === 'ARQUIVADOS') {
         params.set('situacao', 'ARQUIVADO');
       }
 
+      if (filtroPainel.vinculo && ['ATIVOS', 'SEM_ATIVIDADE'].includes(filtroRapido)) params.set('idVinculoResponsavel', filtroPainel.vinculo);
       const res = await requisitarApi<{ casos: CasoItem[]; total: number }>(
         cliente,
         `/api/v1/casos?${params.toString()}`,
@@ -379,7 +385,24 @@ export function PaginaCasos() {
 
   useEffect(() => {
     void carregarCasos();
-  }, [pagina, filtroRapido]);
+  }, [pagina, filtroRapido, filtroPainel]);
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('id'), controle = new AbortController();
+    if (id) {
+      setCarregandoDetalhe(true);
+      void requisitarApi<CasoDetalhe>(cliente, `/api/v1/casos/${encodeURIComponent(id)}`, { signal: controle.signal })
+        .then(async (r) => {
+          if (controle.signal.aborted) return;
+          if (!r.ok) { setErro(r.mensagem); return; }
+          setCasoSelecionado(r.dados); setAbaDetalhe('info');
+          const eventos = await requisitarApi<EventoLinhaTempoCaso[]>(cliente, `/api/v1/casos/${encodeURIComponent(id)}/linha-do-tempo`, { signal: controle.signal });
+          if (!controle.signal.aborted && eventos.ok) setLinhaTempo(eventos.dados);
+        }).catch(() => { if (!controle.signal.aborted) setErro('Não foi possível abrir o caso.'); })
+        .finally(() => { if (!controle.signal.aborted) setCarregandoDetalhe(false); });
+    }
+    return () => controle.abort();
+  }, [cliente]);
 
   async function carregarOpcoesFormulario() {
     try {
@@ -887,6 +910,11 @@ export function PaginaCasos() {
 
   return (
     <Pagina caminho="/casos" titulo="Casos e Processos">
+      {(filtroPainel.vinculo || filtroRapido === 'SEM_ATIVIDADE') && <p>
+        {filtroPainel.vinculo && ['ATIVOS', 'SEM_ATIVIDADE'].includes(filtroRapido) && 'Responsável selecionado no painel. '}
+        {filtroRapido === 'SEM_ATIVIDADE' && `Sem atividade há pelo menos ${filtroPainel.dias} dias. `}
+        <button className="text-cyan-300 underline" onClick={() => { setPagina(1); setFiltroPainel({ vinculo: '', dias: 30 }); setFiltroRapido('ATIVOS'); }}>Limpar filtros do painel</button>
+      </p>}
       <div className="space-y-6">
         {/* Barra superior de ações e busca */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

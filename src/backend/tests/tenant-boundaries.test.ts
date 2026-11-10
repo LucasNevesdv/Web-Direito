@@ -11,10 +11,12 @@ describe('fronteiras de persistência multiempresa', () => {
     // A prova comportamental abaixo executa as operações sobre delegates instrumentados.
     expect(readdirSync(new URL('../src/infrastructure/prisma/', import.meta.url)).filter(n => n.startsWith('prisma-')).sort()).toEqual([
       'prisma-administration-repository.ts', // Negócio: escopo obrigatório pelo escritório da sessão; ver audit-admin.check.
+      'prisma-agenda-repository.ts', // Negócio: sessão e escritório em cada operação; prova real em agenda.check.ts.
       'prisma-authentication-repository.ts', // Global: autenticação por identidade e sessão.
       'prisma-business-links.ts', // Negócio: resolvedores recebem o escritório da sessão.
       'prisma-cases-repository.ts', // Negócio: escopo obrigatório por escritório (RF-031..RF-048).
       'prisma-clients-repository.ts', // Negócio: escopo obrigatório e unicidade por escritório (RF-028).
+      'prisma-dashboard-repository.ts', // Negócio: sessão, permissões e escritório; prova real em dashboard.check.ts.
       'prisma-document-repository.ts', // Negócio: escopo obrigatório; ver work-tenant-boundaries.
       'prisma-login-audit.ts', // Global: falha de login antes de haver sessão; escritórios vêm dos vínculos do próprio usuário.
       'prisma-office-registration-repository.ts', // Público: criação atômica de um novo tenant.

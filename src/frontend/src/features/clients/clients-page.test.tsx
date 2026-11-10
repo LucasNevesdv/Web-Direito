@@ -32,6 +32,18 @@ afterEach(() => {
 });
 
 describe('PaginaClientes (Frontend)', () => {
+
+  it('preserva clientes ativos e responsável do painel, permitindo remover o filtro', async () => {
+    window.history.replaceState(null, '', '/clientes?situacao=ATIVO&idVinculoResponsavel=vinculo-1');
+    const { cliente, requisicao } = await criarClienteAutenticado(() => respostaJson({ clientes: [clienteMock], total: 1 }));
+    renderizarComCliente(cliente, <PaginaClientes />);
+    await screen.findByText('Carlos Eduardo Santos');
+    const url = String(requisicao.mock.calls.find(([u]) => String(u).startsWith('/api/v1/clientes?'))![0]);
+    const q = new URL(url, 'http://localhost').searchParams;
+    expect(q.get('situacao')).toBe('ATIVO'); expect(q.get('idVinculoResponsavel')).toBe('vinculo-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar todos os responsáveis' }));
+    await waitFor(() => expect(requisicao.mock.calls.filter(([u]) => String(u).startsWith('/api/v1/clientes?')).at(-1)![0]).not.toContain('idVinculoResponsavel'));
+  });
   it('carrega e lista os clientes cadastrados', async () => {
     const { cliente } = await criarClienteAutenticado((url) => {
       if (url.startsWith('/api/v1/clientes?')) {

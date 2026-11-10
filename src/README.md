@@ -1,9 +1,25 @@
 # Legal System
 
+## Agenda (RF-078 a RF-088)
+
+O módulo está disponível em `/agenda`, com compromissos, participantes, vínculos, visões diária/semanal/mensal,
+filtros, confirmação de sobreposição, histórico e lembretes internos. Inclui tarefas e prazos na visão unificada.
+Consulte [regras, instalação, testes e limites da Agenda](docs/agenda.md) e o [registro de validação da Agenda](docs/agenda-validacao.md). Aplique as migrations e gere o Prisma
+antes de iniciar a versão atual.
+
+## Dashboard (RF-089 a RF-097)
+
+Disponível em `/painel`, reúne tarefas, prazos críticos/próximos, compromissos, casos sem movimentação
+e totais de clientes e casos ativos. Permite filtrar por período e responsável, respeita as permissões
+atuais do escritório e abre registros ou listas com os filtros correspondentes.
+Consulte [regras e verificação do Dashboard](docs/dashboard.md) e [resultados de validação](docs/dashboard-validacao.md).
+
+A [revisão técnica integrada](docs/revisao-integrada.md) registra os ajustes de permissões e navegação compartilhada e os resultados mais recentes dos testes de Agenda e Dashboard.
+
 SaaS jurídico Legal System. RF-001 a RF-014 entregam cadastro de escritório e
 proprietário, autenticação, recuperação e alteração de senha, equipe, sessões,
-seleção de escritório e isolamento dos módulos existentes. Clientes, casos e os
-demais módulos jurídicos permanecem nas próximas etapas.
+seleção de escritório e isolamento dos módulos existentes. A versão atual também inclui clientes,
+casos, processos, tarefas, prazos, documentos, administração, Agenda e Dashboard.
 
 ## Recuperação e alteração de senha
 

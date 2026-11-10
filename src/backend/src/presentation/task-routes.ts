@@ -4,6 +4,7 @@ import { TIPOS_VINCULO } from '../application/links/business-links.js';
 import type { GestaoTarefas } from '../application/tasks/manage-tasks.js';
 import { ORIGENS_PRAZO, PERIODOS_TAREFA, PRIORIDADES_TAREFA, SITUACOES_PRAZO, SITUACOES_TAREFA } from '../application/tasks/task-contracts.js';
 import { ErroTarefas } from '../application/tasks/task-policy.js';
+import { dataCivilValida } from '../application/tasks/civil-date.js';
 import { ESQUEMA_PAGINACAO, ESQUEMA_VINCULO, idDaRequisicao, protegerRotas, tokenDaRequisicao } from './protected-routes.js';
 
 const DATA = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -40,7 +41,7 @@ export function registrarRotasTarefas(aplicacao: FastifyInstance, tarefas: Gesta
     });
     rotas.get('/api/v1/tarefas', (requisicao) => tarefas.listarTarefas(token(requisicao), z.object({ ...ESQUEMA_PAGINACAO,
       periodo: z.enum(PERIODOS_TAREFA).default('TODAS'), idResponsavel: z.string().uuid().optional(), situacao: z.enum(SITUACOES_TAREFA).optional(),
-      prioridade: z.enum(PRIORIDADES_TAREFA).optional() }).strict().parse(requisicao.query)));
+      prioridade: z.enum(PRIORIDADES_TAREFA).optional(), ate: DATA.refine(dataCivilValida).optional() }).strict().parse(requisicao.query)));
     rotas.post('/api/v1/tarefas', opcoes, async (requisicao, resposta) =>
       resposta.status(201).send(await tarefas.criarTarefa(token(requisicao), TAREFA.strict().parse(requisicao.body))));
     rotas.get('/api/v1/tarefas/:id', (requisicao) => tarefas.consultarTarefa(token(requisicao), id(requisicao)));
@@ -56,6 +57,7 @@ export function registrarRotasTarefas(aplicacao: FastifyInstance, tarefas: Gesta
 
     rotas.get('/api/v1/prazos', (requisicao) => tarefas.listarPrazos(token(requisicao), z.object({ ...ESQUEMA_PAGINACAO,
       situacao: z.enum(SITUACOES_PRAZO).optional(), idResponsavel: z.string().uuid().optional(), idTarefa: z.string().uuid().optional(),
+      ate: DATA.refine(dataCivilValida).optional(), depois: DATA.refine(dataCivilValida).optional(),
       somenteCriticos: z.enum(['true', 'false']).default('false').transform((valor) => valor === 'true') }).strict().parse(requisicao.query)));
     rotas.post('/api/v1/prazos', opcoes, async (requisicao, resposta) =>
       resposta.status(201).send(await tarefas.criarPrazo(token(requisicao), PRAZO.strict().parse(requisicao.body))));

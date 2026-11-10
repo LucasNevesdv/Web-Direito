@@ -1,3 +1,87 @@
+enum AppointmentType {
+  AUDIENCIA
+  REUNIAO
+  PERICIA
+  EVENTO_INTERNO
+}
+
+enum AppointmentStatus {
+  AGENDADO
+  REALIZADO
+  CANCELADO
+}
+
+model Appointment {
+  id String @id @db.Uuid
+  officeId String @map("office_id") @db.Uuid
+  creatorId String @map("creator_id") @db.Uuid
+  title String @db.VarChar(200)
+  description String @db.VarChar(4000)
+  type AppointmentType
+  status AppointmentStatus @default(AGENDADO)
+  startsAt DateTime @map("starts_at") @db.Timestamptz(3)
+  endsAt DateTime @map("ends_at") @db.Timestamptz(3)
+  location String @db.VarChar(500)
+  remoteLink String @map("remote_link") @db.VarChar(2000)
+  reminderMinutes Int? @map("reminder_minutes")
+  clientId String? @map("client_id") @db.Uuid
+  caseId String? @map("case_id") @db.Uuid
+  processId String? @map("process_id") @db.Uuid
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  legalCase LegalCase? @relation(fields: [caseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  process LegalProcess? @relation(fields: [processId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  version Int @default(0)
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+  office Office @relation(fields: [officeId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  creator User @relation(fields: [creatorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  participants AppointmentParticipant[]
+  history AppointmentHistory[]
+  reminders AppointmentReminder[]
+  @@unique([id, officeId])
+  @@index([officeId, status, startsAt])
+  @@index([officeId, endsAt])
+  @@map("appointments")
+}
+
+model AppointmentParticipant {
+  appointmentId String @map("appointment_id") @db.Uuid
+  officeId String @map("office_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  appointment Appointment @relation(fields: [appointmentId, officeId], references: [id, officeId], onDelete: Restrict, onUpdate: Restrict)
+  membership Membership @relation(fields: [officeId, userId], references: [officeId, userId], onDelete: Restrict, onUpdate: Restrict)
+  @@id([appointmentId, userId])
+  @@index([officeId, userId])
+  @@map("appointment_participants")
+}
+
+model AppointmentHistory {
+  id String @id @db.Uuid
+  appointmentId String @map("appointment_id") @db.Uuid
+  actorId String @map("actor_id") @db.Uuid
+  action String @db.VarChar(40)
+  previous Json?
+  current Json
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  @@index([appointmentId, createdAt])
+  @@map("appointment_history")
+}
+
+model AppointmentReminder {
+  id String @id @db.Uuid
+  appointmentId String @map("appointment_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  dueAt DateTime @map("due_at") @db.Timestamptz(3)
+  readAt DateTime? @map("read_at") @db.Timestamptz(3)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  @@unique([appointmentId, userId])
+  @@index([userId, dueAt])
+  @@map("appointment_reminders")
+}
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -27,6 +111,7 @@ enum OfficeStatus {
 }
 
 model Office {
+  appointments Appointment[]
   id            String             @id @db.Uuid
   name          String             @db.VarChar(120)
   status        OfficeStatus       @default(ACTIVE)
@@ -70,6 +155,9 @@ enum MembershipRole {
 }
 
 model User {
+  appointmentsCreated Appointment[]
+  appointmentHistory AppointmentHistory[]
+  appointmentReminders AppointmentReminder[]
   id                   String                    @id @db.Uuid
   name                 String                    @db.VarChar(120)
   email                String                    @unique @db.VarChar(254)
@@ -157,6 +245,7 @@ model RecoveryEmailJob {
 }
 
 model Membership {
+  appointments AppointmentParticipant[]
   id          String              @id @db.Uuid
   officeId    String              @map("office_id") @db.Uuid
   userId      String              @map("user_id") @db.Uuid
@@ -526,6 +615,7 @@ enum ClientStatus {
 }
 
 model Client {
+  appointments Appointment[]
   id                      String                @id @db.Uuid
   officeId                String                @map("office_id") @db.Uuid
   type                    ClientType
@@ -645,6 +735,7 @@ enum ProcessInstance {
 }
 
 model LegalCase {
+  appointments Appointment[]
   id                      String              @id @db.Uuid
   officeId                String              @map("office_id") @db.Uuid
   title                   String              @db.VarChar(160)
@@ -729,6 +820,7 @@ model CaseParty {
 }
 
 model LegalProcess {
+  appointments Appointment[]
   id              String              @id @db.Uuid
   officeId        String              @map("office_id") @db.Uuid
   caseId          String              @map("case_id") @db.Uuid

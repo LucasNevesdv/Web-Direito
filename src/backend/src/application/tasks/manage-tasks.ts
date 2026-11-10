@@ -1,4 +1,5 @@
 import type { TokensAcesso } from '../authentication/authentication-contracts.js';
+import { podeVisualizarVinculo } from '../links/link-policy.js';
 import type { TipoVinculo, Vinculo } from '../links/business-links.js';
 import { dataCivilValida, hojeNoFuso, somarDias } from './civil-date.js';
 import { estadoDaTarefa, type AlteracaoChecklist, type EstadoPrazo, type FiltroPrazos, type FiltroTarefas, type OperacoesTarefas, type OrigemPrazo,
@@ -49,7 +50,10 @@ export class GestaoTarefas {
       podeGerirPrazos: PoliticaTarefas.podeGerirPrazos(operacoes.autor), idUsuario: operacoes.autor.idUsuario, membros: await operacoes.listarMembros() }));
   }
   async pesquisarVinculos(token: string, tipo: TipoVinculo, pesquisa: string) {
-    return this.executar(token, (operacoes) => operacoes.vinculos.pesquisar(tipo, pesquisa.trim(), 20));
+    return this.executar(token, (operacoes) => {
+      if (!podeVisualizarVinculo(operacoes.autor, tipo)) throw new ErroTarefas('PROIBIDO');
+      return operacoes.vinculos.pesquisar(tipo, pesquisa.trim(), 20);
+    });
   }
 
   async listarTarefas(token: string, filtro: Omit<FiltroTarefas, 'hoje'>) {
@@ -110,7 +114,7 @@ export class GestaoTarefas {
     return anterior;
   }
 
-  async listarPrazos(token: string, filtro: Omit<FiltroPrazos, 'ate'> & { somenteCriticos: boolean }) {
+  async listarPrazos(token: string, filtro: FiltroPrazos & { somenteCriticos: boolean }) {
     return this.executar(token, async (operacoes) => {
       const hoje = this.hoje();
       const { somenteCriticos, ...restante } = filtro;

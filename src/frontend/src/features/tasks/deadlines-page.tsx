@@ -14,7 +14,11 @@ export function PaginaPrazos() {
   const { cliente } = useAutenticacao();
   const idTarefa = new URLSearchParams(window.location.search).get('tarefa');
   const [configuracao, definirConfiguracao] = useState<ConfiguracaoTarefas | null>(null);
-  const [filtros, definirFiltros] = useState({ situacao: 'PENDENTE', idResponsavel: '', somenteCriticos: false });
+  const [filtros, definirFiltros] = useState(() => {
+    const q = new URLSearchParams(window.location.search);
+    return { situacao: 'PENDENTE', idResponsavel: q.get('idResponsavel') ?? '', somenteCriticos: q.get('somenteCriticos') === 'true',
+      ate: q.get('ate') ?? '', depois: q.get('depois') ?? '' };
+  });
   const [pagina, definirPagina] = useState(1);
   const [prazos, definirPrazos] = useState<PrazoJudicial[]>([]), [total, definirTotal] = useState(0);
   const [formulario, definirFormulario] = useState<{ dados: Formulario; prazo?: PrazoJudicial } | null>(null);
@@ -34,6 +38,8 @@ export function PaginaPrazos() {
     if (filtros.situacao && !filtros.somenteCriticos) consulta.set('situacao', filtros.situacao);
     if (filtros.idResponsavel) consulta.set('idResponsavel', filtros.idResponsavel);
     if (idTarefa) consulta.set('idTarefa', idTarefa);
+    if (filtros.ate && !filtros.somenteCriticos) consulta.set('ate', filtros.ate);
+    if (filtros.depois && !filtros.somenteCriticos) consulta.set('depois', filtros.depois);
     void requisitarApi<{ prazos: PrazoJudicial[]; total: number }>(cliente, `/api/v1/prazos?${consulta}`, { signal: controle.signal })
       .then((resposta) => { if (controle.signal.aborted) return; if (resposta.ok) { definirPrazos(resposta.dados.prazos); definirTotal(resposta.dados.total); } else definirErro(resposta.mensagem); })
       .catch(() => { if (!controle.signal.aborted) definirErro('Não foi possível carregar os prazos.'); })
@@ -41,6 +47,13 @@ export function PaginaPrazos() {
     return () => controle.abort();
   }, [cliente, filtros, pagina, revisao, idTarefa]);
 
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('id'), controle = new AbortController();
+    if (id) void requisitarApi<PrazoJudicial>(cliente, `/api/v1/prazos/${encodeURIComponent(id)}`, { signal: controle.signal })
+      .then((r) => { if (!controle.signal.aborted) { if (r.ok) definirSelecionado(r.dados); else definirErro(r.mensagem); } })
+      .catch(() => { if (!controle.signal.aborted) definirErro('Não foi possível abrir o prazo.'); });
+    return () => controle.abort();
+  }, [cliente]);
   function aoAtualizar(prazo: PrazoJudicial, aviso: string) { definirSelecionado(prazo); definirFormulario(null); definirMensagem(aviso); definirErro(''); definirRevisao((atual) => atual + 1); }
   const novo = (): Formulario => ({ descricao: '', dataLimite: '', origem: 'INTIMACAO', detalhesOrigem: '', idResponsavel: configuracao?.idUsuario ?? '', idTarefa, vinculo: null });
 
@@ -48,6 +61,8 @@ export function PaginaPrazos() {
     <p className="text-slate-300">A data é informada e confirmada pelo advogado conforme o documento de origem; o sistema não calcula dias úteis.
       {configuracao && <> Prazos pendentes até {configuracao.diasPrazoCritico} dia(s) à frente são críticos e escalados a proprietários e administradores.</>}</p>
     {idTarefa && <p role="note">Exibindo prazos da tarefa selecionada. <a className="text-cyan-300 underline" href="/prazos">Ver todos</a></p>}
+    {!filtros.somenteCriticos && (filtros.ate || filtros.depois) && <p>Vencimentos {filtros.depois && `após ${dataBrasileira(filtros.depois)}`} {filtros.ate && `até ${dataBrasileira(filtros.ate)}`}.
+      {' '}<button className="text-cyan-300 underline" onClick={() => { definirPagina(1); definirFiltros({ ...filtros, ate: '', depois: '' }); }}>Remover limites de data</button></p>}
     {mensagem && <p role="status" className="text-cyan-300">{mensagem}</p>}{erro && <p role="alert" className="text-rose-300">{erro}</p>}
     <section aria-label="Filtros" className="grid gap-3 md:grid-cols-4">
       <label>Situação<select className={CAMPO} value={filtros.situacao} disabled={filtros.somenteCriticos} onChange={(evento) => { definirPagina(1); definirFiltros({ ...filtros, situacao: evento.target.value }); }}>
