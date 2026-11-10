@@ -4,7 +4,7 @@ Projeto acadêmico desenvolvido na disciplina **Empreendedorismo em Sistemas de 
 
 - **Etapa Atual:** Entrega 4 — MVP Funcional e Validação da Solução (10/11/2026)
 - **Repositório:** [https://github.com/LucasNevesdv/Web-Direito](https://github.com/LucasNevesdv/Web-Direito)
-- **Relatório Completo da Entrega 4:** [docs/entrega-04/relatorio-entrega-04.md](docs/entrega-04/relatorio-entrega-04.md)
+- **Relatório Completo da Entrega 4:** [docs/entrega-04/Entrega-04.md](docs/entrega-04/Entrega-04.md)
 
 ---
 
@@ -49,28 +49,32 @@ O software foi desenvolvido seguindo os princípios da **Clean Architecture** e 
 
 ### Passo a Passo
 
+Comece na raiz do repositório. No PowerShell, use `pnpm.cmd` caso a execução de `pnpm.ps1` seja bloqueada. Para demonstrar upload, configure o armazenamento S3/MinIO conforme o [guia técnico](src/README.md); sem `S3_BUCKET`, o envio responde 503.
+
 1. **Instalar Dependências:**
    ```bash
+   cd src
    pnpm install
    ```
 
 2. **Configurar o Backend:**
    ```bash
-   cp src/backend/.env.example src/backend/.env
-   # Edite o src/backend/.env com os dados de acesso ao seu PostgreSQL local
+   # Somente se backend/.env ainda não existir:
+   cp backend/.env.example backend/.env
+   # Edite DATABASE_URL com os dados de acesso a um banco PostgreSQL já criado
    ```
 
 3. **Aplicar Migrações e Gerar o Prisma Client:**
    ```bash
-   cd src/backend
-   pnpm run prisma:generate
-   pnpm exec prisma migrate deploy
+   pnpm --filter ./backend run configure:auth
+   pnpm --filter ./backend run prisma:generate
+   pnpm --filter ./backend exec prisma migrate deploy
    ```
 
 4. **Injetar Dados de Demonstração (Mock Seed):**
-   Popula o banco com o escritório de testes (*Advocacia do Marmelo*), com 8 clientes, 5 casos, 4 processos, 4 tarefas e 3 prazos judiciais:
+   Antes do seed, execute `pnpm dev`, abra `http://localhost:5173` e cadastre o escritório e o proprietário em **Criar escritório**. Cadastre os demais membros, se necessário, e interrompa o comando com Ctrl+C. O seed adiciona 8 clientes, 5 casos, 4 processos, 4 tarefas e 3 prazos judiciais ao primeiro escritório ativo existente; não cria contas. Use um banco local exclusivo de demonstração:
    ```bash
-   pnpm run seed:dev
+   pnpm --filter ./backend run seed:dev
    ```
 
 5. **Iniciar a Aplicação (Backend + Frontend):**
@@ -81,9 +85,8 @@ O software foi desenvolvido seguindo os princípios da **Clean Architecture** e 
    - **Frontend:** `http://localhost:5173`
    - **Backend API:** `http://127.0.0.1:3000`
 
-6. **Credenciais Pré-Configuradas:**
-   - **E-mail:** `marmelo@gmail.com`
-   - **Senha:** `SenhaForte@123`
+6. **Credenciais de Acesso:**
+   Use o e-mail e a senha definidos no cadastro inicial. O seed não cria credenciais pré-configuradas.
 
 ---
 
