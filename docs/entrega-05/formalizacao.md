@@ -95,7 +95,67 @@ O regime considerado é o **Simples Nacional**. O detalhamento tributário fica 
 
 ## 3. Quadro societário e capital social simulado (Seção 27)
 
-*Em elaboração (Bloco 2 do plano).*
+### 3.1 Papéis dos sócios
+
+Os papéis partem da divisão de módulos da Entrega 3, que distribuiu o desenvolvimento do MVP entre os cinco integrantes. Na sociedade simulada, cada sócio continua responsável pela área do produto que já conduz e assume também uma frente do negócio.
+
+| Sócio | Área no produto (Entrega 3) | Função na sociedade (simulada) |
+| --- | --- | --- |
+| Lucas Marcelino Neves | Acesso, escritório, equipe, permissões, sessões e isolamento (RF-001 a RF-014) | Sócio administrador; gestão, finanças e tributação |
+| Diovani Da Cruz Mangia | Clientes; casos e processos (RF-015 a RF-048) | Formalização, contratos e relação societária |
+| Augusto Fernandes Carvalho | Tarefas e prazos; documentos (RF-049 a RF-077) | Produto e operação do fluxo de trabalho jurídico |
+| Matheus Pimenta | Agenda e dashboard (RF-078 a RF-097) | Experiência do usuário e indicadores |
+| Alexandre Bortone | Auditoria e histórico; administração e configurações (RF-098 a RF-117) | Segurança, conformidade e infraestrutura |
+
+### 3.2 Divisão das quotas
+
+A divisão é **igualitária: 20% para cada sócio**. Até aqui, os cinco integrantes contribuíram de forma equivalente: cada um assumiu um conjunto de módulos do MVP e participou da pesquisa, da documentação e da validação. Nenhum sócio aporta capital, tecnologia preexistente ou dedicação muito diferente da dos demais que justifique uma participação maior.
+
+A divisão igualitária vale para o capital. A proteção contra a saída precoce de um fundador (vesting e cliff) fica no acordo de fundadores ([acordo-fundadores.md](acordo-fundadores.md)), e não no contrato social.
+
+### 3.3 Capital social
+
+O capital social simulado é de **R$ 5.000,00**, dividido em **5.000 quotas de R$ 1,00** cada.
+
+O valor foi escolhido por três razões:
+
+1. **É compatível com a renda de estudantes de graduação:** R$ 1.000,00 por sócio.
+2. **Cobre os custos iniciais:**
+   - taxas da Junta Comercial;
+   - certificado digital;
+   - contador nos primeiros meses;
+   - infraestrutura mínima em nuvem.
+3. **Não há exigência legal:** a LTDA não tem capital mínimo (CC, art. 1.055).
+
+A integralização é em moeda corrente, em duas parcelas:
+
+- **50% no ato da constituição:** R$ 500,00 por sócio, R$ 2.500,00 no total;
+- **50% em até 12 meses** da assinatura do contrato social: os outros R$ 2.500,00.
+
+Enquanto o capital não estiver totalmente integralizado, todos os sócios respondem solidariamente pelo valor que falta (CC, art. 1.052).
+
+### 3.4 Administração
+
+**Lucas Marcelino Neves** é o sócio administrador isolado. Ele tem poderes de gestão e representa a sociedade, ativa e passivamente, em juízo e fora dele (CC, arts. 1.060 e 1.064).
+
+Alguns atos dependem de aprovação prévia dos sócios que representem a maioria do capital:
+
+- alienação ou oneração de bens da sociedade;
+- contratação de empréstimos ou dívidas acima do limite fixado no contrato social;
+- prestação de garantias em favor de terceiros.
+
+O limite exato e os quóruns ficam no contrato social ([contrato-social.md](contrato-social.md)).
+
+### 3.5 Quadro societário
+
+| Sócio | Quotas | Participação | Valor (R$) | Integralizado no ato (R$) | Função |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Lucas Marcelino Neves | 1.000 | 20% | 1.000,00 | 500,00 | Sócio administrador; gestão, finanças e tributação |
+| Diovani Da Cruz Mangia | 1.000 | 20% | 1.000,00 | 500,00 | Formalização, contratos e relação societária |
+| Augusto Fernandes Carvalho | 1.000 | 20% | 1.000,00 | 500,00 | Produto e operação do fluxo de trabalho jurídico |
+| Matheus Pimenta | 1.000 | 20% | 1.000,00 | 500,00 | Experiência do usuário e indicadores |
+| Alexandre Bortone | 1.000 | 20% | 1.000,00 | 500,00 | Segurança, conformidade e infraestrutura |
+| **Total** | **5.000** | **100%** | **5.000,00** | **2.500,00** | |
 
 ---
 
