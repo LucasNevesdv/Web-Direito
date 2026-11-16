@@ -225,3 +225,9 @@ Ferramentas de inteligência artificial foram usadas como apoio à pesquisa. Ela
 - REDESIM. Portal gov.br de abertura de empresas.
 - JUNTA COMERCIAL DO ESTADO DE MINAS GERAIS (JUCEMG). Tabela de preços e orientações para registro de sociedade limitada.
 - PREFEITURA MUNICIPAL DE LAVRAS. Inscrição municipal, alvará e NFS-e.
+- JUCEMG. Tabela de Preços. Disponível em: https://jucemg.mg.gov.br/pagina/52. Acesso em: 15/11/2026.
+- CONTABILIZEI. Quanto custa abrir empresa em Belo Horizonte. Disponível em: https://www.contabilizei.com.br/contabilidade-online/quanto-custa-abrir-empresa-em-belo-horizonte/. Acesso em: 15/11/2026.
+- OMIE. Qual é o valor do certificado digital A1 e A3 em 2026. Disponível em: https://www.omie.com.br/blog/qual-e-o-valor-do-certificado-digital-a1-e-a3-em-2026/. Acesso em: 15/11/2026.
+- AGILIZE. Quanto custa contador para pequena empresa em 2026. Disponível em: https://agilize.com.br/artigos/custo-contador-mensal-simples-nacional. Acesso em: 15/11/2026.
+- MEU CONTADOR ONLINE. Quanto custa um contador para pequenas empresas em 2026. Disponível em: https://www.meucontadoronline.com.br/blog/quanto-custa-contador-pequenas-empresas/. Acesso em: 15/11/2026.
+- NFE.IO. Lavras/MG: prefeitura integrada. Disponível em: https://nfe.io/docs/prefeituras-integradas/minas-gerais/lavras-mg-3138203/. Acesso em: 15/11/2026.
