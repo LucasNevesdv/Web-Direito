@@ -233,6 +233,18 @@ describe('PaginaCasos (Frontend)', () => {
     });
   });
 
+  it('abre os detalhes ao clicar em qualquer ponto da linha do caso', async () => {
+    const { cliente } = await criarClienteAutenticado((url) => {
+      if (url.startsWith('/api/v1/casos?')) return respostaJson({ casos: [casoMock], total: 1 });
+      if (url === '/api/v1/casos/caso-1') return respostaJson(casoDetalheMock);
+      if (url === '/api/v1/casos/caso-1/linha-do-tempo') return respostaJson([]);
+      return respostaJson({ clientes: [], membros: [] });
+    });
+    renderizarComCliente(cliente, <PaginaCasos />);
+    fireEvent.click(await screen.findByText(casoMock.titulo));
+    expect(await screen.findByText('Dossiê sobre cobrança de valores em aberto.')).toBeTruthy();
+  });
+
   it('exibe detalhes do caso e permite arquivar (RF-046)', async () => {
     let arquivou = false;
     const { cliente } = await criarClienteAutenticado((url, opcoes) => {

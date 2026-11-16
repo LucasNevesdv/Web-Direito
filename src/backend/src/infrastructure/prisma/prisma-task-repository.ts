@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type { DadosTokenAcesso } from '../../application/authentication/authentication-contracts.js';
-import { estadoDaTarefa, estadoDoPrazo, type EstadoPrazo, type EstadoTarefa, type EventoHistorico, type OperacoesTarefas,
+import { estadoDaTarefa, estadoDoPrazo, PERIODOS_TAREFA, type PeriodoTarefa, type EstadoPrazo, type EstadoTarefa, type EventoHistorico, type OperacoesTarefas,
   type RepositorioTarefas } from '../../application/tasks/task-contracts.js';
 import { ErroTarefas } from '../../application/tasks/task-policy.js';
 import { abrirContextoDoEscritorio, listarMembrosAtivos, membroAtivoDoEscritorio } from './office-access.js';
@@ -60,17 +60,20 @@ export class RepositorioTarefasPrisma implements RepositorioTarefas {
           consultarTarefa,
           listarTarefas: async (filtro) => {
             const hoje = dataDoBanco(filtro.hoje);
-            const periodo: Prisma.TaskWhereInput = filtro.periodo === 'HOJE' ? { status: { in: ABERTAS }, internalDueDate: hoje }
-              : filtro.periodo === 'FUTURAS' ? { status: { in: ABERTAS }, internalDueDate: { gt: hoje } }
-                : filtro.periodo === 'ATRASADAS' ? { status: { in: ABERTAS }, internalDueDate: { lt: hoje } } : {};
-            const where: Prisma.TaskWhereInput = { officeId: idEscritorio, ...periodo,
+            const onde = (periodo: PeriodoTarefa): Prisma.TaskWhereInput => ({ officeId: idEscritorio,
+              ...(periodo === 'HOJE' ? { status: { in: ABERTAS }, internalDueDate: hoje }
+                : periodo === 'FUTURAS' ? { status: { in: ABERTAS }, internalDueDate: { gt: hoje } }
+                  : periodo === 'ATRASADAS' ? { status: { in: ABERTAS }, internalDueDate: { lt: hoje } } : {}),
               ...(filtro.idResponsavel ? { responsibleId: filtro.idResponsavel } : {}),
               ...(filtro.prioridade ? { priority: PRIORIDADES_PRISMA[filtro.prioridade] } : {}),
               AND: [...(filtro.situacao ? [{ status: SITUACOES_TAREFA_PRISMA[filtro.situacao] }] : []),
-                ...(filtro.ate ? [{ internalDueDate: { lte: dataDoBanco(filtro.ate) } }] : [])] };
-            const registros = await transacao.task.findMany({ where, include: INCLUSAO_TAREFA, skip: (filtro.pagina - 1) * filtro.tamanhoPagina, take: filtro.tamanhoPagina,
+                ...(filtro.ate ? [{ internalDueDate: { lte: dataDoBanco(filtro.ate) } }] : [])] });
+            const registros = await transacao.task.findMany({ where: onde(filtro.periodo), include: INCLUSAO_TAREFA, skip: (filtro.pagina - 1) * filtro.tamanhoPagina, take: filtro.tamanhoPagina,
               orderBy: [{ internalDueDate: { sort: 'asc', nulls: 'last' } }, { priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] });
-            return { tarefas: registros.map(converterTarefa), total: await transacao.task.count({ where }) };
+            // Contagem por aba com os mesmos filtros, para a tela indicar onde há tarefas.
+            const contagens = Object.fromEntries(await Promise.all(PERIODOS_TAREFA.map(async (periodo) =>
+              [periodo, await transacao.task.count({ where: onde(periodo) })] as const))) as Record<PeriodoTarefa, number>;
+            return { tarefas: registros.map(converterTarefa), total: contagens[filtro.periodo], contagens };
           },
           criarTarefa: async (estado) => {
             const id = randomUUID(), agora = new Date();

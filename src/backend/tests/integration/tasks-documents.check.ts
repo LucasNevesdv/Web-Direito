@@ -54,7 +54,10 @@ try {
   const tarefa = await tarefas.criarTarefa(token(a.advogado.contexto), { titulo: 'Protocolar contestação', descricao: '', prioridade: 'URGENTE',
     idResponsavel: a.advogado.id, idRevisor: a.dono.id, prazoInterno: somarDias(hoje, -1), vinculo: null });
   assert.equal((await tarefas.listarTarefas(token(a.dono.contexto), { periodo: 'ATRASADAS', prioridade: 'URGENTE', pagina: 1, tamanhoPagina: 20 })).total, 1);
-  assert.equal((await tarefas.listarTarefas(token(a.dono.contexto), { periodo: 'HOJE', pagina: 1, tamanhoPagina: 20 })).total, 0);
+  const hojeA = await tarefas.listarTarefas(token(a.dono.contexto), { periodo: 'HOJE', pagina: 1, tamanhoPagina: 20 });
+  assert.equal(hojeA.total, 0);
+  assert.deepEqual(hojeA.contagens, { TODAS: 1, HOJE: 0, FUTURAS: 0, ATRASADAS: 1 }, 'abas informam onde há tarefas');
+  assert.equal((await tarefas.listarTarefas(token(b.dono.contexto), { periodo: 'TODAS', pagina: 1, tamanhoPagina: 20 })).contagens.TODAS, 0);
   await assert.rejects(tarefas.criarTarefa(token(a.advogado.contexto), { titulo: 'Responsável alheio', descricao: '', prioridade: 'BAIXA', idResponsavel: b.advogado.id,
     idRevisor: null, prazoInterno: null, vinculo: null }), { codigo: 'RESPONSAVEL_INVALIDO' });
   await assert.rejects(tarefas.consultarTarefa(token(b.dono.contexto), tarefa.id), { codigo: 'NAO_ENCONTRADO' });

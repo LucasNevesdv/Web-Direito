@@ -47,6 +47,25 @@ describe('documentos', () => {
     expect(new Headers(download[1]!.headers).get('Authorization')).toBe('Bearer token-teste');
   });
 
+  it('abre o envio já vinculado quando chega pelo atalho da tarefa', async () => {
+    window.history.replaceState(null, '', '/documentos?novo=1&vinculoTipo=CASO&vinculoId=caso-1&tarefa=Protocolar%20peti%C3%A7%C3%A3o');
+    const { cliente, requisicao } = await criarClienteAutenticado((url, opcoes) => {
+      if (url.startsWith('/api/v1/documentos?')) return respostaJson({ documentos: [], total: 0 });
+      if (url === '/api/v1/documentos' && opcoes?.method === 'POST') return respostaJson(documento, 201);
+      if (url === '/api/v1/documentos/doc-1') return respostaJson({ ...documento, versoes: [versao] });
+      return respostaJson([], 200);
+    });
+    renderizarComCliente(cliente, <PaginaDocumentos />);
+    expect(await screen.findByText(/Será vinculado ao mesmo caso da tarefa\./)).toBeTruthy();
+    expect((screen.getByLabelText('Descrição (opcional)') as HTMLTextAreaElement).value).toBe('Anexo da tarefa: Protocolar petição');
+    fireEvent.change(screen.getByLabelText('Arquivo'), { target: { files: [new File(['pdf'], 'minuta.pdf', { type: 'application/pdf' })] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    await screen.findByText('Documento enviado.');
+    const envio = requisicao.mock.calls.find(([url, opcoes]) => url === '/api/v1/documentos' && opcoes?.method === 'POST')!;
+    const formulario = envio[1]!.body as FormData;
+    expect([formulario.get('vinculoTipo'), formulario.get('vinculoId')]).toEqual(['CASO', 'caso-1']);
+  });
+
   it('inativa somente após confirmação e informa preservação do histórico', async () => {
     const { cliente, requisicao } = await criarClienteAutenticado((url) => {
       if (url.startsWith('/api/v1/documentos?')) return respostaJson({ documentos: [documento], total: 1 });
