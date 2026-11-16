@@ -161,7 +161,47 @@ O limite exato e os quóruns ficam no contrato social ([contrato-social.md](cont
 
 ## 4. Fluxo pesquisado para abertura da empresa (Seção 29)
 
-*Em elaboração (Bloco 6 do plano).*
+> **Valores simulados.** Os custos e prazos da Seção 4.3 são estimativas para fins acadêmicos, montadas a partir de fontes oficiais e de levantamentos de mercado consultados em 15/11/2026. Os valores vindos de sites comerciais estão indicados como tal e precisam ser confirmados nas tabelas oficiais (JUCEMG e Prefeitura de Lavras) antes de qualquer uso real. O enquadramento de risco das atividades em Lavras também precisa ser confirmado.
+
+### 4.1 Visão geral
+
+Desde a integração promovida pela REDESIM, a abertura de uma LTDA em Minas Gerais é feita em grande parte por um único fluxo digital: a viabilidade, o registro na JUCEMG e a inscrição no CNPJ estão interligados. Desde a Lei nº 14.195/2021, o CNPJ passa a ser o identificador único da empresa nesse fluxo.
+
+### 4.2 Etapas
+
+1. **Consulta prévia de viabilidade.** Pedida pelo portal da REDESIM. A Prefeitura de Lavras analisa se as atividades (CNAEs) podem ser exercidas no endereço informado, e a JUCEMG analisa se o nome empresarial está disponível.
+2. **Documento Básico de Entrada (DBE).** Preenchido na Receita Federal, com os dados da empresa, dos sócios, dos CNAEs e do capital social. O protocolo do DBE acompanha o pedido de registro.
+3. **Registro do contrato social na JUCEMG.** Envio do contrato social ([contrato-social.md](contrato-social.md)) assinado digitalmente pelos sócios, com os documentos de identificação e o pagamento das taxas. O registro dá à sociedade personalidade jurídica (CC, art. 985).
+4. **Emissão do CNPJ.** Com o registro deferido, a Receita Federal libera o CNPJ no mesmo fluxo integrado.
+5. **Inscrição municipal e alvará.**
+   - A inscrição municipal na Prefeitura de Lavras é necessária porque a empresa presta serviço e recolhe ISS.
+   - As atividades de software são candidatas a **baixo risco**. Nesse caso, a Lei nº 13.874/2019 (Liberdade Econômica), art. 3º, I, dispensa alvará e outros atos públicos de liberação. O enquadramento precisa ser confirmado na classificação de risco adotada pelo Município ou, na falta dela, na Resolução CGSIM nº 51/2019.
+   - A **inscrição estadual não é necessária**, pois a empresa não vende mercadorias nem recolhe ICMS.
+6. **Providências após a abertura.**
+   - **Opção pelo Simples Nacional:** feita no Portal do Simples Nacional, dentro do prazo contado da inscrição no CNPJ e da última inscrição (municipal ou estadual) previsto na Resolução CGSN nº 140/2018. Fora do prazo, a opção só vale a partir do ano seguinte.
+   - **Certificado digital e-CNPJ:** usado para assinar documentos e acessar os sistemas da Receita.
+   - **Emissão de NFS-e:** habilitação no emissor nacional ou no sistema da Prefeitura de Lavras.
+   - **Contador:** contratação para escrituração, folha do pró-labore e apuração mensal do Simples (DAS).
+
+### 4.3 Tabela por etapa
+
+| Etapa | Órgão | Documento principal | Custo estimado (simulado) | Prazo estimado (simulado) | Fonte (data de consulta) |
+| --- | --- | --- | ---: | --- | --- |
+| 1. Viabilidade | Prefeitura de Lavras e JUCEMG, via REDESIM | Pedido de viabilidade (nome e endereço) | R$ 0,00 | 2 a 5 dias úteis | REDESIM/gov.br (15/11/2026); valor e prazo simulados |
+| 2. DBE | Receita Federal | DBE | R$ 0,00 | No mesmo dia | Receita Federal (15/11/2026) |
+| 3. Registro | JUCEMG | Contrato social, documentos dos sócios, comprovante das taxas | R$ 282,00 | 2 a 5 dias úteis | Contabilizei, valor de LTDA porte ME em MG (15/11/2026); confirmar na Tabela de Preços da JUCEMG |
+| 4. CNPJ | Receita Federal | Comprovante de inscrição no CNPJ | R$ 0,00 | Junto com o registro | Receita Federal (15/11/2026) |
+| 5. Inscrição municipal e alvará | Prefeitura de Lavras | Inscrição municipal; alvará dispensado se a atividade for de baixo risco | R$ 0,00 a R$ 150,00 | 5 a 10 dias úteis | Simulado; tabela de taxas de Lavras não localizada (15/11/2026) |
+| 6a. Simples Nacional | Receita Federal | Termo de opção | R$ 0,00 | Prazo da Res. CGSN 140/2018 | Portal do Simples Nacional (15/11/2026) |
+| 6b. Certificado digital | Autoridade certificadora | e-CNPJ A1, validade de 1 ano | R$ 235,00 por ano | 1 dia útil | Omie e levantamentos de mercado: R$ 180 a R$ 280 (15/11/2026) |
+| 6c. NFS-e | Prefeitura de Lavras / emissor nacional | Habilitação para emissão | R$ 0,00 | 1 a 3 dias úteis | Simulado; emissor nacional gratuito (15/11/2026) |
+| 6d. Contador | Escritório de contabilidade | Contrato de prestação de serviços | R$ 300,00 por mês | — | Agilize e Meu Contador Online: R$ 120 a R$ 600 por mês para serviços no Simples (15/11/2026) |
+
+**Total estimado para abrir e operar os 3 primeiros meses:** R$ 282,00 (JUCEMG) + até R$ 150,00 (Prefeitura) + R$ 235,00 (certificado) + R$ 900,00 (3 meses de contador) = **até R$ 1.567,00**.
+
+**Prazo total estimado:** de 2 a 4 semanas entre a viabilidade e a primeira NFS-e, se não houver exigência dos órgãos.
+
+O total cabe no capital integralizado no ato (R$ 2.500,00), conforme a justificativa do capital social na Seção 3.3. A diferença, de cerca de R$ 930,00, cobre a infraestrutura mínima em nuvem dos primeiros meses.
 
 ---
 
@@ -180,3 +220,8 @@ Ferramentas de inteligência artificial foram usadas como apoio à pesquisa. Ela
 - BRASIL. Lei nº 13.874, de 20 de setembro de 2019. Lei da Liberdade Econômica.
 - BRASIL. Lei nº 8.906, de 4 de julho de 1994. Estatuto da Advocacia e da OAB.
 - COMITÊ GESTOR DO SIMPLES NACIONAL. Resolução CGSN nº 140, de 22 de maio de 2018 (Anexo XI: ocupações permitidas ao MEI).
+- BRASIL. Lei nº 14.195, de 26 de agosto de 2021. Facilitação para abertura de empresas.
+- COMITÊ PARA GESTÃO DA REDESIM (CGSIM). Resolução CGSIM nº 51, de 11 de junho de 2019. Classificação de risco das atividades.
+- REDESIM. Portal gov.br de abertura de empresas.
+- JUNTA COMERCIAL DO ESTADO DE MINAS GERAIS (JUCEMG). Tabela de preços e orientações para registro de sociedade limitada.
+- PREFEITURA MUNICIPAL DE LAVRAS. Inscrição municipal, alvará e NFS-e.
