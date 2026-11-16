@@ -1,6 +1,6 @@
 # Contrato Social Acadêmico Simulado — Web-Direito Tecnologia LTDA
 
-> **Documento acadêmico simulado.** Elaborado para a disciplina Empreendedorismo em Sistemas de Informação (UFLA, 2026/2), com base na estrutura do modelo de contrato de sociedade limitada da JUCEMG/DREI. Não tem validade jurídica, não foi assinado e não foi registrado em órgão público. Os dados pessoais além dos nomes dos integrantes são fictícios.
+> **Documento acadêmico simulado.** Elaborado para a disciplina Empreendedorismo em Sistemas de Informação (UFLA, 2026/2), com base no Manual de Registro de Sociedade Limitada do DREI (IN DREI nº 81/2020, Anexo IV). Contém todas as cláusulas obrigatórias previstas no item 3 do manual. Não tem validade jurídica, não foi assinado e não foi registrado em órgão público. Os dados pessoais além dos nomes dos integrantes são fictícios.
 
 **Responsável:** Diovani Da Cruz Mangia · **Item do pacote final:** 13
 
@@ -8,11 +8,11 @@
 
 ## Qualificação dos sócios
 
-1. **Alexandre Bortone**, brasileiro, [estado civil fictício], estudante, portador do RG [RG fictício] e inscrito no CPF sob o nº [CPF fictício], residente e domiciliado em [endereço fictício], Lavras/MG;
-2. **Augusto Fernandes Carvalho**, brasileiro, [estado civil fictício], estudante, portador do RG [RG fictício] e inscrito no CPF sob o nº [CPF fictício], residente e domiciliado em [endereço fictício], Lavras/MG;
-3. **Lucas Marcelino Neves**, brasileiro, [estado civil fictício], estudante, portador do RG [RG fictício] e inscrito no CPF sob o nº [CPF fictício], residente e domiciliado em [endereço fictício], Lavras/MG;
-4. **Matheus Pimenta**, brasileiro, [estado civil fictício], estudante, portador do RG [RG fictício] e inscrito no CPF sob o nº [CPF fictício], residente e domiciliado em [endereço fictício], Lavras/MG;
-5. **Diovani Da Cruz Mangia**, brasileiro, [estado civil fictício], estudante, portador do RG [RG fictício] e inscrito no CPF sob o nº [CPF fictício], residente e domiciliado em [endereço fictício], Lavras/MG.
+1. **Alexandre Bortone**, brasileiro, [estado civil fictício], nascido em [data de nascimento fictícia], estudante, portador do RG [RG fictício] e inscrito no CPF sob o nº [CPF fictício], residente e domiciliado em [endereço fictício], Lavras/MG, CEP [CEP fictício];
+2. **Augusto Fernandes Carvalho**, brasileiro, [estado civil fictício], nascido em [data de nascimento fictícia], estudante, portador do RG [RG fictício] e inscrito no CPF sob o nº [CPF fictício], residente e domiciliado em [endereço fictício], Lavras/MG, CEP [CEP fictício];
+3. **Lucas Marcelino Neves**, brasileiro, [estado civil fictício], nascido em [data de nascimento fictícia], estudante, portador do RG [RG fictício] e inscrito no CPF sob o nº [CPF fictício], residente e domiciliado em [endereço fictício], Lavras/MG, CEP [CEP fictício];
+4. **Matheus Pimenta**, brasileiro, [estado civil fictício], nascido em [data de nascimento fictícia], estudante, portador do RG [RG fictício] e inscrito no CPF sob o nº [CPF fictício], residente e domiciliado em [endereço fictício], Lavras/MG, CEP [CEP fictício];
+5. **Diovani Da Cruz Mangia**, brasileiro, [estado civil fictício], nascido em [data de nascimento fictícia], estudante, portador do RG [RG fictício] e inscrito no CPF sob o nº [CPF fictício], residente e domiciliado em [endereço fictício], Lavras/MG, CEP [CEP fictício].
 
 Os sócios acima qualificados constituem uma sociedade limitada, que se regerá pelas cláusulas a seguir e, nos casos omissos, pelos arts. 1.052 a 1.087 da Lei nº 10.406/2002 (Código Civil).
 
@@ -165,5 +165,5 @@ Lavras/MG, [data simulada].
 - BRASIL. Lei nº 10.406, de 10 de janeiro de 2002. Código Civil.
 - BRASIL. Lei Complementar nº 123, de 14 de dezembro de 2006. Estatuto Nacional da Microempresa e da Empresa de Pequeno Porte.
 - BRASIL. Lei nº 8.906, de 4 de julho de 1994. Estatuto da Advocacia e da OAB.
-- DEPARTAMENTO NACIONAL DE REGISTRO EMPRESARIAL E INTEGRAÇÃO (DREI). Manual de Registro de Sociedade Limitada (Instrução Normativa DREI nº 81/2020, Anexo IV).
-- JUNTA COMERCIAL DO ESTADO DE MINAS GERAIS (JUCEMG). Modelos de atos para sociedade limitada.
+- DEPARTAMENTO NACIONAL DE REGISTRO EMPRESARIAL E INTEGRAÇÃO (DREI). Instrução Normativa DREI nº 81/2020, Anexo IV: Manual de Registro de Sociedade Limitada.
+- JUNTA COMERCIAL DO ESTADO DE GOIÁS (JUCEG). Contrato social: procedimentos e modelo (IN DREI nº 81/2020, Anexo IV). Disponível em: https://goias.gov.br/juceg/wp-content/uploads/sites/42/2021/09/Sociedade_limitada_CONST_Procedimentosemodelo-b60.pdf. Acesso em: 15/11/2026.

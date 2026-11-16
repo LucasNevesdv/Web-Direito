@@ -6,7 +6,7 @@
 
 **Referência de classificação:** CNAE 2.3, subclasses, mantida pela CONCLA/IBGE.
 
-> **Conferência:** os códigos e as descrições foram conferidos em 15/11/2026 na base oficial da CNAE 2.3 do IBGE/CONCLA, pelo serviço de dados do IBGE (servicodados.ibge.gov.br). O enquadramento no Simples Nacional (anexo e Fator R) ainda precisa ser conferido no Anexo VI da Resolução CGSN nº 140/2018 e fica com o responsável pela pesquisa tributária.
+> **Conferência:** os códigos e as descrições foram conferidos em 15/11/2026 na base oficial da CNAE 2.3 do IBGE/CONCLA, pelo serviço de dados do IBGE (servicodados.ibge.gov.br). O enquadramento no Simples Nacional do CNAE principal e do 8599-6/03 foi conferido no texto compilado da LC 123/2006 (Planalto), na mesma data. O anexo dos CNAEs 6311-9/00, 6204-0/00 e 6209-1/00 ainda precisa ser confirmado no Anexo VI da Resolução CGSN nº 140/2018 e fica com o responsável pela pesquisa tributária.
 
 ---
 
@@ -22,16 +22,16 @@ O Web-Direito é um SaaS: os escritórios de advocacia acessam pela internet um 
 
 | Código | Descrição | Justificativa | Simples Nacional |
 | --- | --- | --- | --- |
-| **6203-1/00** | Desenvolvimento e licenciamento de programas de computador não customizáveis | É a receita principal: o mesmo software é licenciado a todos os escritórios, por assinatura, sem adaptação para cada cliente. | Permitido. Anexo III ou V, conforme o Fator R (LC 123/2006, art. 18, §5º-J e §5º-M) |
+| **6203-1/00** | Desenvolvimento e licenciamento de programas de computador não customizáveis | É a receita principal: o mesmo software é licenciado a todos os escritórios, por assinatura, sem adaptação para cada cliente. | Permitido. Anexo III ou V, conforme o Fator R (LC 123/2006, art. 18, §5º-D, V, e §5º-M, II) |
 
 ## 3. CNAEs secundários
 
 | Código | Descrição | Justificativa | Simples Nacional |
 | --- | --- | --- | --- |
-| 6311-9/00 | Tratamento de dados, provedores de serviços de aplicação e serviços de hospedagem na internet | O software é entregue como serviço na internet; a sociedade hospeda a aplicação e os dados dos escritórios. | Permitido. Anexo III ou V, conforme o Fator R |
-| 6204-0/00 | Consultoria em tecnologia da informação | Apoio ao escritório na organização do fluxo de demandas durante a implantação. | Permitido. Anexo III ou V, conforme o Fator R |
-| 6209-1/00 | Suporte técnico, manutenção e outros serviços em tecnologia da informação | Atendimento e suporte aos usuários dos escritórios assinantes. | Permitido. Anexo III ou V, conforme o Fator R |
-| 8599-6/03 | Treinamento em informática | Treinamento das equipes dos escritórios no uso da plataforma, se for cobrado à parte. | Permitido. Anexo III |
+| 6311-9/00 | Tratamento de dados, provedores de serviços de aplicação e serviços de hospedagem na internet | O software é entregue como serviço na internet; a sociedade hospeda a aplicação e os dados dos escritórios. | Permitido. Anexo a confirmar (provável III ou V, conforme o Fator R) |
+| 6204-0/00 | Consultoria em tecnologia da informação | Apoio ao escritório na organização do fluxo de demandas durante a implantação. | Permitido. Anexo a confirmar (provável III ou V, conforme o Fator R) |
+| 6209-1/00 | Suporte técnico, manutenção e outros serviços em tecnologia da informação | Atendimento e suporte aos usuários dos escritórios assinantes. | Permitido. Anexo a confirmar (provável III ou V, conforme o Fator R) |
+| 8599-6/03 | Treinamento em informática | Treinamento das equipes dos escritórios no uso da plataforma, se for cobrado à parte. | Permitido. Anexo III, sem Fator R (LC 123/2006, art. 18, §5º-B, I, escolas livres) |
 
 O CNAE 8599-6/03 só entra se a implantação ou o treinamento for oferecido como serviço cobrado. Se o treinamento estiver incluído na assinatura, ele pode ser retirado.
 
@@ -70,4 +70,5 @@ A última frase deixa claro que a plataforma é uma ferramenta usada por escrit�
 - BRASIL. Lei Complementar nº 123, de 14 de dezembro de 2006. Estatuto Nacional da Microempresa e da Empresa de Pequeno Porte.
 - BRASIL. Lei nº 8.906, de 4 de julho de 1994. Estatuto da Advocacia e da OAB.
 - COMITÊ GESTOR DO SIMPLES NACIONAL. Resolução CGSN nº 140, de 22 de maio de 2018.
+- BRASIL. Lei Complementar nº 123/2006, texto compilado. Disponível em: https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm. Acesso em: 15/11/2026.
 - IBGE. Comissão Nacional de Classificação (CONCLA). Classificação Nacional de Atividades Econômicas, CNAE 2.3 – Subclasses. Disponível em: https://concla.ibge.gov.br. Consulta pela API de dados do IBGE: https://servicodados.ibge.gov.br/api/v2/cnae/subclasses/{código}. Acesso em: 15/11/2026.

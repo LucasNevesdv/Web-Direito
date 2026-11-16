@@ -85,7 +85,7 @@ O empreendimento não presta serviço jurídico; ele licencia software para escr
 
 O regime considerado é o **Simples Nacional**. O detalhamento tributário fica com Lucas Marcelino Neves, responsável pela pesquisa tributária e pelos cenários financeiros (Seção 34). Para esse trabalho, estes pontos são relevantes:
 
-- A atividade principal candidata é a 6203-1/00, de licenciamento de software não customizável (ver [cnaes.md](cnaes.md)). No Simples, esse tipo de atividade fica sujeito ao **Fator R** (LC 123/2006, art. 18, §5º-J e §5º-M):
+- A atividade principal candidata é a 6203-1/00, de licenciamento de software não customizável (ver [cnaes.md](cnaes.md)). No Simples, o licenciamento de programas de computador está no art. 18, §5º-D, V, da LC 123/2006 e fica sujeito ao **Fator R** (art. 18, §5º-M, II):
   - se a folha de salários, incluído o pró-labore, for igual ou maior que 28% da receita bruta, a tributação segue o **Anexo III**;
   - se for menor, segue o **Anexo V**, que tem alíquotas maiores.
 - O pró-labore dos sócios, previsto no contrato social, influencia diretamente o Fator R.
@@ -175,10 +175,10 @@ Desde a integração promovida pela REDESIM, a abertura de uma LTDA em Minas Ger
 4. **Emissão do CNPJ.** Com o registro deferido, a Receita Federal libera o CNPJ no mesmo fluxo integrado.
 5. **Inscrição municipal e alvará.**
    - A inscrição municipal na Prefeitura de Lavras é necessária porque a empresa presta serviço e recolhe ISS.
-   - As atividades de software são candidatas a **baixo risco**. Nesse caso, a Lei nº 13.874/2019 (Liberdade Econômica), art. 3º, I, dispensa alvará e outros atos públicos de liberação. O enquadramento precisa ser confirmado na classificação de risco adotada pelo Município ou, na falta dela, na Resolução CGSIM nº 51/2019.
+   - As atividades de software são candidatas a **baixo risco**. Nesse caso, a Lei nº 13.874/2019 (Liberdade Econômica), art. 3º, I, dispensa alvará e outros atos públicos de liberação. Não foi localizada lei municipal de Lavras sobre o tema (pesquisa em 15/11/2026). Por isso, o enquadramento deve seguir a classificação de risco da REDESIM-MG, coordenada pela JUCEMG, ou, na falta dela, a Resolução CGSIM nº 51/2019, e precisa ser confirmado na consulta de viabilidade.
    - A **inscrição estadual não é necessária**, pois a empresa não vende mercadorias nem recolhe ICMS.
 6. **Providências após a abertura.**
-   - **Opção pelo Simples Nacional:** feita no Portal do Simples Nacional, dentro do prazo contado da inscrição no CNPJ e da última inscrição (municipal ou estadual) previsto na Resolução CGSN nº 140/2018. Fora do prazo, a opção só vale a partir do ano seguinte.
+   - **Opção pelo Simples Nacional:** para empresa em início de atividade, a Resolução CGSN nº 183/2025 alterou o art. 6º da Resolução CGSN nº 140/2018 para que o pedido de opção seja feito junto com a inscrição no CNPJ. A regra anterior dava até 30 dias do último deferimento de inscrição municipal ou estadual, dentro de 60 dias da abertura do CNPJ. Fora do prazo, a opção só pode ser feita em janeiro do ano seguinte.
    - **Certificado digital e-CNPJ:** usado para assinar documentos e acessar os sistemas da Receita.
    - **Emissão de NFS-e:** habilitação no emissor nacional ou no sistema da Prefeitura de Lavras.
    - **Contador:** contratação para escrituração, folha do pró-labore e apuração mensal do Simples (DAS).
@@ -192,7 +192,7 @@ Desde a integração promovida pela REDESIM, a abertura de uma LTDA em Minas Ger
 | 3. Registro | JUCEMG | Contrato social, documentos dos sócios, comprovante das taxas | R$ 282,00 | 2 a 5 dias úteis | Contabilizei, valor de LTDA porte ME em MG (15/11/2026); confirmar na Tabela de Preços da JUCEMG |
 | 4. CNPJ | Receita Federal | Comprovante de inscrição no CNPJ | R$ 0,00 | Junto com o registro | Receita Federal (15/11/2026) |
 | 5. Inscrição municipal e alvará | Prefeitura de Lavras | Inscrição municipal; alvará dispensado se a atividade for de baixo risco | R$ 0,00 a R$ 150,00 | 5 a 10 dias úteis | Simulado; tabela de taxas de Lavras não localizada (15/11/2026) |
-| 6a. Simples Nacional | Receita Federal | Termo de opção | R$ 0,00 | Prazo da Res. CGSN 140/2018 | Portal do Simples Nacional (15/11/2026) |
+| 6a. Simples Nacional | Receita Federal | Pedido de opção | R$ 0,00 | Junto com a inscrição no CNPJ (Res. CGSN 183/2025) | Res. CGSN 140/2018, art. 6º, alterada pela Res. CGSN 183/2025 (15/11/2026) |
 | 6b. Certificado digital | Autoridade certificadora | e-CNPJ A1, validade de 1 ano | R$ 235,00 por ano | 1 dia útil | Omie e levantamentos de mercado: R$ 180 a R$ 280 (15/11/2026) |
 | 6c. NFS-e | Prefeitura de Lavras / emissor nacional | Habilitação para emissão | R$ 0,00 | 1 a 3 dias úteis | Simulado; emissor nacional gratuito (15/11/2026) |
 | 6d. Contador | Escritório de contabilidade | Contrato de prestação de serviços | R$ 300,00 por mês | — | Agilize e Meu Contador Online: R$ 120 a R$ 600 por mês para serviços no Simples (15/11/2026) |
@@ -207,7 +207,7 @@ O total cabe no capital integralizado no ato (R$ 2.500,00), conforme a justifica
 
 ## Uso de inteligência artificial
 
-Ferramentas de inteligência artificial foram usadas como apoio à pesquisa. Elas ajudaram a localizar as leis aplicáveis e a apresentar os tipos jurídicos existentes para a comparação da Seção 2. A análise, a escolha da estrutura e a redação final foram feitas pela equipe, e as referências legais foram conferidas nas fontes oficiais.
+Ferramentas de inteligência artificial foram usadas como apoio à pesquisa. Elas ajudaram a localizar as leis aplicáveis e a apresentar os tipos jurídicos existentes para a comparação da Seção 2. A análise, a escolha da estrutura e a redação final foram feitas pela equipe. As referências legais devem ser conferidas nas fontes oficiais antes de qualquer uso real.
 
 ---
 
@@ -223,9 +223,11 @@ Ferramentas de inteligência artificial foram usadas como apoio à pesquisa. Ela
 - BRASIL. Lei nº 14.195, de 26 de agosto de 2021. Facilitação para abertura de empresas.
 - COMITÊ PARA GESTÃO DA REDESIM (CGSIM). Resolução CGSIM nº 51, de 11 de junho de 2019. Classificação de risco das atividades.
 - REDESIM. Portal gov.br de abertura de empresas.
+- COMITÊ GESTOR DO SIMPLES NACIONAL. Resolução CGSN nº 183, de 26 de setembro de 2025. Altera a Resolução CGSN nº 140/2018.
+- BRASIL. Lei Complementar nº 123/2006, texto compilado. Disponível em: https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm. Acesso em: 15/11/2026.
 - JUNTA COMERCIAL DO ESTADO DE MINAS GERAIS (JUCEMG). Tabela de preços e orientações para registro de sociedade limitada.
 - PREFEITURA MUNICIPAL DE LAVRAS. Inscrição municipal, alvará e NFS-e.
-- JUCEMG. Tabela de Preços. Disponível em: https://jucemg.mg.gov.br/pagina/52. Acesso em: 15/11/2026.
+- JUCEMG. Tabela de Preços (atualizada em 05/01/2026; valores em UFEMG convertidos em reais, não exibidos na página). Disponível em: https://jucemg.mg.gov.br/pagina/52. Acesso em: 15/11/2026.
 - CONTABILIZEI. Quanto custa abrir empresa em Belo Horizonte. Disponível em: https://www.contabilizei.com.br/contabilidade-online/quanto-custa-abrir-empresa-em-belo-horizonte/. Acesso em: 15/11/2026.
 - OMIE. Qual é o valor do certificado digital A1 e A3 em 2026. Disponível em: https://www.omie.com.br/blog/qual-e-o-valor-do-certificado-digital-a1-e-a3-em-2026/. Acesso em: 15/11/2026.
 - AGILIZE. Quanto custa contador para pequena empresa em 2026. Disponível em: https://agilize.com.br/artigos/custo-contador-mensal-simples-nacional. Acesso em: 15/11/2026.
