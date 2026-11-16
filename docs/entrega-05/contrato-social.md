@@ -38,11 +38,11 @@ c) a consultoria em tecnologia da informação;
 
 d) o suporte técnico, a manutenção e outros serviços em tecnologia da informação;
 
-e) o treinamento em desenvolvimento profissional e gerencial relacionado ao uso dos seus programas.
+e) o treinamento em informática relacionado ao uso dos seus programas.
 
 **Parágrafo único.** A sociedade não presta serviços jurídicos de qualquer natureza, inclusive consultoria, assessoria ou representação jurídica, atividades privativas da advocacia (Lei nº 8.906/1994, art. 1º).
 
-*CNAEs correspondentes em [cnaes.md](cnaes.md): 6203-1/00 (principal), 6311-9/00, 6204-0/00, 6209-1/00 e 8599-6/04.*
+*CNAEs correspondentes em [cnaes.md](cnaes.md): 6203-1/00 (principal), 6311-9/00, 6204-0/00, 6209-1/00 e 8599-6/03.*
 
 ---
 
