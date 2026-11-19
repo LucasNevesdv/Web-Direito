@@ -533,7 +533,8 @@ async function main() {
     }
   }
 
-  // 5. Tarefas (para alimentar /painel e /tarefas)
+  // 5. Tarefas (para alimentar /painel e /tarefas); as duas primeiras ficam ligadas ao primeiro caso para o atalho de anexo.
+  const casoDemonstracao = await prisma.legalCase.findFirst({ where: { officeId: escritorio.id, title: casosParaCriar[0]!.titulo }, select: { id: true } });
   const tarefasParaCriar = [
     {
       titulo: 'Revisar petição inicial de danos morais por queimação estomacal',
@@ -542,6 +543,7 @@ async function main() {
       prioridade: TaskPriority.HIGH,
       dias: 0, // Hoje
       idResponsavel: membroAdvogado.userId,
+      vinculadaAoCaso: true,
     },
     {
       titulo: 'Ligar para Dona Paçoca e solicitar notas fiscais do lote de amendoim',
@@ -550,6 +552,7 @@ async function main() {
       prioridade: TaskPriority.URGENT,
       dias: -3, // Atrasada!
       idResponsavel: membroAdvogado.userId,
+      vinculadaAoCaso: true,
     },
     {
       titulo: 'Preparar quesitos para perícia no óleo de soja e teste balístico de gotículas',
@@ -589,6 +592,7 @@ async function main() {
           responsibleId: t.idResponsavel,
           creatorId: membroProprietario.userId,
           internalDueDate: dataLimiteDia,
+          caseId: 'vinculadaAoCaso' in t && t.vinculadaAoCaso ? casoDemonstracao?.id ?? null : null,
           completedAt: t.status === TaskStatus.DONE ? agora : null,
           completedById: t.status === TaskStatus.DONE ? membroProprietario.userId : null,
           completionNote: t.status === TaskStatus.DONE ? 'Extintores devidamente testados com canela em pó.' : null,

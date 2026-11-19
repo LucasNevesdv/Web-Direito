@@ -93,6 +93,39 @@ describe('tarefas', () => {
   });
 });
 
+describe('ajustes da validação', () => {
+  it('mostra quantas tarefas há em cada aba e indica onde estão quando a aba atual está vazia', async () => {
+    const { cliente } = await criarClienteAutenticado((url) => {
+      if (url.endsWith('/configuracao')) return respostaJson(configuracao);
+      if (url.startsWith('/api/v1/tarefas?')) return respostaJson({ tarefas: url.includes('periodo=HOJE') ? [] : [tarefa], total: url.includes('periodo=HOJE') ? 0 : 1,
+        contagens: { HOJE: 0, ATRASADAS: 1, FUTURAS: 2, TODAS: 3 } });
+      return respostaJson({}, 404);
+    });
+    renderizarComCliente(cliente, <PaginaTarefas />);
+    expect(await screen.findByRole('button', { name: 'Hoje (0)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Futuras (2)' })).toBeTruthy();
+    expect(screen.getByText((_, elemento) => elemento?.tagName === 'P' && !!elemento.textContent?.includes('Há 3 tarefa(s) em Todas.'))).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Todas (3)' }));
+    expect(await screen.findByText('Protocolar petição')).toBeTruthy();
+  });
+
+  it('atalho de anexo leva ao envio de documento com o vínculo da tarefa', async () => {
+    const vinculada = { ...tarefa, vinculo: { tipo: 'CASO', id: 'caso-1' } };
+    const { cliente } = await criarClienteAutenticado((url) => {
+      if (url.endsWith('/configuracao')) return respostaJson(configuracao);
+      if (url.startsWith('/api/v1/tarefas?')) return respostaJson({ tarefas: [vinculada], total: 1, contagens: { HOJE: 1, ATRASADAS: 0, FUTURAS: 0, TODAS: 1 } });
+      if (url === '/api/v1/tarefas/tarefa-1') return respostaJson(vinculada);
+      return respostaJson({}, 404);
+    });
+    renderizarComCliente(cliente, <PaginaTarefas />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir' }));
+    const atalho = await screen.findByRole('link', { name: 'Anexar arquivo ao caso da tarefa' });
+    const destino = new URL(atalho.getAttribute('href')!, 'http://localhost');
+    expect(destino.pathname).toBe('/documentos');
+    expect(Object.fromEntries(destino.searchParams)).toEqual({ novo: '1', tarefa: 'Protocolar petição', vinculoTipo: 'CASO', vinculoId: 'caso-1' });
+  });
+});
+
 describe('prazos judiciais e painel', () => {
   it('exige confirmação da data antes de registrar prazo', async () => {
     window.history.replaceState(null, '', '/prazos');

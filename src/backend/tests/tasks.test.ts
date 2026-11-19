@@ -32,7 +32,7 @@ function preparar(papel: PapelVinculoEscritorio = 'ADVOGADO', idUsuario = membro
     vinculos: { existe: vi.fn(async () => false), pesquisar: vi.fn(async () => []) },
     membroAtivo: async (id) => id === membros.autor || id === membros.outro,
     listarMembros: async () => [pessoa(membros.autor), pessoa(membros.outro)],
-    listarTarefas: vi.fn(async () => ({ tarefas: [...tarefas.values()], total: tarefas.size })),
+    listarTarefas: vi.fn(async () => ({ tarefas: [...tarefas.values()], total: tarefas.size, contagens: { TODAS: tarefas.size, HOJE: 0, FUTURAS: 0, ATRASADAS: 0 } })),
     consultarTarefa: async (id) => { const tarefa = tarefas.get(id); if (!tarefa) throw naoEncontrado(); return tarefa; },
     criarTarefa: async (estado) => { const tarefa = aplicarTarefa(randomUUID(), estado); tarefas.set(tarefa.id, tarefa); historico.push({ id: tarefa.id, acao: 'CRIADA' }); return tarefa; },
     alterarTarefa: async (anterior, estado, acao) => { const tarefa = aplicarTarefa(anterior.id, estado, anterior); tarefas.set(tarefa.id, tarefa); historico.push({ id: tarefa.id, acao }); return tarefa; },

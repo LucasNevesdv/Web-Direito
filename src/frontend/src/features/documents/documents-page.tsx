@@ -26,7 +26,12 @@ export function PaginaDocumentos() {
   const [filtros, definirFiltros] = useState({ pesquisa: '', categoria: '', situacao: 'ATIVOS' });
   const [pesquisa, definirPesquisa] = useState(''), [pagina, definirPagina] = useState(1);
   const [documentos, definirDocumentos] = useState<Documento[]>([]), [total, definirTotal] = useState(0);
-  const [selecionado, definirSelecionado] = useState<Documento | null>(null), [enviandoNovo, definirEnviandoNovo] = useState(false);
+  // Atalho vindo da tarefa: /documentos?novo=1&vinculoTipo=CASO&vinculoId=...&tarefa=Título
+  const [origemTarefa] = useState(() => {
+    const q = new URLSearchParams(window.location.search), tipo = q.get('vinculoTipo'), id = q.get('vinculoId');
+    return q.get('novo') === '1' ? { vinculo: tipo && id && tipo in ROTULOS_VINCULO ? { tipo: tipo as Vinculo['tipo'], id } : null, tarefa: q.get('tarefa') ?? '' } : null;
+  });
+  const [selecionado, definirSelecionado] = useState<Documento | null>(null), [enviandoNovo, definirEnviandoNovo] = useState(!!origemTarefa);
   const [revisao, definirRevisao] = useState(0), [carregando, definirCarregando] = useState(true);
   const [mensagem, definirMensagem] = useState(''), [erro, definirErro] = useState('');
   useEffect(() => {
@@ -67,13 +72,14 @@ export function PaginaDocumentos() {
           <td><button type="button" className={BOTAO_SECUNDARIO} onClick={() => { void abrir(documento.id); }}>Abrir</button></td></tr>)}</tbody></table></div>}
     <nav aria-label="Paginação" className="flex gap-4"><button disabled={pagina === 1 || carregando} onClick={() => definirPagina(pagina - 1)}>Anterior</button>
       <span>Página {pagina} de {Math.max(1, Math.ceil(total / TAMANHO_PAGINA))}</span><button disabled={pagina * TAMANHO_PAGINA >= total || carregando} onClick={() => definirPagina(pagina + 1)}>Próxima</button></nav>
-    {enviandoNovo && <FormularioDocumento podeConfidencial={podeConfidencial} aoCancelar={() => definirEnviandoNovo(false)}
+    {enviandoNovo && <FormularioDocumento podeConfidencial={podeConfidencial} origemTarefa={origemTarefa} aoCancelar={() => definirEnviandoNovo(false)}
       aoSalvar={(documento) => { definirEnviandoNovo(false); aoAtualizar(documento, 'Documento enviado.'); }} />}
     {selecionado && <DetalheDocumento documento={selecionado} podeConfidencial={podeConfidencial} aoAtualizar={aoAtualizar} aoFechar={() => definirSelecionado(null)} />}
   </Pagina>;
 }
 
-function CamposMetadados({ dados, definirDados, podeConfidencial }: { dados: Metadados; definirDados: (dados: Metadados) => void; podeConfidencial: boolean }) {
+function CamposMetadados({ dados, definirDados, podeConfidencial, vinculoTravado, liberarVinculo }: { dados: Metadados; definirDados: (dados: Metadados) => void;
+  podeConfidencial: boolean; vinculoTravado?: string; liberarVinculo?: () => void }) {
   return <>
     <label className="block">Nome do documento<input className={CAMPO} required maxLength={200} value={dados.nome} onChange={(evento) => definirDados({ ...dados, nome: evento.target.value })} /></label>
     <label className="block">Categoria<select className={CAMPO} value={dados.categoria} onChange={(evento) => definirDados({ ...dados, categoria: evento.target.value as Categoria })}>
@@ -81,13 +87,17 @@ function CamposMetadados({ dados, definirDados, podeConfidencial }: { dados: Met
     <label className="block">Descrição (opcional)<textarea className={CAMPO} maxLength={2000} value={dados.descricao} onChange={(evento) => definirDados({ ...dados, descricao: evento.target.value })} /></label>
     {podeConfidencial && <label className="flex gap-2"><input type="checkbox" checked={dados.confidencial} onChange={(evento) => definirDados({ ...dados, confidencial: evento.target.checked })} />
       Confidencial: visível somente a proprietários, administradores, advogados e a quem enviou.</label>}
-    <SeletorVinculo valor={dados.vinculo} aoAlterar={(vinculo) => definirDados({ ...dados, vinculo })} />
+    {vinculoTravado ? <p role="note">{vinculoTravado} <button type="button" className="text-cyan-300 underline" onClick={liberarVinculo}>Alterar vínculo</button></p>
+      : <SeletorVinculo valor={dados.vinculo} aoAlterar={(vinculo) => definirDados({ ...dados, vinculo })} />}
   </>;
 }
 
-function FormularioDocumento({ podeConfidencial, aoSalvar, aoCancelar }: { podeConfidencial: boolean; aoSalvar: (documento: Documento) => void; aoCancelar: () => void }) {
+function FormularioDocumento({ podeConfidencial, origemTarefa, aoSalvar, aoCancelar }: { podeConfidencial: boolean; origemTarefa: { vinculo: Vinculo | null; tarefa: string } | null;
+  aoSalvar: (documento: Documento) => void; aoCancelar: () => void }) {
   const { cliente } = useAutenticacao();
-  const [dados, definirDados] = useState<Metadados>({ nome: '', descricao: '', categoria: 'OUTRO', confidencial: false, vinculo: null });
+  const [dados, definirDados] = useState<Metadados>({ nome: '', descricao: origemTarefa?.tarefa ? `Anexo da tarefa: ${origemTarefa.tarefa}` : '', categoria: 'OUTRO',
+    confidencial: false, vinculo: origemTarefa?.vinculo ?? null });
+  const [vinculoTravado, definirVinculoTravado] = useState(!!origemTarefa?.vinculo);
   const [arquivo, definirArquivo] = useState<File | null>(null), [enviando, definirEnviando] = useState(false), [erro, definirErro] = useState('');
   const pendente = useRef(false);
   async function enviar(evento: FormEvent) {
@@ -113,7 +123,9 @@ function FormularioDocumento({ podeConfidencial, aoSalvar, aoCancelar }: { podeC
         const selecionado = evento.target.files?.[0] ?? null; definirArquivo(selecionado);
         if (selecionado && !dados.nome) definirDados({ ...dados, nome: selecionado.name.replace(/\.[^.]+$/, '') });
       }} /></label>
-      <CamposMetadados dados={dados} definirDados={definirDados} podeConfidencial={podeConfidencial} />
+      <CamposMetadados dados={dados} definirDados={definirDados} podeConfidencial={podeConfidencial}
+        vinculoTravado={vinculoTravado && dados.vinculo ? `Será vinculado ao mesmo ${ROTULOS_VINCULO[dados.vinculo.tipo].toLowerCase()} da tarefa.` : undefined}
+        liberarVinculo={() => definirVinculoTravado(false)} />
       <div className="flex gap-3"><button className={BOTAO} type="submit">{enviando ? 'Enviando…' : 'Enviar'}</button>
         <button type="button" className={BOTAO_SECUNDARIO} onClick={aoCancelar}>Cancelar</button></div>
     </fieldset>

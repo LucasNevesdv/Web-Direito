@@ -58,7 +58,7 @@ export interface OperacoesTarefas {
   vinculos: CatalogoVinculos;
   membroAtivo(idUsuario: string): Promise<boolean>;
   listarMembros(): Promise<Pessoa[]>;
-  listarTarefas(filtro: FiltroTarefas): Promise<{ tarefas: Tarefa[]; total: number }>;
+  listarTarefas(filtro: FiltroTarefas): Promise<{ tarefas: Tarefa[]; total: number; contagens: Record<PeriodoTarefa, number> }>;
   consultarTarefa(id: string): Promise<Tarefa>;
   criarTarefa(estado: EstadoTarefa): Promise<Tarefa>;
   alterarTarefa(anterior: Tarefa, estado: EstadoTarefa, acao: string): Promise<Tarefa>;

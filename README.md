@@ -2,9 +2,11 @@
 
 Projeto acadêmico desenvolvido na disciplina **Empreendedorismo em Sistemas de Informação (2026/2)** da **Universidade Federal de Lavras (UFLA)**, sob orientação do **Prof. Johnatan Oliveira**.
 
-- **Etapa Atual:** Entrega 4 — MVP Funcional e Validação da Solução (10/11/2026)
+- **Etapa Atual:** Entrega 5 — Entrega final e pitch (01/12/2026)
 - **Repositório:** [https://github.com/LucasNevesdv/Web-Direito](https://github.com/LucasNevesdv/Web-Direito)
-- **Relatório Completo da Entrega 4:** [docs/entrega-04/Entrega-04.md](docs/entrega-04/Entrega-04.md)
+- **Alterações após a validação:** [docs/entrega-05/alteracoes-pos-validacao.md](docs/entrega-05/alteracoes-pos-validacao.md)
+- **Roteiro da demonstração:** [docs/entrega-05/roteiro-demo.md](docs/entrega-05/roteiro-demo.md)
+- **Aplicação online:** não hospedada; o MVP roda localmente seguindo as instruções abaixo.
 
 ---
 
@@ -36,7 +38,8 @@ O software foi desenvolvido seguindo os princípios da **Clean Architecture** e 
 - **Tarefas, Prazos Judiciais e Documentos (`RF-049` a `RF-077`):** Fluxo com distinção de **executor** e **revisor** (uma tarefa com revisão pendente não encerra prematuramente), checklist interno, prazos judiciais com destaque de criticidade (escalonamento a 3 dias) e versionamento incremental de documentos vinculados.
 - **Agenda e Dashboard (`RF-078` a `RF-097`):** Painel operacional consolidado com alertas imediatos de prazos críticos e agenda semanal unificada com compromissos e prazos fatais.
 - **Auditoria e Administração (`RF-098` a `RF-117`):** Trilha de auditoria imutável via triggers SQL no PostgreSQL.
-- **Qualidade Automatizada:** **821 testes automatizados aprovados** (662 no backend e 159 no frontend) com 0 erros de lint, typecheck e build de produção.
+- **Ajustes após a validação (Entrega 5):** contador de tarefas em cada aba, linha da tabela de casos clicável e atalho para anexar arquivo a partir da tarefa, já vinculado ao mesmo caso. Detalhes em [alterações pós-validação](docs/entrega-05/alteracoes-pos-validacao.md).
+- **Qualidade Automatizada:** **825 testes automatizados aprovados** (662 no backend e 163 no frontend) com 0 erros de lint, typecheck e build de produção.
 
 ---
 
@@ -72,7 +75,7 @@ Comece na raiz do repositório. No PowerShell, use `pnpm.cmd` caso a execução 
    ```
 
 4. **Injetar Dados de Demonstração (Mock Seed):**
-   Antes do seed, execute `pnpm dev`, abra `http://localhost:5173` e cadastre o escritório e o proprietário em **Criar escritório**. Cadastre os demais membros, se necessário, e interrompa o comando com Ctrl+C. O seed adiciona 8 clientes, 5 casos, 4 processos, 4 tarefas e 3 prazos judiciais ao primeiro escritório ativo existente; não cria contas. Use um banco local exclusivo de demonstração:
+   Antes do seed, execute `pnpm dev`, abra `http://localhost:5173` e cadastre o escritório e o proprietário em **Criar escritório**. Cadastre os demais membros, se necessário, e interrompa o comando com Ctrl+C. O seed adiciona 6 clientes, 4 casos, 3 processos, 4 tarefas e 3 prazos judiciais ao primeiro escritório ativo existente; não cria contas nem compromissos de agenda. Os dados usados no vídeo estão no [roteiro da demonstração](docs/entrega-05/roteiro-demo.md). Use um banco local exclusivo de demonstração:
    ```bash
    pnpm --filter ./backend run seed:dev
    ```
@@ -100,7 +103,7 @@ O MVP foi submetido a testes de usabilidade com 5 participantes representativos 
 - **Índice de Utilidade Percebida:** **4,6 / 5,0** na escala Likert.
 - **Decisão Oficial:** **Prosseguir com ajustes** rumo à Entrega 5 (Pitch final em 01/12/2026).
 
-Consulte o relatório completo com todas as fichas individuais e prints em [docs/entrega-04/Entrega-04.md](docs/entrega-04/Entrega-04.md).
+Consulte o relatório completo com todas as fichas individuais em [docs/entrega-04/Entrega-04.md](docs/entrega-04/Entrega-04.md). Os ajustes feitos a partir desses testes estão em [docs/entrega-05/alteracoes-pos-validacao.md](docs/entrega-05/alteracoes-pos-validacao.md).
 
 ---
 
@@ -110,3 +113,20 @@ Consulte o relatório completo com todas as fichas individuais e prints em [docs
 - [Entrega 2 — Validação do Problema, Clientes e Mercado](docs/entrega-02/Entrega-02.md)
 - [Entrega 3 — Proposta de Valor, Modelo de Negócio e Definição do MVP](docs/entrega-03/Entrega-03.md)
 - [Entrega 4 — MVP Funcional e Validação da Solução](docs/entrega-04/Entrega-04.md)
+- [Entrega 5 — Alterações após a validação](docs/entrega-05/alteracoes-pos-validacao.md), [roteiro da demonstração](docs/entrega-05/roteiro-demo.md) e [dados guardados pelo sistema](docs/entrega-05/dados-armazenados.md)
+
+---
+
+## Situação Atual do Projeto
+
+- **Concluído:** MVP funcional com os módulos de acesso, equipe, clientes, casos e processos, tarefas, prazos judiciais, documentos, agenda, painel, auditoria e administração; validação com 5 participantes; ajustes decididos na Entrega 4.
+- **Em andamento:** relatório final, pitch e vídeo da Entrega 5.
+- **Fora do MVP:** contagem automática de dias úteis, integração com tribunais, Google Calendar/Outlook, exportação da pauta semanal e hospedagem online.
+
+## Organização do Repositório
+
+- `docs/`: documentos de cada entrega, relatório final e apresentação.
+- `src/`: código do backend e do frontend.
+- `evidencias/`: capturas de tela por entrega.
+- `testes/`: como rodar os testes automatizados e onde estão os testes com usuários.
+- `prototipo/`: referência ao MVP funcional.

@@ -22,6 +22,7 @@ export function PaginaTarefas() {
   });
   const [pagina, definirPagina] = useState(1);
   const [tarefas, definirTarefas] = useState<Tarefa[]>([]), [total, definirTotal] = useState(0);
+  const [contagens, definirContagens] = useState<Record<Periodo, number> | null>(null);
   const [selecionada, definirSelecionada] = useState<Tarefa | null>(null);
   const [formulario, definirFormulario] = useState<{ dados: Formulario; tarefa?: Tarefa } | null>(null);
   const [revisao, definirRevisao] = useState(0), [carregando, definirCarregando] = useState(true);
@@ -38,8 +39,8 @@ export function PaginaTarefas() {
     const controle = new AbortController(); definirCarregando(true);
     const consulta = new URLSearchParams({ periodo: filtros.periodo, pagina: String(pagina), tamanhoPagina: String(TAMANHO_PAGINA) });
     for (const chave of ['idResponsavel', 'situacao', 'prioridade', 'ate'] as const) if (filtros[chave]) consulta.set(chave, filtros[chave]);
-    void requisitarApi<{ tarefas: Tarefa[]; total: number }>(cliente, `/api/v1/tarefas?${consulta}`, { signal: controle.signal })
-      .then((resposta) => { if (controle.signal.aborted) return; if (resposta.ok) { definirTarefas(resposta.dados.tarefas); definirTotal(resposta.dados.total); } else definirErro(resposta.mensagem); })
+    void requisitarApi<{ tarefas: Tarefa[]; total: number; contagens: Record<Periodo, number> }>(cliente, `/api/v1/tarefas?${consulta}`, { signal: controle.signal })
+      .then((resposta) => { if (controle.signal.aborted) return; if (resposta.ok) { definirTarefas(resposta.dados.tarefas); definirTotal(resposta.dados.total); definirContagens(resposta.dados.contagens); } else definirErro(resposta.mensagem); })
       .catch(() => { if (!controle.signal.aborted) definirErro('Não foi possível carregar as tarefas.'); })
       .finally(() => { if (!controle.signal.aborted) definirCarregando(false); });
     return () => controle.abort();
@@ -67,7 +68,7 @@ export function PaginaTarefas() {
     <section aria-label="Filtros" className="grid gap-3 md:grid-cols-5">
       <div role="group" aria-label="Período" className="flex flex-wrap gap-2 md:col-span-5">{(Object.keys(PERIODOS) as Periodo[]).map((periodo) =>
         <button key={periodo} type="button" aria-pressed={filtros.periodo === periodo} className={filtros.periodo === periodo ? BOTAO : BOTAO_SECUNDARIO}
-          onClick={() => alterarFiltro('periodo', periodo)}>{PERIODOS[periodo]}</button>)}</div>
+          onClick={() => alterarFiltro('periodo', periodo)}>{PERIODOS[periodo]}{contagens && ` (${contagens[periodo]})`}</button>)}</div>
       <label>Responsável<select className={CAMPO} value={filtros.idResponsavel} onChange={(evento) => alterarFiltro('idResponsavel', evento.target.value)}>
         <option value="">Todos</option>{configuracao?.membros.map((membro) => <option key={membro.id} value={membro.id}>{membro.nome}</option>)}</select></label>
       <label>Situação<select className={CAMPO} value={filtros.situacao} onChange={(evento) => alterarFiltro('situacao', evento.target.value)}>
@@ -76,7 +77,7 @@ export function PaginaTarefas() {
         <option value="">Todas</option>{(Object.keys(PRIORIDADES) as PrioridadeTarefa[]).map((prioridade) => <option key={prioridade} value={prioridade}>{PRIORIDADES[prioridade]}</option>)}</select></label>
       <div className="flex items-end"><button type="button" className={BOTAO} disabled={!configuracao} onClick={() => { definirFormulario({ dados: novoFormulario() }); definirSelecionada(null); }}>Nova tarefa</button></div>
     </section>
-    {carregando ? <p role="status">Carregando tarefas…</p> : tarefas.length === 0 ? <p>Nenhuma tarefa encontrada.</p> :
+    {carregando ? <p role="status">Carregando tarefas…</p> : tarefas.length === 0 ? <p>Nenhuma tarefa em {PERIODOS[filtros.periodo].toLowerCase()}.{filtros.periodo !== 'TODAS' && !!contagens?.TODAS && <> Há {contagens.TODAS} tarefa(s) em <button type="button" className="text-cyan-300 underline" onClick={() => alterarFiltro('periodo', 'TODAS')}>Todas</button>.</>}</p> :
       <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr>{['Título', 'Prazo interno', 'Prioridade', 'Situação', 'Responsável', ''].map((titulo) => <th key={titulo} className="p-2">{titulo}</th>)}</tr></thead>
         <tbody>{tarefas.map((tarefa) => {
           const atrasada = !!tarefa.prazoInterno && !!configuracao && tarefa.prazoInterno < configuracao.hoje && ['PENDENTE', 'EM_ANDAMENTO'].includes(tarefa.situacao);
@@ -203,6 +204,8 @@ function DetalheTarefa({ tarefa, configuracao, aoAtualizar, aoEditar, aoFechar }
     <div className="flex flex-wrap gap-2">
       <button type="button" className={BOTAO_SECUNDARIO} onClick={() => { void consultarHistorico(); }}>Histórico</button>
       <a className={BOTAO_SECUNDARIO} href={`/prazos?tarefa=${tarefa.id}`}>Prazos judiciais desta tarefa</a>
+      <a className={BOTAO_SECUNDARIO} href={`/documentos?${new URLSearchParams({ novo: '1', tarefa: tarefa.titulo, ...(tarefa.vinculo ? { vinculoTipo: tarefa.vinculo.tipo, vinculoId: tarefa.vinculo.id } : {}) })}`}>
+        Anexar arquivo{tarefa.vinculo ? ` ao ${ROTULOS_VINCULO[tarefa.vinculo.tipo].toLowerCase()} da tarefa` : ''}</a>
     </div>
     {historico && <ListaHistorico eventos={historico} aoFechar={() => definirHistorico(null)} />}
   </section>;

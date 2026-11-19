@@ -1032,7 +1032,8 @@ export function PaginaCasos() {
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {casos.map((caso) => (
-                  <tr key={caso.id} className="hover:bg-slate-800/50 transition">
+                  <tr key={caso.id} data-testid={`linha-caso-${caso.id}`} className="cursor-pointer hover:bg-slate-800/50 transition"
+                    onClick={() => void abrirDetalhesCaso(caso.id)}>
                     <td className="p-3 font-semibold text-slate-100">
                       <div>{caso.titulo}</div>
                       <span className="text-xs text-slate-400">
@@ -1075,7 +1076,7 @@ export function PaginaCasos() {
                     <td className="p-3 text-right">
                       <button
                         type="button"
-                        onClick={() => void abrirDetalhesCaso(caso.id)}
+                        onClick={(evento) => { evento.stopPropagation(); void abrirDetalhesCaso(caso.id); }}
                         className={BOTAO_SECUNDARIO}
                       >
                         Ver detalhes

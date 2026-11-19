@@ -102,7 +102,7 @@ O fluxo operacional do Web-Direito foi desenhado para eliminar o atrito comum em
 ### Etapa 1: Acesso e Autenticação no Escritório
 O usuário inicia a sessão através de autenticação segura baseada em JWT efêmero em memória e renovação via cookie seguro `HttpOnly`. O backend valida estritamente a origem da requisição e garante que todo o contexto de dados subsequente pertença exclusivamente ao escritório autenticado.
 
-![Tela de Login do Web-Direito](evidencias/01-login.png)
+![Tela de Login do Web-Direito](../../evidencias/entrega-04/01-login.png)
 *Figura 1 — Tela de acesso seguro ao escritório com suporte a recuperação e primeiro acesso.*
 
 ---
@@ -110,7 +110,7 @@ O usuário inicia a sessão através de autenticação segura baseada em JWT ef�
 ### Etapa 2: Painel Operacional Unificado (Dashboard)
 Ao ingressar, o advogado ou gestor visualiza instantaneamente as prioridades do dia: tarefas pendentes, tarefas futuras e o quadro de **Prazos Judiciais Críticos** (destacando em vermelho demandas com vencimento fatal em até 3 dias). Essa visão atende à principal dor relatada pelos participantes P01 e P06 na validação do problema.
 
-![Painel Operacional e Prazos Críticos](evidencias/02-dashboard.png)
+![Painel Operacional e Prazos Críticos](../../evidencias/entrega-04/02-dashboard.png)
 *Figura 2 — Painel operacional com prazos judiciais críticos e agrupamento de tarefas do dia.*
 
 ---
@@ -118,7 +118,7 @@ Ao ingressar, o advogado ou gestor visualiza instantaneamente as prioridades do 
 ### Etapa 3: Gestão Centralizada de Clientes
 O cadastro de clientes suporta Pessoas Físicas (CPF) e Pessoas Jurídicas (CNPJ), com validação algorítmica de dígitos verificadores e garantia de unicidade dentro do escritório. A listagem permite busca instantânea por nome, documento ou telefone, além de acesso direto a contatos e histórico.
 
-![Gestão de Clientes](evidencias/03-clientes.png)
+![Gestão de Clientes](../../evidencias/entrega-04/03-clientes.png)
 *Figura 3 — Listagem de clientes com pesquisa reativa, filtros por tipo/situação e ações rápidas.*
 
 ---
@@ -126,10 +126,10 @@ O cadastro de clientes suporta Pessoas Físicas (CPF) e Pessoas Jurídicas (CNPJ
 ### Etapa 4: Cadastro de Casos e Processos Judiciais (CNJ)
 Cada demanda interna gera um **Caso** (que pode ser judicial, extrajudicial, administrativo ou consultivo). Vinculados ao caso estão os clientes atendidos, o advogado responsável e o número de processo no padrão CNJ (20 dígitos). O modal de detalhes reúne valores envolvidos, partes contrárias e a linha do tempo do processo.
 
-![Casos e Processos](evidencias/04-casos.png)
+![Casos e Processos](../../evidencias/entrega-04/04-casos.png)
 *Figura 4 — Listagem de casos com filtros por responsabilidade e status operacional.*
 
-![Detalhes do Caso e Processo](evidencias/04-caso-detalhes.png)
+![Detalhes do Caso e Processo](../../evidencias/entrega-04/04-caso-detalhes.png)
 *Figura 5 — Modal de detalhes do caso com dados processuais, partes contrárias e linha do tempo.*
 
 ---
@@ -137,7 +137,7 @@ Cada demanda interna gera um **Caso** (que pode ser judicial, extrajudicial, adm
 ### Etapa 5: Distribuição e Execução de Tarefas com Fluxo de Revisão
 O módulo de tarefas materializa o diferencial do Web-Direito: cada atividade possui **executor** e **revisor** distintos. Uma tarefa com revisão pendente não pode ser encerrada prematuramente como concluída pelo executor, evitando que minutas incompletas sejam protocoladas. Prazos internos vencidos são destacados visualmente para rápida identificação.
 
-![Gestão de Tarefas](evidencias/05-tarefas.png)
+![Gestão de Tarefas](../../evidencias/entrega-04/05-tarefas.png)
 *Figura 6 — Controle de tarefas com indicação explícita de atrasos, prioridades e responsáveis.*
 
 ---
@@ -145,7 +145,7 @@ O módulo de tarefas materializa o diferencial do Web-Direito: cada atividade po
 ### Etapa 6: Gestão de Documentos e Versionamento Vinculado
 Os documentos do escritório são enviados diretamente vinculados ao cliente ou ao caso correspondente. O sistema armazena metadados estruturados, controla versões de forma incremental (v1, v2, v3...) e permite restringir documentos sob sigilo confidencial.
 
-![Envio e Versionamento de Documentos](evidencias/06-documentos-upload.png)
+![Envio e Versionamento de Documentos](../../evidencias/entrega-04/06-documentos-upload.png)
 *Figura 7 — Interface de upload de documentos com categorização e vinculação ao caso/cliente.*
 
 ---
@@ -153,10 +153,10 @@ Os documentos do escritório são enviados diretamente vinculados ao cliente ou 
 ### Etapa 7: Agenda Semanal Unificada e Prazos Judiciais
 A Agenda consolida em uma grade temporal tanto os compromissos com hora marcada quanto as tarefas e os prazos processuais fatais. O sistema sinaliza sobreposições de horários e permite que o advogado visualize a semana completa sem recorrer a agendas externas.
 
-![Agenda Semanal Unificada](evidencias/07-agenda.png)
+![Agenda Semanal Unificada](../../evidencias/entrega-04/07-agenda.png)
 *Figura 8 — Agenda semanal integrada com prazos judiciais fatais e tarefas internas.*
 
-![Controle de Prazos Judiciais](evidencias/08-prazos-judiciais.png)
+![Controle de Prazos Judiciais](../../evidencias/entrega-04/08-prazos-judiciais.png)
 *Figura 9 — Tela dedicada de Prazos Judiciais com alerta de prazos vencidos e críticos.*
 
 ---
